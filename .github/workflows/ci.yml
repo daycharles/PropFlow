@@ -62,9 +62,12 @@ jobs:
         env:
           POSTGRES_PASSWORD: propflow-e2e
           ConnectionStrings__Admin: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow;Password=propflow-e2e
-          Runtime__Password: runtime-e2e
+          # At least 20 characters, or configure-runtime refuses the role
+          # (src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs:37). Keep this value
+          # and the password in ConnectionStrings__Database below identical.
+          Runtime__Password: runtime-e2e-not-a-secret-01
           Demo__Password: DemoPassword!123
-          ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow_app;Password=runtime-e2e
+          ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow_app;Password=runtime-e2e-not-a-secret-01
           # HTTPS, and the host must be `localhost`. The session and antiforgery cookies are
           # `__Host-` prefixed with SecurePolicy=Always (src/PropFlow.Api/Program.cs:79-81,93-95),
           # so over plain http the antiforgery system throws and GET /api/auth/csrf returns 500 —
@@ -145,4 +148,8 @@ jobs:
           path: apps/web/playwright-report
       - name: Stop database
         if: always()
+        # compose.yaml declares POSTGRES_PASSWORD as required, so `down` interpolates it too and
+        # fails the step without it. It is only set on the start step's env, not the job's.
+        env:
+          POSTGRES_PASSWORD: propflow-e2e
         run: docker compose down -v
