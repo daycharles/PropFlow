@@ -9,22 +9,25 @@ public sealed class CapabilitiesTests
     [Theory]
     [InlineData("Organization Admin")]
     [InlineData("Property Manager")]
-    public void Admin_and_property_manager_can_manage_templates(string role)
+    public void Admin_and_property_manager_can_manage_templates_and_people(string role)
     {
-        Assert.Contains(Capabilities.ManageTemplates, Capabilities.ForRole(role));
-        Assert.Contains(Capabilities.ReadWork, Capabilities.ForRole(role));
-        Assert.Contains(Capabilities.AssignVendor, Capabilities.ForRole(role));
+        var capabilities = Capabilities.ForRole(role);
+        Assert.Contains(Capabilities.ManageTemplates, capabilities);
+        Assert.Contains(Capabilities.ManagePeople, capabilities);
+        Assert.Contains(Capabilities.ReadWork, capabilities);
+        Assert.Contains(Capabilities.AssignVendor, capabilities);
     }
 
     [Theory]
     [InlineData("Regional Manager")]
     [InlineData("Maintenance Supervisor")]
-    public void Other_managers_assign_work_but_do_not_manage_templates(string role)
+    public void Other_managers_assign_work_but_do_not_manage_templates_or_people(string role)
     {
         var capabilities = Capabilities.ForRole(role);
         Assert.Contains(Capabilities.ReadWork, capabilities);
         Assert.Contains(Capabilities.AssignVendor, capabilities);
         Assert.DoesNotContain(Capabilities.ManageTemplates, capabilities);
+        Assert.DoesNotContain(Capabilities.ManagePeople, capabilities);
     }
 
     [Fact]
