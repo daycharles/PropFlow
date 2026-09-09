@@ -28,34 +28,28 @@ public sealed class MessageTemplate : TenantEntity
 
     public void Deactivate() => IsActive = false;
 
-    private static string NormalizeName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
-            throw new ArgumentException("Template name must contain 1 to 200 characters.", nameof(name));
-        return name.Trim();
-    }
+    private static string NormalizeName(string name) => MessageText.RequireSingleLine(name, nameof(name), 200);
 
     private static (string? Subject, string Body) NormalizeContent(MessageChannel channel, string? subject, string body)
     {
-        if (string.IsNullOrWhiteSpace(body) || body.Trim().Length > 2000)
-            throw new ArgumentException("Template body must contain 1 to 2000 characters.", nameof(body));
+        var normalizedBody = MessageText.RequireBody(body, nameof(body), 2000);
 
-        var trimmed = subject?.Trim();
+        var trimmed = string.IsNullOrWhiteSpace(subject) ? null : subject.Trim();
         switch (channel)
         {
-            case MessageChannel.Email when string.IsNullOrEmpty(trimmed) || trimmed.Length > 200:
+            case MessageChannel.Email when trimmed is null:
                 throw new ArgumentException("Email templates require a subject of 1 to 200 characters.", nameof(subject));
             case MessageChannel.Email:
+                trimmed = MessageText.RequireSingleLine(trimmed, nameof(subject), 200);
                 break;
-            case MessageChannel.Sms when !string.IsNullOrEmpty(trimmed):
+            case MessageChannel.Sms when trimmed is not null:
                 throw new ArgumentException("SMS templates must not carry a subject.", nameof(subject));
             case MessageChannel.Sms:
-                trimmed = null;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(channel), channel, "Unknown message channel.");
         }
 
-        return (trimmed, body.Trim());
+        return (trimmed, normalizedBody);
     }
 }

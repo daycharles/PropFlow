@@ -52,7 +52,10 @@ public abstract class MockMessageSender(ISentMessageLog log) : IMessageSender
 
         var reference = $"mock-{Channel.ToString().ToLowerInvariant()}-{Guid.NewGuid():N}";
         log.Record(new SentMessage(message.Channel, message.RecipientAddress, message.Subject, message.Body, idempotencyKey, reference));
-        return Task.FromResult(MessageDeliveryResult.Delivered(reference));
+        // A concurrent first send for the same key may have won the Record race; return whatever
+        // is actually in the log so every caller gets a reference that was recorded.
+        log.TryGet(idempotencyKey, out var recorded);
+        return Task.FromResult(MessageDeliveryResult.Delivered(recorded?.ProviderReference ?? reference));
     }
 }
 

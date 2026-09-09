@@ -1,6 +1,8 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
@@ -22,6 +24,26 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+
+// Data Protection secures the auth and antiforgery cookies. In a real deployment the key ring
+// must persist and be shared across instances (and encrypted at rest); Development/Testing keep
+// the ephemeral default.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("PropFlow");
+var keyPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+    var certPath = builder.Configuration["DataProtection:CertificatePath"];
+    if (!string.IsNullOrWhiteSpace(certPath))
+        dataProtection.ProtectKeysWithCertificate(X509CertificateLoader.LoadPkcs12FromFile(
+            certPath, builder.Configuration["DataProtection:CertificatePassword"] ?? ""));
+}
+else if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
+{
+    throw new InvalidOperationException(
+        "Set DataProtection:KeyPath to a persistent directory shared by every instance. " +
+        "Without it, auth and antiforgery tokens do not survive a restart or a second instance.");
+}
 builder.Services.AddDbContext<IdentityStore>(options => options.UseNpgsql(connection,
     postgres => postgres.MigrationsHistoryTable("__IdentityMigrations", "identity")));
 builder.Services.AddDbContext<OperationsStore>(options => options.UseNpgsql(connection,

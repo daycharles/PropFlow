@@ -85,4 +85,14 @@ public sealed class MessageTemplateTests
         template.Activate();
         Assert.True(template.IsActive);
     }
+
+    [Fact]
+    public void Rejects_a_line_break_in_the_name_or_subject()
+    {
+        var lf = ((char)10).ToString();
+        Assert.Throws<ArgumentException>(() =>
+            new MessageTemplate(Org, Guid.NewGuid(), "Bad" + lf + "name", MessageChannel.Sms, null, "Body"));
+        Assert.Throws<ArgumentException>(() =>
+            new MessageTemplate(Org, Guid.NewGuid(), "Name", MessageChannel.Email, "Bad" + lf + "subject", "Body"));
+    }
 }

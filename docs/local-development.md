@@ -7,8 +7,14 @@ Prerequisites: .NET 10 SDK 10.0.3xx, Docker running Linux containers, and a free
 ```powershell
 ./scripts/Initialize-Local.ps1 -AdminEmail 'you@example.com' -OrganizationName 'Tidewater Residential Management' -AdminPassword (Read-Host 'New administrator password' -AsSecureString)
 dotnet dev-certs https --trust
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
 dotnet run --project src/PropFlow.Api --urls https://localhost:7080
 ```
+
+Run locally as `Development`. In `Production` or `Staging` the API refuses to start without
+`DataProtection:KeyPath` — a persistent directory, shared by every instance, holding the
+key ring that protects the auth and antiforgery cookies (optionally encrypted with
+`DataProtection:CertificatePath` / `DataProtection:CertificatePassword`).
 
 Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID and slug (the slug is used for login) and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
 

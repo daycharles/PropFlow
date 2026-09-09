@@ -19,10 +19,8 @@ public sealed class OutboxMessage : TenantEntity
     public static OutboxMessage Create(Guid organizationId, Guid id, MessageChannel channel, string recipientAddress,
         string? subject, string body, string idempotencyKey, DateTimeOffset createdAt)
     {
-        if (string.IsNullOrWhiteSpace(recipientAddress) || recipientAddress.Trim().Length > 320)
-            throw new ArgumentException("Recipient address must contain 1 to 320 characters.", nameof(recipientAddress));
-        if (string.IsNullOrWhiteSpace(body) || body.Trim().Length > 2000)
-            throw new ArgumentException("Message body must contain 1 to 2000 characters.", nameof(body));
+        var normalizedRecipient = MessageText.RequireSingleLine(recipientAddress, nameof(recipientAddress), 320);
+        var normalizedBody = MessageText.RequireBody(body, nameof(body), 2000);
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Trim().Length > 200)
             throw new ArgumentException("Idempotency key must contain 1 to 200 characters.", nameof(idempotencyKey));
 
@@ -31,13 +29,15 @@ public sealed class OutboxMessage : TenantEntity
             throw new ArgumentException("Email messages require a subject.", nameof(subject));
         if (channel == MessageChannel.Sms && trimmedSubject is not null)
             throw new ArgumentException("SMS messages must not carry a subject.", nameof(subject));
+        if (trimmedSubject is not null)
+            trimmedSubject = MessageText.RequireSingleLine(trimmedSubject, nameof(subject), 200);
 
         return new OutboxMessage(organizationId, id)
         {
             Channel = channel,
-            RecipientAddress = recipientAddress.Trim(),
+            RecipientAddress = normalizedRecipient,
             Subject = trimmedSubject,
-            Body = body.Trim(),
+            Body = normalizedBody,
             IdempotencyKey = idempotencyKey.Trim(),
             Status = OutboxStatus.Pending,
             CreatedAt = createdAt.ToUniversalTime()
