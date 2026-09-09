@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using PropFlow.Application;
+using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Identity;
 
 namespace PropFlow.Infrastructure.Persistence;
@@ -14,6 +15,8 @@ public static class DatabaseProvisioner
         await identity.Database.MigrateAsync();
         await using var operations = CreateOperationsStore(adminConnection, Guid.Parse("00000000-0000-0000-0000-000000000001"));
         await operations.Database.MigrateAsync();
+        await using var communications = CreateCommunicationsStore(adminConnection, Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        await communications.Database.MigrateAsync();
     }
 
     public static IdentityStore CreateIdentityStore(string connection) => new(new DbContextOptionsBuilder<IdentityStore>()
@@ -22,6 +25,11 @@ public static class DatabaseProvisioner
     public static OperationsStore CreateOperationsStore(string connection, Guid organizationId) => new(
         new DbContextOptionsBuilder<OperationsStore>().UseNpgsql(connection,
             options => options.MigrationsHistoryTable("__OperationsMigrations", "operations")).Options,
+        new FixedTenantContext(organizationId));
+
+    public static CommunicationsStore CreateCommunicationsStore(string connection, Guid organizationId) => new(
+        new DbContextOptionsBuilder<CommunicationsStore>().UseNpgsql(connection,
+            options => options.MigrationsHistoryTable("__CommunicationsMigrations", "communications")).Options,
         new FixedTenantContext(organizationId));
 
     public static async Task ConfigureRuntimeAsync(string adminConnection, string password)
@@ -44,12 +52,14 @@ public static class DatabaseProvisioner
         await command.ExecuteNonQueryAsync();
         command.CommandText = """
             REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-            GRANT USAGE ON SCHEMA identity, operations TO propflow_app;
+            GRANT USAGE ON SCHEMA identity, operations, communications TO propflow_app;
             GRANT SELECT ON ALL TABLES IN SCHEMA identity TO propflow_app;
             GRANT UPDATE ON identity."AspNetUsers" TO propflow_app;
             GRANT SELECT ON operations."Vendors" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."WorkItems" TO propflow_app;
             GRANT SELECT, INSERT ON operations."Timeline" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."OutboxMessages" TO propflow_app;
             """;
         await command.ExecuteNonQueryAsync();
         await transaction.CommitAsync();

@@ -17,11 +17,17 @@ into `main` with a PR once the integrated set is verified.
 **Never merge to `develop` or `main` until it is tested:**
 
 1. `dotnet build PropFlow.slnx -c Release` is clean (warnings are errors).
-2. `dotnet run --project tests/PropFlow.FoundationChecks -c Release` passes.
-3. CI `verify` is green — it also runs the PostgreSQL integration suite
-   (`tests/PropFlow.IntegrationTests`), which needs Docker and is **not** run locally here.
+2. `dotnet run --project tests/PropFlow.FoundationChecks -c Release` passes (fast boot checks).
+3. `dotnet test tests/PropFlow.UnitTests -c Release` passes.
+4. `dotnet test tests/PropFlow.IntegrationTests -c Release` passes (needs Docker via Colima).
+5. CI `verify` is green — it runs all of the above.
 
 Open PRs as **draft** until CI passes, then mark ready.
+
+**Add tests with the code, not after.** New domain/application logic gets xUnit tests in
+`tests/PropFlow.UnitTests`; database, RLS, and HTTP behavior gets tests in
+`tests/PropFlow.IntegrationTests`. `PropFlow.FoundationChecks` is a minimal boot smoke test —
+do not grow it.
 
 ## Local toolchain
 

@@ -39,3 +39,23 @@ Success is `{ "changed": true }`; repeating the same assignment returns `{ "chan
 The API does not yet expose work/vendor creation or bulk assignment. Integration tests provision data explicitly; the web workflow and demo dataset arrive in milestone 3. There is no public registration endpoint. Use the administrative bootstrap command to create the first organization and account.
 
 Application errors use Problem Details with a request trace ID; unexpected details stay in server logs. Routing/authentication 401/403/404 and readiness responses may be empty/plain-text. Never log passwords, cookies or connection strings. OpenAPI documents endpoint shapes; these CSRF and capability requirements also apply even where generated metadata does not express them.
+
+## Communications (milestone 4, in progress)
+
+Enums serialize as their names (for example `"Sms"`, `"Email"`, `"Pending"`).
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/communication/templates | `Communications.ManageTemplates`; tenant-scoped message templates ordered by name |
+| GET | /api/communication/templates/{id} | `Communications.ManageTemplates`; one template, or 404 |
+| POST | /api/communication/templates | `Communications.ManageTemplates` + CSRF; `name`, `channel` (`Sms`/`Email`), `subject` (required for email, rejected for SMS), `body` (may contain `{{ placeholder }}` tokens); 201 with the template, 400 on invalid content |
+| PUT | /api/communication/templates/{id} | `Communications.ManageTemplates` + CSRF; `name`, `subject`, `body`, `isActive`; the channel is immutable; 200, 400, or 404 |
+| DELETE | /api/communication/templates/{id} | `Communications.ManageTemplates` + CSRF; 204 or 404 |
+
+`Communications.ManageTemplates` is granted to Organization Admin and Property Manager only.
+
+The transactional outbox and its dispatcher are internal: messages are enqueued in the tenant
+transaction that produces them, then delivered out of band by a background worker that polls
+each organization on its own tenant context. Milestone 4 ships mock SMS and email providers
+that record rather than send. No HTTP endpoint enqueues resident messages yet; that arrives
+with the work-event wiring in a later task.

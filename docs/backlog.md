@@ -64,6 +64,12 @@ integration + e2e tests cover the success and failure paths; CI builds and tests
 assign a vendor, schedule a window, notify residents, confirm — completes as one fast operation
 with a success summary, durable communication dispatch, and a full seeded demo dataset.
 
+**Progress:** the Communications module core is in — `MessageTemplate` + renderer + consent
+type (#75), then the `CommunicationsStore` context, mock SMS/email senders, transactional
+outbox + dispatcher, template CRUD API, and their tests. PF-4.04, PF-4.05 and PF-4.12 are
+substantially done; PF-4.03 is done bar the resident-data wiring. PF-4.01, PF-4.06–4.11
+remain (they need milestone 3).
+
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
 | PF-4.01 | `Resident`/`Person` domain + occupancy (unit ↔ resident over time); migrations + RLS | domain | L | PF-3.05 |

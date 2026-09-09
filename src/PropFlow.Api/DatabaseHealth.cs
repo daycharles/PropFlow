@@ -31,6 +31,9 @@ public sealed class DatabaseReadiness(IConfiguration configuration) : IHealthChe
                   AND (SELECT count(*) = 3 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity)
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
                        WHERE n.nspname = 'operations' AND c.relname IN ('WorkItems', 'Vendors', 'Timeline'))
+                  AND (SELECT count(*) = 2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity)
+                       FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+                       WHERE n.nspname = 'communications' AND c.relname IN ('MessageTemplates', 'OutboxMessages'))
                 """;
             return await command.ExecuteScalarAsync(ct) is true ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy();
         }

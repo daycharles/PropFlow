@@ -14,10 +14,11 @@ See [local development](docs/local-development.md) for first organization/admin 
 dotnet restore PropFlow.slnx --locked-mode
 dotnet build PropFlow.slnx --configuration Release --no-restore
 dotnet run --project tests/PropFlow.FoundationChecks --configuration Release --no-build
+dotnet test tests/PropFlow.UnitTests --configuration Release --no-build
 dotnet test tests/PropFlow.IntegrationTests --configuration Release --no-build
 ```
 
-Integration tests use disposable real PostgreSQL containers; Docker must be running. No existing database is changed. Dependencies are pinned and locked. GitHub Actions runs both test suites.
+Integration tests use disposable real PostgreSQL containers; Docker must be running. No existing database is changed. Dependencies are pinned and locked. GitHub Actions runs the foundation checks and both test suites.
 
 ## Repository
 
@@ -26,7 +27,7 @@ Integration tests use disposable real PostgreSQL containers; Docker must be runn
 - `src/PropFlow.Domain`: tenant entities, assignment semantics and immutable history.
 - `src/PropFlow.Infrastructure`: Identity, EF Core, PostgreSQL RLS, migrations and persistence services.
 - `tools/PropFlow.Admin`: explicit migration, runtime-role configuration and initial organization provisioning.
-- `tests`: foundation checks and PostgreSQL/API integration tests.
+- `tests`: foundation boot checks, xUnit unit tests for domain/application logic, and PostgreSQL/API integration tests.
 - `apps/web`: reserved Next.js boundary; no runnable frontend yet.
 - `docs`: [architecture](docs/architecture.md), [milestones](docs/milestones.md), [backlog](docs/backlog.md), [API](docs/api.md), and original handoff.
 
