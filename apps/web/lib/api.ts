@@ -7,25 +7,26 @@ export type Session = {
 export type WorkItem = {
   id: string;
   title: string;
+  description?: string | null;
   status: string;
   priority: string;
+  workType?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   propertyId?: string | null;
   propertyName?: string | null;
+  buildingId?: string | null;
+  spaceId?: string | null;
   vendorId?: string | null;
   vendorName?: string | null;
+  employeeId?: string | null;
   dueDate?: string | null;
   createdAt?: string | null;
+  version?: number;
   rowVersion?: string | null;
 };
 export type WorkDetail = WorkItem & {
-  description?: string | null;
-  workType?: string;
-  buildingId?: string | null;
-  spaceId?: string | null;
   residentId?: string | null;
-  employeeId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
@@ -64,6 +65,13 @@ export type UpdateWorkInput = {
 export type Vendor = {
   id: string;
   name: string;
+  email?: string | null;
+  phone?: string | null;
+  isActive: boolean;
+};
+export type Employee = {
+  id: string;
+  displayName: string;
   email?: string | null;
   phone?: string | null;
   isActive: boolean;
@@ -134,19 +142,28 @@ function queryString(query: WorkListQuery) {
   const serialized = params.toString();
   return serialized ? `?${serialized}` : "";
 }
-async function listWork(query: WorkListQuery = {}): Promise<WorkListResult> {
-  const response = await request<WorkItem[] | WorkListResult | { items: WorkResponse[] }>(
-    `/api/work/${queryString(query)}`,
-  );
-  if (Array.isArray(response)) return { items: response, totalCount: response.length };
-  const items = response.items.map(normalizeWork);
-  return { items, totalCount: "totalCount" in response ? response.totalCount : items.length };
-}
+// GET /api/work/ returns a flat page of work items; GET /api/work/{id} keeps the { item, version }
+// envelope. normalizeWork accepts either and always yields a numeric `version` plus the string
+// `rowVersion` the bulk-assignment payload builder still reads.
+type WorkListResponse =
+  | (WorkItem | WorkResponse)[]
+  | { items: (WorkItem | WorkResponse)[]; totalCount?: number };
 type WorkResponse = { item: Omit<WorkDetail, "version">; version: number };
+async function listWork(query: WorkListQuery = {}): Promise<WorkListResult> {
+  const response = await request<WorkListResponse>(`/api/work/${queryString(query)}`);
+  const raw = Array.isArray(response) ? response : response.items;
+  const items = raw.map(normalizeWork);
+  const totalCount =
+    !Array.isArray(response) && typeof response.totalCount === "number"
+      ? response.totalCount
+      : items.length;
+  return { items, totalCount };
+}
 function normalizeWork(value: WorkItem | WorkResponse): WorkDetail {
   if ("item" in value)
     return { ...value.item, version: value.version, rowVersion: String(value.version) };
-  return { ...value, version: Number(value.rowVersion ?? 0) };
+  const version = typeof value.version === "number" ? value.version : Number(value.rowVersion ?? 0);
+  return { ...value, version, rowVersion: String(version) };
 }
 export const api = {
   session: () => request<Session>("/api/session"),
@@ -181,6 +198,12 @@ export const api = {
         }),
       );
     },
+    assignEmployee: (id: string, employeeId: string, version: number) =>
+      mutation<{ changed: boolean }>(`/api/work/${id}/employee`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId, version }),
+      }),
     assignVendor: (id: string, vendorId: string, version: number) =>
       mutation<{ changed: boolean }>(`/api/work/${id}/vendor`, {
         method: "POST",
@@ -204,6 +227,7 @@ export const api = {
     },
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
+  employees: { list: () => request<Employee[]>("/api/employees/") },
   categories: { list: () => request<Category[]>("/api/categories/") },
   savedViews: {
     list: () => request<SavedView[]>("/api/saved-views/"),

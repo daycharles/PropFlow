@@ -14,7 +14,7 @@ public static class WorkEndpoints
         {
             var page = Math.Max(1, request.Page); var size = Math.Clamp(request.PageSize, 1, 100);
             var results = await work.ListAsync(new(request.Search, request.CategoryId, request.Status, request.Priority, request.PropertyId, request.SpaceId, request.Sort, request.Descending, page, size), ct);
-            return Results.Ok(new { items = await WithVersions(results.Items, work, ct), results.TotalCount, results.Page, results.PageSize });
+            return Results.Ok(new { results.Items, results.TotalCount, results.Page, results.PageSize });
         });
         group.MapGet("/{id:guid}", async (Guid id, IWorkOperations work, CancellationToken ct) =>
             await work.GetAsync(id, ct) is { } item ? Results.Ok(new WorkResponse(item, (await work.VersionAsync(id, ct))!.Value)) : Results.NotFound());
@@ -36,25 +36,31 @@ public static class WorkEndpoints
             if (id == Guid.Empty || request.VendorId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Work and vendor IDs are required");
             var outcome = await work.AssignVendorAsync(id, request.VendorId, Actor(user), request.Version, ct); return AssignmentResult(outcome);
         }).RequireAuthorization(Capabilities.AssignVendor);
+        group.MapPost("/{id:guid}/employee", async (Guid id, AssignEmployeeRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
+        {
+            if (id == Guid.Empty || request.EmployeeId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Work and employee IDs are required");
+            return AssignmentResult(await work.AssignEmployeeAsync(id, request.EmployeeId, Actor(user), request.Version, ct));
+        }).RequireAuthorization(Capabilities.AssignEmployee);
         group.MapPost("/bulk/vendor", async (BulkAssignVendorRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (request.VendorId == Guid.Empty || request.Items is null || request.Items.Count is 0 or > 100) return Results.Problem(statusCode: 400, title: "Vendor and 1 to 100 work items are required");
-            return AssignmentResult(await work.BulkAssignVendorAsync(request.Items.Select(x => new BulkVendorAssignment(x.WorkId, x.Version)).ToArray(), request.VendorId, Actor(user), ct));
+            var summary = await work.BulkAssignVendorAsync(request.Items.Select(x => new BulkVendorAssignment(x.WorkId, x.Version)).ToArray(), request.VendorId, Actor(user), ct);
+            return summary.Outcome switch
+            {
+                AssignmentOutcome.NotFound => Results.NotFound(),
+                AssignmentOutcome.Conflict => Results.Problem(statusCode: 409, title: "One or more work items changed by another user"),
+                _ => Results.Ok(new { summary.Changed, summary.Unchanged, summary.Total })
+            };
         }).RequireAuthorization(Capabilities.AssignVendor);
     }
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static IResult AssignmentResult(AssignmentOutcome outcome) => outcome switch { AssignmentOutcome.NotFound => Results.NotFound(), AssignmentOutcome.Conflict => Results.Problem(statusCode: 409, title: "One or more work items changed by another user"), _ => Results.Ok(new { changed = outcome == AssignmentOutcome.Updated }) };
-    private static async Task<IReadOnlyList<WorkResponse>> WithVersions(IReadOnlyList<WorkItem> items, IWorkOperations work, CancellationToken ct)
-    {
-        var responses = new List<WorkResponse>(items.Count);
-        foreach (var item in items) responses.Add(new(item, (await work.VersionAsync(item.Id, ct))!.Value));
-        return responses;
-    }
 }
 
 public sealed record WorkListRequest(string? Search, Guid? CategoryId, WorkStatus? Status, WorkPriority? Priority, Guid? PropertyId, Guid? SpaceId, string? Sort, bool Descending = false, int Page = 1, int PageSize = 25);
 public sealed record WorkResponse(WorkItem Item, uint Version);
 public sealed record AssignVendorRequest(Guid VendorId, uint? Version = null);
+public sealed record AssignEmployeeRequest(Guid EmployeeId, uint? Version = null);
 public sealed record BulkWorkVersion(Guid WorkId, uint Version);
 public sealed record BulkAssignVendorRequest(Guid VendorId, List<BulkWorkVersion>? Items);
 public sealed record CreateWorkRequest(string Title, Guid PropertyId, string? Description = null, WorkType WorkType = WorkType.WorkOrder, Guid? CategoryId = null, WorkPriority Priority = WorkPriority.Normal, Guid? BuildingId = null, Guid? SpaceId = null, Guid? ResidentId = null, DateTimeOffset? DueDate = null, decimal? Cost = null, string? InternalNotes = null, string? ResidentVisibleNotes = null)

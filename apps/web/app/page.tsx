@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   api,
   ApiError,
+  type Category,
   type Session,
   type Vendor,
   type SavedView,
@@ -108,10 +109,13 @@ export default function Home() {
   );
 }
 
+const defaultQuery: WorkListQuery = { sort: "title", page: 1, pageSize: 100 };
+
 function WorkList({ session }: { session: Session }) {
   const [work, setWork] = useState<WorkItem[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [query, setQuery] = useState<WorkListQuery>({ sort: "title", page: 1, pageSize: 100 });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [query, setQuery] = useState<WorkListQuery>(defaultQuery);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -124,15 +128,35 @@ function WorkList({ session }: { session: Session }) {
   } | null>(null);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState("");
+  const [viewIsDefault, setViewIsDefault] = useState(false);
+  // The default view is applied once, when reference data first arrives. Any user-driven query
+  // change also sets this, so a late default view cannot clobber filters already on screen.
+  const defaultViewApplied = useRef(false);
   async function saveView() {
     const name = viewName.trim();
     if (!name) return;
     try {
-      const created = await api.savedViews.create({ name, filters: query });
-      setSavedViews((current) => [...current, created]);
+      const created = await api.savedViews.create({
+        name,
+        filters: query,
+        isDefault: viewIsDefault,
+      });
+      // Saving a new default clears the previous one server-side, so re-read the list — through
+      // loadReference so the read carries the same sequence guard as every other reference load.
+      if (viewIsDefault) await loadReference();
+      else setSavedViews((current) => [...current, created]);
       setViewName("");
+      setViewIsDefault(false);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Unable to save this view.");
+    }
+  }
+  function applyView(view: SavedView) {
+    defaultViewApplied.current = true;
+    try {
+      setQuery(JSON.parse(view.filters) as WorkListQuery);
+    } catch {
+      setError("This saved view has invalid filters.");
     }
   }
   async function deleteView(id: string) {
@@ -147,49 +171,82 @@ function WorkList({ session }: { session: Session }) {
     () => work.filter((item) => selected.has(item.id)),
     [work, selected],
   );
-  const categoryNames = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          work.map((item) => item.categoryName).filter((name): name is string => Boolean(name)),
-        ),
-      ).sort(),
-    [work],
-  );
-  async function load(next = query) {
+  // Every work request takes the next ticket; only the newest ticket may touch state. Without
+  // this an earlier, unfiltered response can resolve last and overwrite a filtered one, leaving
+  // rows on screen that contradict the filters (and never correcting themselves).
+  const workRequest = useRef(0);
+  async function loadWork(next = query) {
+    const ticket = ++workRequest.current;
     setLoading(true);
     setError("");
     try {
-      const [listed, vendorList, viewList] = await Promise.all([
-        api.work.list(next),
-        api.vendors.list(),
-        api.savedViews.list(),
-      ]);
+      const listed = await api.work.list(next);
+      if (ticket !== workRequest.current) return;
       setWork(listed.items);
-      setVendors(vendorList.filter((vendor) => vendor.isActive));
-      setSavedViews(viewList);
       setSelected(
         (current) =>
           new Set([...current].filter((id) => listed.items.some((item) => item.id === id))),
       );
     } catch (cause) {
+      if (ticket !== workRequest.current) return;
       setError(
         cause instanceof ApiError
           ? cause.message
           : "Unable to load work. Please refresh and try again.",
       );
     } finally {
-      setLoading(false);
+      // A superseded request must not clear the spinner a newer one is still showing.
+      if (ticket === workRequest.current) setLoading(false);
+    }
+  }
+  // Vendors, saved views and categories do not depend on `query`, so they load once per mount
+  // (and on an explicit Refresh) rather than on every keystroke.
+  const referenceRequest = useRef(0);
+  async function loadReference() {
+    const ticket = ++referenceRequest.current;
+    try {
+      const [vendorList, viewList, categoryList] = await Promise.all([
+        api.vendors.list(),
+        api.savedViews.list(),
+        api.categories.list(),
+      ]);
+      if (ticket !== referenceRequest.current) return;
+      setVendors(vendorList.filter((vendor) => vendor.isActive));
+      setSavedViews(viewList);
+      setCategories(categoryList.filter((category) => !category.isArchived));
+      if (!defaultViewApplied.current) {
+        defaultViewApplied.current = true;
+        const preferred = viewList.find((view) => view.isDefault);
+        // Applying the default view changes `query`, which re-runs the work effect below.
+        if (preferred) applyView(preferred);
+      }
+    } catch (cause) {
+      if (ticket !== referenceRequest.current) return;
+      setError(
+        cause instanceof ApiError ? cause.message : "Unable to load vendors, views and categories.",
+      );
     }
   }
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const timer = window.setTimeout(() => void loadReference(), 0);
     return () => window.clearTimeout(timer);
-    // load reads the query from this render; its identity is not part of the request trigger.
+    // Reference data is query-independent; it loads once for this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadWork(), 0);
+    return () => window.clearTimeout(timer);
+    // loadWork reads the query from this render; its identity is not part of the request trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
   function updateQuery(changes: Partial<WorkListQuery>) {
+    // The user has taken control of the filters; a default view arriving late must not win.
+    defaultViewApplied.current = true;
     setQuery((current) => ({ ...current, ...changes, page: 1 }));
+  }
+  function clearFilters() {
+    defaultViewApplied.current = true;
+    setQuery({ ...defaultQuery });
   }
   function toggle(id: string) {
     setSelected((current) => {
@@ -199,6 +256,7 @@ function WorkList({ session }: { session: Session }) {
     });
   }
   function sortBy(sort: Sort) {
+    defaultViewApplied.current = true;
     setQuery((current) => ({
       ...current,
       sort,
@@ -221,9 +279,12 @@ function WorkList({ session }: { session: Session }) {
       });
       setResult(response);
       setFlow("success");
-      await load();
+      await loadWork();
     } catch (cause) {
       setFlow(null);
+      // Refresh first: loadWork clears the error banner on entry, so setting the message before
+      // it would wipe the message the user needs to read.
+      await loadWork();
       setError(
         cause instanceof ApiError && cause.status === 409
           ? "Some selected work changed. The list was refreshed; review it and try again."
@@ -231,11 +292,12 @@ function WorkList({ session }: { session: Session }) {
             ? cause.message
             : "Vendor assignment could not be completed.",
       );
-      await load();
     }
   }
   const allSelected = work.length > 0 && work.every((item) => selected.has(item.id));
   const chosenVendor = vendors.find((vendor) => vendor.id === vendorId);
+  const defaultView = savedViews.find((view) => view.isDefault);
+  const assignedTotal = result?.total ?? visibleSelected.length;
   if (!hasCapability(session, "Work.Read"))
     return (
       <section className="panel">
@@ -250,7 +312,14 @@ function WorkList({ session }: { session: Session }) {
           <h1>Work</h1>
           <p>Find, prioritize, and assign operational work.</p>
         </div>
-        <button className="secondary" onClick={() => void load()} disabled={loading}>
+        <button
+          className="secondary"
+          onClick={() => {
+            void loadWork();
+            void loadReference();
+          }}
+          disabled={loading}
+        >
           Refresh
         </button>
       </div>
@@ -299,17 +368,14 @@ function WorkList({ session }: { session: Session }) {
             onChange={(event) => updateQuery({ categoryId: event.target.value || undefined })}
           >
             <option value="">All categories</option>
-            {categoryNames.map((value) => (
-              <option key={value} value={value}>
-                {value}
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
               </option>
             ))}
           </select>
         </label>
-        <button
-          className="secondary filter-clear"
-          onClick={() => setQuery({ sort: "title", page: 1, pageSize: 100 })}
-        >
+        <button className="secondary filter-clear" onClick={clearFilters}>
           Clear filters
         </button>
       </div>
@@ -320,20 +386,14 @@ function WorkList({ session }: { session: Session }) {
           defaultValue=""
           onChange={(event) => {
             const view = savedViews.find((item) => item.id === event.target.value);
-            if (view) {
-              try {
-                setQuery(JSON.parse(view.filters) as WorkListQuery);
-              } catch {
-                setError("This saved view has invalid filters.");
-              }
-            }
+            if (view) applyView(view);
             event.currentTarget.value = "";
           }}
         >
           <option value="">Apply a view…</option>
           {savedViews.map((view) => (
             <option key={view.id} value={view.id}>
-              {view.name}
+              {viewLabel(view)}
             </option>
           ))}
         </select>
@@ -343,6 +403,14 @@ function WorkList({ session }: { session: Session }) {
           onChange={(event) => setViewName(event.target.value)}
           placeholder="View name"
         />
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={viewIsDefault}
+            onChange={(event) => setViewIsDefault(event.target.checked)}
+          />
+          Make this my default view
+        </label>
         <button className="secondary" onClick={() => void saveView()} disabled={!viewName.trim()}>
           Save current view
         </button>
@@ -358,11 +426,16 @@ function WorkList({ session }: { session: Session }) {
             <option value="">Delete a view…</option>
             {savedViews.map((view) => (
               <option key={view.id} value={view.id}>
-                {view.name}
+                {viewLabel(view)}
               </option>
             ))}
           </select>
         )}
+        <small className="saved-views-note">
+          {defaultView
+            ? `Default view: ${defaultView.name} (applied when the list opens)`
+            : "No default view yet."}
+        </small>
       </div>
       {selected.size > 0 && (
         <div className="bulk-toolbar" role="status">
@@ -524,13 +597,13 @@ function WorkList({ session }: { session: Session }) {
               <>
                 <h2 id="assignment-title">Vendor assigned</h2>
                 <p>
-                  {result?.changed ?? result?.total ?? visibleSelected.length} work{" "}
-                  {visibleSelected.length === 1 ? "item was" : "items were"} assigned to{" "}
-                  {chosenVendor?.name}. The list has been refreshed.
+                  Assigned {result?.changed ?? assignedTotal} of {assignedTotal}{" "}
+                  {assignedTotal === 1 ? "work item" : "work items"} to {chosenVendor?.name}
+                  {result && result.unchanged > 0
+                    ? ` (${result.unchanged} already had this vendor)`
+                    : ""}
+                  . The list has been refreshed.
                 </p>
-                {result && result.unchanged > 0 && (
-                  <p>{result.unchanged} already had this vendor.</p>
-                )}
                 <div className="modal-actions">
                   <button
                     onClick={() => {
@@ -570,6 +643,9 @@ function SortHeader({
       </button>
     </th>
   );
+}
+function viewLabel(view: SavedView) {
+  return view.isDefault ? `${view.name} (default)` : view.name;
 }
 function formatDate(value?: string | null) {
   return value

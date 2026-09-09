@@ -21,15 +21,39 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         if (q.PropertyId is { } property) query = query.Where(x => x.PropertyId == property);
         if (q.SpaceId is { } space) query = query.Where(x => x.SpaceId == space);
         var total = await query.CountAsync(ct);
-        query = (q.Sort?.ToLowerInvariant(), q.Descending) switch
+        // One query: the vendor/property/category names and the xmin version join onto the row, so the
+        // list costs a single round trip regardless of page size. Ordering and paging stay in the same
+        // SELECT as the joins; EF cannot order through a record constructor, hence the anonymous shape.
+        var joined =
+            from x in query
+            join p in store.Properties on x.PropertyId equals p.Id into properties
+            from p in properties.DefaultIfEmpty()
+            join c in store.Categories on x.CategoryId equals (Guid?)c.Id into categories
+            from c in categories.DefaultIfEmpty()
+            join v in store.Vendors on x.VendorId equals (Guid?)v.Id into vendors
+            from v in vendors.DefaultIfEmpty()
+            select new
+            {
+                Work = x,
+                PropertyName = p == null ? null : p.Name,
+                CategoryName = c == null ? null : c.Name,
+                VendorName = v == null ? null : v.Name,
+                Version = EF.Property<uint>(x, "Version")
+            };
+        joined = (q.Sort?.ToLowerInvariant(), q.Descending) switch
         {
-            ("status", false) => query.OrderBy(x => x.Status).ThenBy(x => x.Id), ("status", true) => query.OrderByDescending(x => x.Status).ThenBy(x => x.Id),
-            ("priority", false) => query.OrderBy(x => x.Priority).ThenBy(x => x.Id), ("priority", true) => query.OrderByDescending(x => x.Priority).ThenBy(x => x.Id),
-            ("due", false) => query.OrderBy(x => x.DueDate).ThenBy(x => x.Id), ("due", true) => query.OrderByDescending(x => x.DueDate).ThenBy(x => x.Id),
-            ("created", false) => query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id), ("created", true) => query.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
-            ("title", true) => query.OrderByDescending(x => x.Title).ThenBy(x => x.Id), _ => query.OrderBy(x => x.Title).ThenBy(x => x.Id)
+            ("status", false) => joined.OrderBy(t => t.Work.Status).ThenBy(t => t.Work.Id), ("status", true) => joined.OrderByDescending(t => t.Work.Status).ThenBy(t => t.Work.Id),
+            ("priority", false) => joined.OrderBy(t => t.Work.Priority).ThenBy(t => t.Work.Id), ("priority", true) => joined.OrderByDescending(t => t.Work.Priority).ThenBy(t => t.Work.Id),
+            // "due" is the original spelling and stays a working alias for "dueDate".
+            ("due" or "duedate", false) => joined.OrderBy(t => t.Work.DueDate).ThenBy(t => t.Work.Id), ("due" or "duedate", true) => joined.OrderByDescending(t => t.Work.DueDate).ThenBy(t => t.Work.Id),
+            ("created", false) => joined.OrderBy(t => t.Work.CreatedAt).ThenBy(t => t.Work.Id), ("created", true) => joined.OrderByDescending(t => t.Work.CreatedAt).ThenBy(t => t.Work.Id),
+            ("title", true) => joined.OrderByDescending(t => t.Work.Title).ThenBy(t => t.Work.Id), _ => joined.OrderBy(t => t.Work.Title).ThenBy(t => t.Work.Id)
         };
-        var items = await query.Skip((q.Page - 1) * q.PageSize).Take(q.PageSize).ToListAsync(ct);
+        var rows = await joined.Skip((q.Page - 1) * q.PageSize).Take(q.PageSize).ToListAsync(ct);
+        var items = rows.Select(t => new WorkListItem(t.Work.Id, t.Work.Title, t.Work.Description, t.Work.Status, t.Work.Priority, t.Work.WorkType,
+            t.Work.PropertyId, t.PropertyName, t.Work.BuildingId, t.Work.SpaceId,
+            t.Work.CategoryId, t.CategoryName, t.Work.VendorId, t.VendorName, t.Work.EmployeeId,
+            t.Work.DueDate, t.Work.CreatedAt, t.Version)).ToList();
         return new(items, total, q.Page, q.PageSize);
     }
 
@@ -68,15 +92,29 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         store.Timeline.Add(TimelineEntry.From(change)); try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
     }
 
-    public async Task<AssignmentOutcome> BulkAssignVendorAsync(IReadOnlyList<BulkVendorAssignment> items, Guid vendorId, Guid actorId, CancellationToken ct)
+    public async Task<AssignmentOutcome> AssignEmployeeAsync(Guid id, Guid employeeId, Guid actorId, uint? version, CancellationToken ct)
     {
-        if (items.Count is 0 or > 100 || items.Select(x => x.WorkId).Distinct().Count() != items.Count) return AssignmentOutcome.NotFound;
-        if (!await store.Vendors.AnyAsync(x => x.Id == vendorId, ct)) return AssignmentOutcome.NotFound;
+        var work = await store.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (work is null || !await store.Employees.AnyAsync(x => x.Id == employeeId, ct)) return AssignmentOutcome.NotFound;
+        if (version is { } v) store.Entry(work).Property("Version").OriginalValue = v;
+        var change = work.AssignEmployee(employeeId, actorId, clock.GetUtcNow()); if (change is null) return AssignmentOutcome.Unchanged;
+        store.Timeline.Add(TimelineEntry.Record(change.OrganizationId, change.ActorId, change.OccurredAt, nameof(EmployeeAssigned), "WorkItem", change.WorkId,
+            change.PreviousEmployeeId?.ToString(), change.EmployeeId.ToString(), change.WorkId,
+            JsonSerializer.Serialize(new { oldValue = change.PreviousEmployeeId, newValue = change.EmployeeId })));
+        try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
+    }
+
+    public async Task<BulkAssignmentSummary> BulkAssignVendorAsync(IReadOnlyList<BulkVendorAssignment> items, Guid vendorId, Guid actorId, CancellationToken ct)
+    {
+        var total = items.Count;
+        if (items.Count is 0 or > 100 || items.Select(x => x.WorkId).Distinct().Count() != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        if (!await store.Vendors.AnyAsync(x => x.Id == vendorId, ct)) return new(AssignmentOutcome.NotFound, 0, 0, total);
         await using var transaction = await store.Database.BeginTransactionAsync(ct);
-        var ids = items.Select(x => x.WorkId).ToArray(); var works = await store.WorkItems.Where(x => ids.Contains(x.Id)).ToListAsync(ct); if (works.Count != items.Count) return AssignmentOutcome.NotFound;
-        var byId = items.ToDictionary(x => x.WorkId); var changed = false;
-        foreach (var work in works) { store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version; var e = work.AssignVendor(vendorId, actorId, clock.GetUtcNow()); if (e is not null) { changed = true; store.Timeline.Add(TimelineEntry.From(e)); } }
-        try { await store.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return changed ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged; } catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(ct); return AssignmentOutcome.Conflict; }
+        var ids = items.Select(x => x.WorkId).ToArray(); var works = await store.WorkItems.Where(x => ids.Contains(x.Id)).ToListAsync(ct); if (works.Count != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        var byId = items.ToDictionary(x => x.WorkId); var changed = 0;
+        foreach (var work in works) { store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version; var e = work.AssignVendor(vendorId, actorId, clock.GetUtcNow()); if (e is not null) { changed++; store.Timeline.Add(TimelineEntry.From(e)); } }
+        try { await store.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total); }
+        // All-or-nothing: the transaction rolls back, so nothing was changed and nothing is reported as changed.
+        catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(ct); return new(AssignmentOutcome.Conflict, 0, 0, total); }
     }
 
     private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue) => TimelineEntry.Record(work.OrganizationId, actor, clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));

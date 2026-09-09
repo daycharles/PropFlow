@@ -2,7 +2,9 @@
 
 Epics and tasks for the remaining roadmap (milestones 3–6 from [milestones.md](milestones.md)).
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
-implemented. This document is the source for GitHub milestones and issues.
+implemented, and milestone 3 (the first usable vertical slice) is implemented — see the M3
+**Progress** note below for what remains open against it. Milestone 4 is in flight alongside.
+This document is the source for GitHub milestones and issues.
 
 ## How this maps to GitHub
 
@@ -25,6 +27,25 @@ Task IDs are stable references; do not renumber. Add new tasks with the next fre
 running end to end through a real Next.js UI against persisted property/vendor/work data.
 **Definition of done:** the demo workflow above works in a browser against seeded data;
 integration + e2e tests cover the success and failure paths; CI builds and tests the web app.
+
+**Progress:** the slice is delivered end to end. PF-3.01–3.04 (Next.js app, API/session layer,
+auth UI, capability-gated navigation), PF-3.05–3.10 (property hierarchy, expanded
+`Vendor`/`Employee`/`WorkItem`, their migrations with forced RLS, generalized `TimelineEntry`),
+PF-3.11–3.13 (create/update use cases, timeline events, work + reference endpoints),
+**PF-3.14** (search/filter/sort/pagination on `GET /api/work/`), **PF-3.15** (the `xmin`
+version on every work response, required on updates, 409 on mismatch), **PF-3.16** (bounded
+all-or-nothing bulk vendor assignment), **PF-3.17**/**PF-3.21** (user-scoped saved views,
+entity through UI), PF-3.18–3.20 (work list with multi-select and bulk toolbar, work detail
+workspace with autosaving notes, the confirm-and-summarize bulk vendor flow), **PF-3.22**
+(demo seed covering all eight statuses and all four priorities), PF-3.23 (integration tests for
+stale 409, bulk atomicity, cross-tenant concealment, capability denial), PF-3.24/PF-3.25
+(Playwright spec plus the `web` and `e2e` CI jobs) and **PF-3.26** (this doc pass) are done.
+Employee assignment (`POST /api/work/{id}/employee`, `Work.AssignEmployee`) landed with the
+slice although no task numbered it.
+Carried forward rather than closed, tracked in [followups.md](followups.md): `TimelineEntry`
+is only half generalized (`From()` still writes the legacy vendor columns), Tailwind is
+installed but nothing processes it, and the `M3Operations` migration is not safe against a
+populated milestone-2 database.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |

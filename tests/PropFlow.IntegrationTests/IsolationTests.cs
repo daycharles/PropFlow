@@ -22,7 +22,7 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         await s.LoginAsync();
         s.Client.DefaultRequestHeaders.Add("X-Organization-Id", s.OrganizationB.ToString());
         var list = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/?organizationId={s.OrganizationB}");
-        Assert.Equal(s.WorkA, Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("item").GetProperty("id").GetGuid());
+        Assert.Equal(s.WorkA, Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
         Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkB}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkB}/timeline")).StatusCode);
     }

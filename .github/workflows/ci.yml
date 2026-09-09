@@ -53,7 +53,7 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: dotnet restore PropFlow.slnx --locked-mode
-      - run: dotnet build PropFlow.slnx --no-restore
+      - run: dotnet build PropFlow.slnx --configuration Release --no-restore
       - run: npm ci
         working-directory: apps/web
       - run: npm exec playwright install --with-deps chromium
@@ -65,19 +65,79 @@ jobs:
           Runtime__Password: runtime-e2e
           Demo__Password: DemoPassword!123
           ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow_app;Password=runtime-e2e
-          ASPNETCORE_URLS: http://127.0.0.1:5001
-          PROPFLOW_API_ORIGIN: http://127.0.0.1:5001
+          # HTTPS, and the host must be `localhost`. The session and antiforgery cookies are
+          # `__Host-` prefixed with SecurePolicy=Always (src/PropFlow.Api/Program.cs:79-81,93-95),
+          # so over plain http the antiforgery system throws and GET /api/auth/csrf returns 500 —
+          # login is then impossible. The ASP.NET dev cert's SAN is `localhost`, so `127.0.0.1`
+          # would fail hostname verification. apps/web/.env.example says the same thing.
+          ASPNETCORE_URLS: https://localhost:5001
+          # Development is the intended local/CI posture (docs/local-development.md:14-17).
+          # Without it the API boots as Production and throws at startup unless
+          # DataProtection:KeyPath is set (src/PropFlow.Api/Program.cs:42-47), and it would also
+          # add HSTS (Program.cs:115-116).
+          ASPNETCORE_ENVIRONMENT: Development
+          PROPFLOW_API_ORIGIN: https://localhost:5001
+          # Where the exported dev cert lands. `next dev` proxies /api through undici, which
+          # ignores NODE_TLS_REJECT_UNAUTHORIZED and fails with DEPTH_ZERO_SELF_SIGNED_CERT;
+          # pointing Node's CA store at the PEM is what actually works. curl reuses the same file
+          # as its --cacert below, so the two cannot drift apart. The browser is unaffected: it
+          # reaches `next dev` over http://127.0.0.1:3000, a potentially-trustworthy origin, so
+          # Chrome still accepts the Secure/__Host- cookies the API sets through the proxy.
+          NODE_EXTRA_CA_CERTS: ${{ runner.temp }}/propflow-devcert.pem
         run: |
+          wait_for() {
+            name=$1
+            url=$2
+            shift 2
+            for attempt in $(seq 1 60); do
+              if curl -fsS "$@" "$url" >/dev/null 2>&1; then
+                echo "$name became ready after ${attempt}s ($url)"
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::$name never became ready after 60s ($url). Refusing to start Playwright."
+            return 1
+          }
           docker compose up -d --wait
-          dotnet run --project tools/PropFlow.Admin --no-build -- migrate
-          dotnet run --project tools/PropFlow.Admin --no-build -- configure-runtime
-          dotnet run --project tools/PropFlow.Admin --no-build -- seed-demo
-          dotnet run --project src/PropFlow.Api --no-build > /tmp/propflow-api.log 2>&1 &
+          # Kestrel needs a dev cert to serve https://localhost:5001 and a fresh runner has none,
+          # so create it explicitly rather than relying on --export-path to create one. No --trust:
+          # nothing here uses the OS trust store — curl is given --cacert and Node
+          # NODE_EXTRA_CA_CERTS, and the browser never talks to the API directly.
+          dotnet dev-certs https
+          dotnet dev-certs https --export-path "$NODE_EXTRA_CA_CERTS" --format PEM --no-password
+          test -s "$NODE_EXTRA_CA_CERTS" || {
+            echo "::error::No dev certificate PEM at $NODE_EXTRA_CA_CERTS; the API would be unreachable over TLS."
+            exit 1
+          }
+          dotnet run --project tools/PropFlow.Admin --configuration Release --no-build -- migrate
+          dotnet run --project tools/PropFlow.Admin --configuration Release --no-build -- configure-runtime
+          dotnet run --project tools/PropFlow.Admin --configuration Release --no-build -- seed-demo
+          dotnet run --project src/PropFlow.Api --configuration Release --no-build > /tmp/propflow-api.log 2>&1 &
           (cd apps/web && npm run dev -- --hostname 127.0.0.1 > /tmp/propflow-web.log 2>&1) &
-          for attempt in {1..30}; do curl -fsS http://127.0.0.1:3000 >/dev/null && break; sleep 1; done
-          curl -fsS http://127.0.0.1:3000 >/dev/null
+          # The API answers /health/ready with 503 until the schema and RLS readiness checks pass,
+          # so this gates on a usable API rather than on an open socket. The web app is polled too:
+          # the first proxied /api/session must not race a cold API.
+          wait_for "API readiness" https://localhost:5001/health/ready --cacert "$NODE_EXTRA_CA_CERTS" || exit 1
+          wait_for "Web app" http://127.0.0.1:3000 || exit 1
       - run: npm run e2e
         working-directory: apps/web
+      - name: Dump API and web logs
+        if: failure()
+        run: |
+          for log in /tmp/propflow-api.log /tmp/propflow-web.log; do
+            echo "::group::$log"
+            if [ ! -e "$log" ]; then
+              echo "ABSENT: $log does not exist. The process never redirected output here, so this is NOT a clean log."
+            elif [ ! -s "$log" ]; then
+              echo "EMPTY: $log exists but is 0 bytes. The process produced no output; absence of errors here proves nothing."
+            else
+              echo "--- begin $log ($(wc -c < "$log") bytes) ---"
+              cat "$log"
+              echo "--- end $log ---"
+            fi
+            echo "::endgroup::"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

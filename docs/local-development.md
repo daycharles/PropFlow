@@ -25,8 +25,10 @@ npm ci
 npm run dev
 ```
 
-Set `PROPFLOW_API_ORIGIN=https://localhost:7080` in `apps/web/.env.local` (the default)
-and open `http://localhost:3000`. The browser talks to Next.js on the same origin; Next.js
+Then set `PROPFLOW_API_ORIGIN=https://localhost:7080` in `apps/web/.env.local` and open
+`http://localhost:3000`. `.env.example` ships `https://localhost:5001` and `next.config.ts`
+falls back to the same value when the variable is unset, so the copied file must be edited to
+match the port the API is actually listening on — otherwise every `/api` call proxies nowhere. The browser talks to Next.js on the same origin; Next.js
 proxies `/api/*` to the API so secure session and antiforgery cookies remain browser-visible.
 
 Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID and slug (the slug is used for login) and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
@@ -45,15 +47,19 @@ Set environment variables in your shell or secret manager, then run the commands
 | `dotnet run --project tools/PropFlow.Admin -- seed-demo` | `ConnectionStrings__Admin`, `Demo__Password` (12+ characters) |
 | `dotnet run --project src/PropFlow.Api --urls https://localhost:7080` | `ConnectionStrings__Database` (username `propflow_app`) |
 
-Migration order is Identity, then Operations. The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
+Migration order is Identity, then Operations, then Communications — three contexts with three separate histories (`src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs:14-19`). The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
 
 ## Demo data
 
 After applying the M3 migrations, `seed-demo` creates (or preserves) two organizations:
 Tidewater Residential Management and an isolation tenant. It adds a portfolio/property/building/space,
-vendor, employee, categories, and sample work covering the available priorities and early workflow
-states. The command is safe to rerun: it never resets accounts and leaves an organization with
-existing work untouched. Sign in as `demo-admin@tidewater.example.test` using `Demo__Password`.
+vendor, employee, two categories, and 12 work items per organization covering **all eight**
+`WorkStatus` values (Draft, New, Assigned, Scheduled, InProgress, OnHold, Completed, Cancelled)
+and **all four** `WorkPriority` values (Low, Normal, High, Critical), with a spread of overdue
+and upcoming due dates. Four of the twelve stay in `New`, so a "filter to New, select all,
+assign vendor" demo always has work to act on. The `Draft` row is the one that is never
+published — `WorkItem.ChangeStatus` refuses a move back to `Draft`. The command is safe to
+rerun: it never resets accounts and leaves an organization with existing work untouched. Sign in as `demo-admin@tidewater.example.test` using `Demo__Password`.
 The second tenant uses `demo-admin@isolation.example.test` with the same password; use it only to
 exercise tenant-isolation checks. These credentials are local demo data, not production defaults.
 

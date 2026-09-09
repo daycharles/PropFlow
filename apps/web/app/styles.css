@@ -154,6 +154,18 @@ td small {
 .saved-views input {
   width: 150px;
 }
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inline-check input {
+  width: auto;
+  padding: 0;
+}
+.saved-views-note {
+  color: #667085;
+}
 .detail-workspace {
   display: grid;
   gap: 16px;

@@ -18,7 +18,7 @@ try
     if (args[0] == "migrate")
     {
         await DatabaseProvisioner.MigrateAsync(admin);
-        Console.WriteLine("Identity and operations migrations applied.");
+        Console.WriteLine("Identity, operations and communications migrations applied.");
         return 0;
     }
     if (args[0] == "configure-runtime")
@@ -153,22 +153,48 @@ internal static class DemoSeeder
         store.Employees.Add(new Employee(organizationId, employeeId, "Jordan Lee", "jordan@example.test", "555-0101"));
         store.Categories.AddRange(new WorkCategory(organizationId, maintenanceId, "Maintenance", 0),
             new WorkCategory(organizationId, pestId, "Pest control", 1));
-        foreach (var (title, priority, category, status) in new[]
-                 { ("Leaking kitchen sink", WorkPriority.Low, maintenanceId), ("Pest inspection", WorkPriority.Normal, pestId),
-                   ("Broken entry light", WorkPriority.High, maintenanceId), ("Gas odor investigation", WorkPriority.Critical, maintenanceId) }
-                    .Select((item, index) => (item.Item1, item.Item2, item.Item3, (WorkStatus)(index + 1))))
+        // PF-3.22: cover every WorkStatus and every WorkPriority. Four rows stay in New so the
+        // demo/e2e "filter to New, select all, assign vendor" flow always has work to act on.
+        var now = DateTimeOffset.UtcNow;
+        var seeds = new (string Title, WorkPriority Priority, Guid Category, WorkStatus Status)[]
+        {
+            ("Replace lobby entry mats", WorkPriority.Low, maintenanceId, WorkStatus.Draft),
+            ("Leaking kitchen sink", WorkPriority.Low, maintenanceId, WorkStatus.New),
+            ("Pest inspection", WorkPriority.Normal, pestId, WorkStatus.New),
+            ("Broken entry light", WorkPriority.High, maintenanceId, WorkStatus.New),
+            ("Gas odor investigation", WorkPriority.Critical, maintenanceId, WorkStatus.New),
+            ("Quarterly pest treatment", WorkPriority.Normal, pestId, WorkStatus.Assigned),
+            ("Roof leak above the top floor", WorkPriority.High, maintenanceId, WorkStatus.Assigned),
+            ("Ant swarm in the trash room", WorkPriority.High, pestId, WorkStatus.Scheduled),
+            ("Water heater replacement", WorkPriority.Normal, maintenanceId, WorkStatus.InProgress),
+            ("Repaint the stairwell", WorkPriority.Low, maintenanceId, WorkStatus.OnHold),
+            ("Rodent bait station refresh", WorkPriority.Normal, pestId, WorkStatus.Completed),
+            ("Duplicate pest report", WorkPriority.Critical, pestId, WorkStatus.Cancelled)
+        };
+        var offset = -3;
+        foreach (var (title, priority, category, status) in seeds)
         {
             var work = new WorkItem(organizationId, Guid.NewGuid(), title, propertyId, creatorId);
             work.Edit(title, "Seeded demo work item", category, priority);
             work.SetLocation(propertyId, buildingId, spaceId, null);
-            work.Publish(DateTimeOffset.UtcNow);
-            if (status is WorkStatus.Assigned or WorkStatus.Scheduled)
+            work.SetDueDate(now.AddDays(offset++)); // a mix of overdue and upcoming dates for the dueDate sort
+            // Draft is reached by never publishing: a WorkItem starts Draft and ChangeStatus refuses a move back to it.
+            if (status is not WorkStatus.Draft)
             {
-                work.AssignVendor(vendorId);
-                if (status == WorkStatus.Scheduled) work.Schedule(DateTimeOffset.UtcNow.AddDays(1), DateTimeOffset.UtcNow.AddDays(1).AddHours(2));
+                work.Publish(now);
+                if (status is WorkStatus.Assigned or WorkStatus.Scheduled)
+                {
+                    work.AssignVendor(vendorId);
+                    if (status is WorkStatus.Scheduled) work.Schedule(now.AddDays(1), now.AddDays(1).AddHours(2));
+                }
+                else if (status is WorkStatus.InProgress)
+                {
+                    work.AssignEmployee(employeeId); // Schedule/InProgress need an assignee; also gives the seed an employee-assigned row.
+                    work.ChangeStatus(WorkStatus.InProgress, now);
+                }
+                else if (status is WorkStatus.OnHold or WorkStatus.Completed or WorkStatus.Cancelled)
+                    work.ChangeStatus(status, now);
             }
-            else if (status == WorkStatus.InProgress)
-                work.ChangeStatus(WorkStatus.InProgress, DateTimeOffset.UtcNow);
             store.WorkItems.Add(work);
         }
         await store.SaveChangesAsync();

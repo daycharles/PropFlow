@@ -7,6 +7,7 @@ import { AppShell } from "../../components/app-shell";
 import {
   api,
   ApiError,
+  type Employee,
   type Session,
   type TimelineEntry,
   type Vendor,
@@ -62,22 +63,27 @@ function Detail({ session, id }: { session: Session; id: string }) {
   const [work, setWork] = useState<WorkDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [confirm, setConfirm] = useState<"status" | "schedule" | "vendor" | null>(null);
+  const [confirm, setConfirm] = useState<"status" | "schedule" | "vendor" | "employee" | null>(
+    null,
+  );
 
   async function load() {
     setError("");
     try {
-      const [item, entries, vendorList] = await Promise.all([
+      const [item, entries, vendorList, employeeList] = await Promise.all([
         api.work.get(id),
         api.work.timeline(id),
         api.vendors.list(),
+        api.employees.list(),
       ]);
       setWork(item);
       setTimeline(entries);
       setVendors(vendorList.filter((vendor) => vendor.isActive));
+      setEmployees(employeeList.filter((employee) => employee.isActive));
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Unable to load this work item.");
     }
@@ -144,6 +150,28 @@ function Detail({ session, id }: { session: Session; id: string }) {
       setConfirm(null);
     }
   }
+  async function assignEmployee() {
+    if (!work?.employeeId || !hasCapability(session, "Work.AssignEmployee")) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.work.assignEmployee(id, work.employeeId, work.version);
+      setNotice("Employee assigned");
+      await load();
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError && cause.status === 409
+          ? "This work item changed elsewhere. Reloaded the latest version."
+          : cause instanceof ApiError
+            ? cause.message
+            : "Unable to assign employee.",
+      );
+      if (cause instanceof ApiError && cause.status === 409) await load();
+    } finally {
+      setSaving(false);
+      setConfirm(null);
+    }
+  }
   function change<K extends keyof WorkDetail>(key: K, value: WorkDetail[K]) {
     setWork((current) => (current ? { ...current, [key]: value } : current));
     setNotice("");
@@ -162,6 +190,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
       </section>
     );
   const scheduleChanged = Boolean(work.scheduledStart);
+  const canAssignEmployee = hasCapability(session, "Work.AssignEmployee");
   return (
     <section className="detail-workspace">
       <div className="detail-heading">
@@ -266,10 +295,30 @@ function Detail({ session, id }: { session: Session; id: string }) {
           >
             Assign vendor…
           </button>
-          <p className="hint">
-            Employee assignment is not available until the API exposes an employee-assignment
-            endpoint.
-          </p>
+          <label>
+            Employee
+            <select
+              value={work.employeeId ?? ""}
+              disabled={!canAssignEmployee}
+              onChange={(event) => change("employeeId", event.target.value || null)}
+            >
+              <option value="">Unassigned</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!work.employeeId || saving || !canAssignEmployee}
+            onClick={() => setConfirm("employee")}
+          >
+            Assign employee…
+          </button>
+          {!canAssignEmployee && <p className="hint">Your role cannot assign employees to work.</p>}
           <div className="two-column">
             <label>
               Start
@@ -373,9 +422,11 @@ function Detail({ session, id }: { session: Session; id: string }) {
             <p>
               {confirm === "vendor"
                 ? "Assigning a vendor changes responsibility and records this in the timeline."
-                : confirm === "schedule"
-                  ? "Scheduling commits the selected time window."
-                  : "Changing status updates the operational lifecycle and may be irreversible for completed work."}
+                : confirm === "employee"
+                  ? "Assigning an employee changes responsibility and records this in the timeline."
+                  : confirm === "schedule"
+                    ? "Scheduling commits the selected time window."
+                    : "Changing status updates the operational lifecycle and may be irreversible for completed work."}
             </p>
             <div className="modal-actions">
               <button className="secondary" onClick={() => setConfirm(null)}>
@@ -384,6 +435,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
               <button
                 onClick={() => {
                   if (confirm === "vendor") void assignVendor();
+                  else if (confirm === "employee") void assignEmployee();
                   else {
                     setConfirm(null);
                     void save();
