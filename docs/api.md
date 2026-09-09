@@ -51,12 +51,17 @@ Enums serialize as their names (for example `"Sms"`, `"Email"`, `"Pending"`).
 | GET | /api/residents | `Work.Read`; up to 200 tenant-scoped residents ordered by name |
 | GET | /api/residents/{id} | `Work.Read`; one resident (name, email, phone, per-channel consent), or 404 including foreign-tenant IDs |
 | GET | /api/residents/{id}/occupancies | `Work.Read`; the resident's occupancies (space, move-in/out dates) newest first, or 404 |
+| POST | /api/residents | `People.Manage` + CSRF; `fullName`, `email`, `phone`; 201, 400 on invalid contact text |
+| PUT | /api/residents/{id} | `People.Manage` + CSRF; `fullName`, `email`, `phone`; 200, 400, or 404 |
+| PUT | /api/residents/{id}/consent | `People.Manage` + CSRF; `channel` (`Sms`/`Email`), `granted` (bool); records the decision with a server timestamp; 200 or 404 |
+| POST | /api/residents/{id}/occupancies | `People.Manage` + CSRF; `spaceId`, `movedInOn` (`date`); 201, 400 for an unknown/foreign space, or 404 |
+| PUT | /api/residents/{id}/occupancies/{occupancyId}/end | `People.Manage` + CSRF; `movedOutOn` (`date`); 200, 400 if it precedes move-in, or 404 |
 
 A resident carries `smsConsent` / `emailConsent` (`Unknown` / `Granted` / `Revoked`) with the
 decision timestamp. A message is only sent on a channel with an explicit `Granted` and a
 matching address. Occupancy dates are `date` values; the current occupancy has no move-out
-date. Residents and occupancies are managed (created/updated) through the property-operations
-admin surface, not yet exposed as write endpoints.
+date. `People.Manage` is granted to Organization Admin and Property Manager. Contact fields
+reject control characters (a resident name is a template substitution value).
 
 ### Templates
 
