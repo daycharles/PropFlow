@@ -8,10 +8,16 @@ namespace PropFlow.Infrastructure.Identity;
 public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
     SignInManager<ApplicationUser> signIn, MembershipAccess memberships)
 {
+    // A valid Identity password hash whose work factor VerifyHashedPassword reads from the hash
+    // itself. Verifying against it for an unknown email spends the same time as a wrong-password
+    // check, so a missing account is not distinguishable by response latency.
+    private static readonly PasswordHasher<ApplicationUser> DecoyHasher = new();
+    private static readonly string DecoyHash = new PasswordHasher<ApplicationUser>().HashPassword(new ApplicationUser(), "decoy");
+
     public async Task<bool> LoginAsync(string email, string password, Guid organizationId, CancellationToken ct)
     {
         var user = await users.FindByEmailAsync(email);
-        if (user is null) return false;
+        if (user is null) { DecoyHasher.VerifyHashedPassword(new ApplicationUser(), DecoyHash, password); return false; }
         var result = await signIn.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
         if (!result.Succeeded) return false;
         var membership = await memberships.FindActiveAsync(user.Id, organizationId, ct);
@@ -23,7 +29,7 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
     public async Task<bool> LoginAsync(string email, string password, string organizationSlug, CancellationToken ct)
     {
         var user = await users.FindByEmailAsync(email);
-        if (user is null) return false;
+        if (user is null) { DecoyHasher.VerifyHashedPassword(new ApplicationUser(), DecoyHash, password); return false; }
         var result = await signIn.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
         if (!result.Succeeded) return false;
         var membership = await memberships.FindActiveBySlugAsync(user.Id, organizationSlug.Trim().ToLowerInvariant(), ct);

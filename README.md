@@ -29,6 +29,6 @@ Integration tests use disposable real PostgreSQL containers; Docker must be runn
 - `tools/PropFlow.Admin`: explicit migration, runtime-role configuration and initial organization provisioning.
 - `tests`: foundation boot checks, xUnit unit tests for domain/application logic, and PostgreSQL/API integration tests.
 - `apps/web`: reserved Next.js boundary; no runnable frontend yet.
-- `docs`: [architecture](docs/architecture.md), [milestones](docs/milestones.md), [backlog](docs/backlog.md), [API](docs/api.md), and original handoff.
+- `docs`: [architecture](docs/architecture.md), [milestones](docs/milestones.md), [backlog](docs/backlog.md), [API](docs/api.md), [security audit](docs/audit-security.md), [communications audit](docs/audit-communications.md), and original handoff.
 
 Design and implementation are independent. Competitor products are market references only; their source, UI and proprietary workflows are not copied.

@@ -7,21 +7,21 @@ public sealed class OutboundMessage
 {
     public OutboundMessage(MessageChannel channel, string recipientAddress, string? subject, string body)
     {
-        if (string.IsNullOrWhiteSpace(recipientAddress))
-            throw new ArgumentException("A recipient address is required.", nameof(recipientAddress));
-        if (string.IsNullOrWhiteSpace(body))
-            throw new ArgumentException("A message body is required.", nameof(body));
+        var normalizedRecipient = MessageText.RequireSingleLine(recipientAddress, nameof(recipientAddress), 320);
+        var normalizedBody = MessageText.RequireBody(body, nameof(body), 2000);
 
         var trimmedSubject = string.IsNullOrWhiteSpace(subject) ? null : subject.Trim();
         if (channel == MessageChannel.Email && trimmedSubject is null)
             throw new ArgumentException("Email messages require a subject.", nameof(subject));
         if (channel == MessageChannel.Sms && trimmedSubject is not null)
             throw new ArgumentException("SMS messages must not carry a subject.", nameof(subject));
+        if (trimmedSubject is not null)
+            trimmedSubject = MessageText.RequireSingleLine(trimmedSubject, nameof(subject), 200);
 
         Channel = channel;
-        RecipientAddress = recipientAddress.Trim();
+        RecipientAddress = normalizedRecipient;
         Subject = trimmedSubject;
-        Body = body.Trim();
+        Body = normalizedBody;
     }
 
     public MessageChannel Channel { get; }

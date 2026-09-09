@@ -57,4 +57,22 @@ public sealed class OutboundMessageTests
         Assert.Null(rejected.ProviderReference);
         Assert.Equal("nope", rejected.FailureReason);
     }
+
+    [Fact]
+    public void Rejects_header_injection_in_the_recipient_or_subject()
+    {
+        var crlf = ((char)13).ToString() + ((char)10).ToString();
+        Assert.Throws<ArgumentException>(() =>
+            new OutboundMessage(MessageChannel.Email, "resident@example.test" + crlf + "Bcc: evil@example.test", "Subject", "Body"));
+        Assert.Throws<ArgumentException>(() =>
+            new OutboundMessage(MessageChannel.Email, "resident@example.test", "Subject" + crlf + "X-Injected: 1", "Body"));
+    }
+
+    [Fact]
+    public void Allows_newlines_in_the_body()
+    {
+        var body = "Line one" + ((char)10).ToString() + "Line two";
+        var message = new OutboundMessage(MessageChannel.Sms, "+15550001111", null, body);
+        Assert.Equal(body, message.Body);
+    }
 }

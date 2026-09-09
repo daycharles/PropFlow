@@ -50,7 +50,7 @@ The in-process event dispatcher is a foundation, not a durable queue. The Commun
 
 - Property- and assignment-level scope for regional, technician and vendor access remains to be defined before field workflows ship.
 - Invitations, self-service account recovery, MFA and organization switching are not included. Initial provisioning is an administrator-only command.
-- A multi-instance deployment needs shared encrypted Data Protection keys, trusted proxy configuration, managed secrets and PostgreSQL TLS; the local defaults are not a production deployment recipe.
+- `Production`/`Staging` startup requires `DataProtection:KeyPath` (a persistent, instance-shared key ring, optionally certificate-encrypted via `DataProtection:CertificatePath`). A multi-instance deployment still needs trusted proxy configuration, managed secrets and PostgreSQL TLS; the local defaults are not a production deployment recipe.
 - RLS policies and grants must accompany every new business table; migrations are reviewed and explicitly applied, never run by the API.
 - Bulk all-or-nothing operations, bounded batches and client-facing concurrency tokens belong to milestone 3. The current API exposes only single-item assignment for persistence validation.
 - Scheduling uses UTC instants plus property IANA zones when implemented.

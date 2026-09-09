@@ -44,4 +44,19 @@ public sealed class MockMessageSenderTests
         Assert.Equal(first.ProviderReference, second.ProviderReference);
         Assert.Single(log.Sent);
     }
+
+    [Fact]
+    public async Task Concurrent_first_sends_all_return_the_one_recorded_reference()
+    {
+        var log = new InMemorySentMessageLog();
+        var sender = new MockSmsSender(log);
+        var message = new OutboundMessage(MessageChannel.Sms, "+15550001111", null, "On the way.");
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(() => sender.SendAsync(message, "race-key", default))));
+
+        var recorded = Assert.Single(log.Sent);
+        Assert.All(results, r => Assert.Equal(recorded.ProviderReference, r.ProviderReference));
+    }
 }
+

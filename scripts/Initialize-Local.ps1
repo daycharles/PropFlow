@@ -44,7 +44,8 @@ try {
     $env:Bootstrap__Password = [System.Net.NetworkCredential]::new('', $AdminPassword).Password
     Invoke-Checked 'dotnet' @('run', '--project', 'tools/PropFlow.Admin', '--', 'bootstrap')
     $env:ConnectionStrings__Database = "Host=localhost;Database=$($values.POSTGRES_DB);Username=propflow_app;Password=$($values.APP_DB_PASSWORD)"
-    Write-Output 'Local setup complete. Copy the organization ID above for login. The runtime connection is set in this PowerShell session.'
+    $env:ASPNETCORE_ENVIRONMENT = 'Development'
+    Write-Output 'Local setup complete. Copy the organization slug above for login. The runtime connection and Development environment are set in this PowerShell session.'
 } finally {
     Remove-Item Env:ConnectionStrings__Admin,Env:Runtime__Password,Env:Bootstrap__Password,Env:Bootstrap__Email,Env:Bootstrap__Organization -ErrorAction SilentlyContinue
 }
