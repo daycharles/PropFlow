@@ -151,7 +151,7 @@ earlier milestones when a feature forces the issue.
 | PF-7.03 | Observability pass: structured log review, request trace IDs end to end, basic metrics/health dashboards | infra | M | — |
 | PF-7.04 | Scheduling model: store UTC instants plus property IANA time zones; render local times in web | domain | M | PF-3.08 |
 | PF-7.05 | Message consent + provider callback + retry/retention controls for real communication providers | application | L | PF-4.05 |
-| PF-7.06 | RLS/grants review checklist enforced in PR template for every new business table | ci | S | — |
+| PF-7.06 | ✅ RLS/grants review checklist enforced in PR template for every new business table | ci | S | — |
 
 ---
 
