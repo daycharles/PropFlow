@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/coverage/
+.env
+.env.*
+!.env.example
+*.user
+.vs/
+/work/
+/outputs/
+*.log

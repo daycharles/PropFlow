@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PropFlow.Api/PropFlow.Api.csproj" />
+    <Project Path="src/PropFlow.Application/PropFlow.Application.csproj" />
+    <Project Path="src/PropFlow.Domain/PropFlow.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PropFlow.FoundationChecks/PropFlow.FoundationChecks.csproj" />
+  </Folder>
+</Solution>

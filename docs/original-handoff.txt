@@ -1,0 +1,865 @@
+Absolutely. Here’s a **Codex handoff** you can paste directly into a coding agent to start the project.
+
+> **Project: PropFlow**
+>
+> Build the initial MVP for a modular property operations platform called **PropFlow**.
+>
+> PropFlow is not intended to replace Yardi, AppFolio, Buildium, Rent Manager, etc. in the first phase. The initial goal is to become the **operational layer on top of property-management systems**, focused on work orders, bulk operations, resident communication, workflow automation, asset history, and reducing repetitive property-management tasks.
+>
+> The long-term vision is a modular property operating system, but the MVP must remain narrow and usable.
+>
+> ---
+>
+> ## Product philosophy
+>
+> The application should be optimized around:
+>
+> * actions rather than records
+> * minimal clicks
+> * one workflow, one workspace
+> * bulk operations
+> * strong audit/history
+> * configurable workflows
+> * modular architecture
+> * clean integration boundaries
+> * excellent field/mobile usability
+> * attention management rather than dashboard overload
+>
+> A core UX principle:
+>
+> **“Do the work without fighting the software.”**
+>
+> ---
+>
+> # Initial MVP scope
+>
+> Build these primary areas:
+>
+> ## 1. Property Core
+>
+> Support:
+>
+> * organizations
+> * portfolios
+> * properties
+> * buildings
+> * units/spaces
+> * residents
+> * vendors
+> * users
+>
+> Relationship hierarchy:
+>
+> Organization
+> → Portfolio
+> → Property
+> → Building
+> → Unit / Space
+>
+> Do not hard-code the system only for apartments. Structure entities so the platform can eventually support:
+>
+> * multifamily
+> * single-family
+> * commercial
+> * HOA
+> * manufactured housing
+> * RV parks
+> * mixed portfolios
+>
+> ---
+>
+> ## 2. Work Operations
+>
+> This is the primary MVP module.
+>
+> Work items should support:
+>
+> * maintenance request
+> * work order
+> * inspection follow-up
+> * preventive maintenance
+> * unit turn task
+> * project task
+>
+> Core work-order fields:
+>
+> * id
+> * title
+> * description
+> * work type
+> * category
+> * priority
+> * status
+> * property
+> * building
+> * unit
+> * resident
+> * vendor
+> * assigned employee
+> * scheduled start
+> * scheduled end
+> * due date
+> * created date
+> * completed date
+> * cost
+> * notes
+> * resident-visible notes
+> * internal notes
+> * attachments/photos
+>
+> ---
+>
+> # Critical feature: bulk operations
+>
+> This comes directly from real property-manager pain.
+>
+> Users must be able to select multiple work orders and perform bulk actions.
+>
+> Support:
+>
+> * assign vendor
+> * assign employee
+> * change status
+> * change priority
+> * schedule
+> * add note
+> * add tag
+> * send resident message
+> * close
+> * reopen
+>
+> Example:
+>
+> A property manager has 18 pest-control work orders.
+>
+> Current systems may require opening each work order individually.
+>
+> PropFlow should allow:
+>
+> Select 18
+> → Assign Vendor
+> → Select Pest Control Vendor
+> → Schedule
+> → Notify residents
+> → Confirm
+>
+> All in one operation.
+>
+> ---
+>
+> # Work Order UI
+>
+> Build a work-order list optimized for action.
+>
+> Include:
+>
+> * filters
+> * search
+> * saved views
+> * sortable columns
+> * multi-select
+> * bulk-action toolbar
+>
+> Suggested columns:
+>
+> * priority
+> * work type
+> * description
+> * property/unit
+> * resident
+> * vendor
+> * assigned technician
+> * status
+> * age
+> * scheduled time
+> * SLA status
+>
+> Selecting a work order should open a unified work workspace.
+>
+> Avoid forcing users through many separate tabs/screens.
+>
+> The workspace should expose:
+>
+> * work details
+> * scheduling
+> * vendor
+> * assigned employee
+> * resident communication
+> * internal notes
+> * photos
+> * asset history
+> * timeline
+>
+> Prefer autosave for low-risk edits.
+>
+> Explicit confirmation should only be required for consequential actions.
+>
+> ---
+>
+> # 3. Resident Communication
+>
+> This is another high-priority MVP feature.
+>
+> Property managers should be able to send resident updates directly from the work order.
+>
+> Support:
+>
+> * SMS
+> * email
+> * message templates
+>
+> Distinguish:
+>
+> **Internal notes**
+>
+> versus
+>
+> **Resident-visible updates**
+>
+> Example internal note:
+>
+> “Compressor may need replacement. Check warranty.”
+>
+> Example resident message:
+>
+> “The technician completed the initial inspection. We are coordinating the next repair step.”
+>
+> ---
+>
+> # Communication automation
+>
+> Work-order events should be capable of triggering communication.
+>
+> Examples:
+>
+> Technician marked On The Way
+> → send SMS
+>
+> Appointment Scheduled
+> → send confirmation
+>
+> Appointment Changed
+> → notify resident
+>
+> Work Completed
+> → send completion message
+>
+> Work Cancelled
+> → notify resident
+>
+> Build this using an event-driven architecture rather than hard-wiring every workflow into controller code.
+>
+> ---
+>
+> # 4. Timeline / Audit History
+>
+> Every important action should create a timeline event.
+>
+> Examples:
+>
+> * work created
+> * vendor assigned
+> * technician assigned
+> * status changed
+> * priority changed
+> * appointment scheduled
+> * SMS sent
+> * email sent
+> * resident responded
+> * technician arrived
+> * work completed
+> * invoice added
+>
+> The timeline should show:
+>
+> * timestamp
+> * actor
+> * event type
+> * old value
+> * new value
+> * related objects
+>
+> Never silently overwrite operational history.
+>
+> ---
+>
+> # 5. Attention Queue
+>
+> Create a dashboard called:
+>
+> **Needs Your Attention**
+>
+> Do not make the main dashboard a wall of charts.
+>
+> Surface actionable exceptions.
+>
+> Examples:
+>
+> * emergency work orders unassigned
+> * overdue work
+> * SLA breach
+> * work waiting on vendor
+> * work waiting on resident
+> * repeat repair
+> * unit turn at risk
+> * invoice awaiting approval
+>
+> Suggested cards:
+>
+> Critical
+> Warning
+> Informational
+>
+> Users should click directly from an alert into the relevant filtered work view.
+>
+> ---
+>
+> # 6. Assets
+>
+> Include a basic asset model in MVP.
+>
+> Examples:
+>
+> * HVAC
+> * water heater
+> * appliance
+> * roof
+> * electrical panel
+> * plumbing fixture
+> * generator
+>
+> Fields:
+>
+> * property
+> * unit
+> * asset type
+> * manufacturer
+> * model
+> * serial number
+> * install date
+> * warranty expiration
+> * expected service life
+> * condition
+> * replacement cost estimate
+> * notes
+> * photos
+>
+> Work orders should optionally link to an asset.
+>
+> Asset page should show complete maintenance history.
+>
+> ---
+>
+> # Repeat repair detection
+>
+> Add initial logic to flag:
+>
+> * multiple work orders against the same asset
+> * repeated similar categories within a configurable period
+>
+> Example:
+>
+> HVAC asset has 3 repairs in 120 days.
+>
+> Surface:
+>
+> **Repeat Repair Warning**
+>
+> Show:
+>
+> * repair count
+> * total repair cost
+> * asset age
+>
+> This can initially be rules-based.
+>
+> Do not overbuild predictive AI yet.
+>
+> ---
+>
+> # 7. Workflow / Automation Engine
+>
+> Architect the product so actions are triggered from domain events.
+>
+> Concept:
+>
+> WHEN
+>
+> event occurs
+>
+> IF
+>
+> optional conditions are true
+>
+> THEN
+>
+> perform one or more actions
+>
+> Example:
+>
+> WHEN WorkStatusChanged
+>
+> IF status == “On The Way”
+>
+> THEN SendResidentSMS
+>
+> Another:
+>
+> WHEN WorkCreated
+>
+> IF category == Emergency
+>
+> THEN:
+>
+> * notify maintenance supervisor
+> * set priority = Critical
+> * start SLA timer
+>
+> Initial MVP can support a small predefined action set.
+>
+> Design the architecture so a visual workflow builder can be added later.
+>
+> ---
+>
+> # Architecture expectations
+>
+> Use a modular monolith initially.
+>
+> Do not start with microservices.
+>
+> Organize domain boundaries cleanly enough to extract services later if necessary.
+>
+> Suggested modules:
+>
+> * Identity
+> * Organizations
+> * Properties
+> * People
+> * Work
+> * Assets
+> * Communications
+> * Automation
+> * Timeline
+> * Integrations
+>
+> Keep domain logic out of controllers.
+>
+> Prefer application/domain services and explicit domain events.
+>
+> ---
+>
+> # Suggested stack
+>
+> Unless repository constraints dictate otherwise:
+>
+> Frontend:
+>
+> * React
+> * TypeScript
+> * Next.js
+> * Tailwind
+>
+> Backend:
+>
+> * .NET 8+
+> * ASP.NET Core Web API
+> * C#
+>
+> Database:
+>
+> * PostgreSQL
+>
+> ORM:
+>
+> * Entity Framework Core
+>
+> Authentication:
+>
+> * ASP.NET Identity or equivalent provider abstraction
+>
+> Infrastructure:
+>
+> * Docker
+> * docker-compose for local development
+>
+> Messaging initially:
+>
+> * in-process domain event dispatcher
+>
+> Architecture should make it possible to introduce:
+>
+> * RabbitMQ
+> * Azure Service Bus
+> * Kafka
+>
+> later without rewriting the domain model.
+>
+> ---
+>
+> # Multi-tenancy
+>
+> PropFlow is SaaS.
+>
+> Every business record must belong to an Organization/Tenant.
+>
+> Enforce tenant isolation centrally.
+>
+> Do not rely on developers remembering to manually filter queries.
+>
+> Design with future enterprise portfolio hierarchies in mind.
+>
+> ---
+>
+> # Permissions
+>
+> Initial roles:
+>
+> * Organization Admin
+> * Regional Manager
+> * Property Manager
+> * Maintenance Supervisor
+> * Technician
+> * Vendor
+> * Read Only
+>
+> Build permissions around capabilities rather than scattering role-name checks throughout the code.
+>
+> Example permission:
+>
+> `Work.AssignVendor`
+>
+> rather than:
+>
+> `if role == PropertyManager`
+>
+> ---
+>
+> # Integration architecture
+>
+> Build an integration abstraction now, even though the first MVP may use mocked integrations.
+>
+> Long-term systems include:
+>
+> * Yardi
+> * AppFolio
+> * Rent Manager
+> * Buildium
+>
+> Define canonical internal objects.
+>
+> External systems should map into those canonical objects.
+>
+> Example:
+>
+> External Property
+> → PropFlow Property
+>
+> External Unit
+> → PropFlow Space
+>
+> External Resident
+> → PropFlow Person/Occupancy
+>
+> External Work Order
+> → PropFlow Work
+>
+> Track:
+>
+> * source system
+> * external ID
+> * last sync
+> * sync status
+>
+> Do not tightly couple the domain model to Yardi terminology.
+>
+> ---
+>
+> # Integration health
+>
+> Create the foundation for an Integration Health screen.
+>
+> Show:
+>
+> * connected system
+> * status
+> * last successful sync
+> * failure count
+> * unresolved conflicts
+>
+> Eventually support object-level source-of-truth configuration.
+>
+> ---
+>
+> # Search
+>
+> Build global search early.
+>
+> Search:
+>
+> * properties
+> * buildings
+> * units
+> * residents
+> * vendors
+> * work orders
+> * assets
+>
+> Fuzzy matching should be supported.
+>
+> Architect so semantic search can be added later.
+>
+> ---
+>
+> # UI direction
+>
+> Desktop-first management interface with responsive mobile behavior.
+>
+> Field workflows must work well on phones.
+>
+> Design for:
+>
+> * minimal navigation
+> * high information density without clutter
+> * fast keyboard operation
+> * large touch targets on mobile
+>
+> Favor tables and actionable lists over decorative dashboard widgets.
+>
+> Main navigation:
+>
+> * Home
+> * Work
+> * Properties
+> * Assets
+> * Vendors
+> * Residents
+> * Reports
+> * Settings
+>
+> ---
+>
+> # Seed/demo data
+>
+> Create realistic seed data:
+>
+> Organization:
+>
+> Tidewater Residential Management
+>
+> Portfolio:
+>
+> Norfolk Residential
+>
+> Properties:
+>
+> * Harbor Point Apartments
+> * Chesapeake Landing
+> * Bayview Commons
+>
+> Populate approximately:
+>
+> * 3 properties
+> * 10 buildings
+> * 80 units
+> * 70 residents
+> * 6 vendors
+> * 5 employees
+> * 100 work orders
+> * 60 assets
+>
+> Include:
+>
+> * emergency requests
+> * pest-control work
+> * HVAC repairs
+> * plumbing
+> * preventive maintenance
+> * completed work
+> * overdue work
+>
+> Create enough duplicate pest-control work orders to demonstrate bulk assignment.
+>
+> ---
+>
+> # First demo workflow
+>
+> The first polished workflow should be:
+>
+> ### Bulk Pest-Control Assignment
+>
+> User opens Work.
+>
+> Filters:
+>
+> Category = Pest Control
+>
+> Selects 12 work orders.
+>
+> Clicks:
+>
+> Assign Vendor
+>
+> Chooses:
+>
+> Tidewater Pest Services
+>
+> Chooses:
+>
+> Schedule = Friday, 9:00 AM to 3:00 PM
+>
+> Enables:
+>
+> Notify Residents
+>
+> Message:
+>
+> “Pest control is scheduled for Friday between 9:00 AM and 3:00 PM.”
+>
+> Click:
+>
+> Assign & Notify
+>
+> System:
+>
+> * updates all 12 work orders
+> * assigns vendor
+> * schedules work
+> * creates timeline entries
+> * creates resident communication entries
+> * displays success summary
+>
+> This workflow should feel exceptionally fast.
+>
+> ---
+>
+> # Second demo workflow
+>
+> ### Technician On The Way
+>
+> Technician opens assigned work.
+>
+> Changes status:
+>
+> On The Way
+>
+> System:
+>
+> * records timeline event
+> * triggers communication rule
+> * sends/mock-sends resident SMS
+> * records delivery status
+>
+> Property manager sees the communication in the work-order timeline.
+>
+> ---
+>
+> # Third demo workflow
+>
+> ### Repeat HVAC Repair
+>
+> A work order is created for an HVAC asset.
+>
+> System detects:
+>
+> 3 similar repairs within 120 days.
+>
+> Show:
+>
+> Repeat Repair Warning
+>
+> Include:
+>
+> * previous repairs
+> * repair cost
+> * asset age
+> * total cost
+>
+> ---
+>
+> # Non-goals for MVP
+>
+> Do NOT build:
+>
+> * full accounting
+> * rent payment processing
+> * applicant screening
+> * listing syndication
+> * full leasing
+> * general ledger
+> * owner distributions
+> * sophisticated AI agents
+> * native Yardi production integration before the domain model is stable
+>
+> Use mocks/adapters where needed.
+>
+> ---
+>
+> # Development priorities
+>
+> Prioritize in this order:
+>
+> 1. Repository/project structure
+> 2. Tenant-aware auth
+> 3. Property domain model
+> 4. Work domain
+> 5. Work list
+> 6. Work detail workspace
+> 7. Bulk operations
+> 8. Timeline/events
+> 9. Communications
+> 10. Automation
+> 11. Assets
+> 12. Attention queue
+> 13. Integration abstractions
+>
+> ---
+>
+> # Engineering quality
+>
+> Require:
+>
+> * migrations
+> * unit tests for core domain logic
+> * integration tests for major workflows
+> * validation
+> * structured logging
+> * centralized error handling
+> * API documentation
+> * seed/demo environment
+>
+> Keep methods/classes reasonably small.
+>
+> Avoid premature abstraction, but do not tightly couple modules.
+>
+> Use clear domain terminology.
+>
+> ---
+>
+> # First task
+>
+> Before implementing significant code:
+>
+> 1. Inspect the repository.
+> 2. Produce a proposed architecture and folder structure.
+> 3. Identify any existing technology decisions.
+> 4. Produce an implementation plan broken into milestones.
+> 5. Identify risks or ambiguities.
+> 6. Then begin implementing Milestone 1.
+>
+> Do not attempt to build the entire product in one pass.
+>
+> Build vertically usable slices.
+>
+> The first usable slice should allow:
+>
+> **Login → Open Work → Select multiple work orders → Assign vendor → Confirm → See updated timeline.**
+
+### One additional note for Codex
+
+I would put this immediately after the handoff:
+
+> **Do not copy Yardi, MIQ, AppFolio, Property Meld, HappyCo, or any competitor UI, source code, proprietary workflow, terminology, or implementation. Competitors are market references only. Design PropFlow independently around the requirements above.**
+
+That gives you a clean IP boundary while still benefiting from all the research we’ve done.
+
+I’d use **PropFlow as the working project name** for now. We can rename it later without letting branding become the first six-week engineering milestone.

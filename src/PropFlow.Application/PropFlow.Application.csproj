@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../PropFlow.Domain/PropFlow.Domain.csproj" />
+  </ItemGroup>
+</Project>
