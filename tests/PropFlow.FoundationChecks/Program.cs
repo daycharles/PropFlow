@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using PropFlow.Application;
+using PropFlow.Application.Communications;
 using PropFlow.Application.Events;
 using PropFlow.Domain;
+using PropFlow.Domain.Communications;
 using PropFlow.Domain.Work;
 
 var organization = Guid.NewGuid();
@@ -54,6 +56,53 @@ var checks = new List<(string Name, Action Run)>
         var change = new WorkItem(organization, Guid.NewGuid(), "Repair").AssignVendor(Guid.NewGuid(), actor, DateTimeOffset.UtcNow)!;
         Reject<OperationCanceledException>(() => dispatcher.DispatchAsync(change, new CancellationToken(true)).GetAwaiter().GetResult());
         Assert(!handler.Called);
+    }),
+    ("Template rejects a blank name", () => Reject<ArgumentException>(() =>
+        new MessageTemplate(organization, Guid.NewGuid(), " ", MessageChannel.Sms, null, "Pest control is on the way."))),
+    ("Email template requires a subject", () => Reject<ArgumentException>(() =>
+        new MessageTemplate(organization, Guid.NewGuid(), "Completion", MessageChannel.Email, " ", "The work is complete."))),
+    ("SMS template rejects a subject", () => Reject<ArgumentException>(() =>
+        new MessageTemplate(organization, Guid.NewGuid(), "On the way", MessageChannel.Sms, "Subject", "On the way."))),
+    ("Template revision revalidates content and toggles active state", () =>
+    {
+        var template = new MessageTemplate(organization, Guid.NewGuid(), "Scheduled", MessageChannel.Email, "Visit", "Body");
+        Reject<ArgumentException>(() => template.Revise(null, "Updated"));
+        template.Revise("New subject", "Updated body");
+        Assert(template.Subject == "New subject" && template.Body == "Updated body");
+        template.Deactivate();
+        Assert(!template.IsActive);
+        template.Activate();
+        Assert(template.IsActive);
+    }),
+    ("Renderer substitutes supplied values", () => Assert(
+        new TemplateRenderer().Render("Pest control is scheduled for {{ day }} at {{time}}.",
+            new Dictionary<string, string> { ["day"] = "Friday", ["time"] = "9:00 AM" })
+        == "Pest control is scheduled for Friday at 9:00 AM.")),
+    ("Renderer rejects a placeholder with no supplied value", () => Reject<TemplateRenderException>(() =>
+        new TemplateRenderer().Render("Hello {{ name }}", new Dictionary<string, string>()))),
+    ("Renderer rejects a malformed placeholder", () => Reject<TemplateRenderException>(() =>
+        new TemplateRenderer().Render("Hello {{ 1nvalid }}", new Dictionary<string, string> { ["x"] = "y" }))),
+    ("Renderer lists distinct placeholders", () =>
+    {
+        var names = new TemplateRenderer().Placeholders("{{a}} {{ b }} {{a}}");
+        Assert(names.Count == 2 && names.Contains("a") && names.Contains("b"));
+    }),
+    ("Consent blocks contact until explicitly granted", () =>
+    {
+        var when = DateTimeOffset.Parse("2026-09-09T09:00:00-04:00");
+        var consent = ChannelConsent.Unset(MessageChannel.Sms);
+        Assert(!consent.AllowsContact);
+        var granted = consent.Grant(when);
+        Assert(granted.AllowsContact && granted.DecidedAt == when && granted.DecidedAt!.Value.Offset == TimeSpan.Zero);
+        Assert(!granted.Revoke(when).AllowsContact);
+    }),
+    ("Outbound message enforces channel shape and trims", () =>
+    {
+        Reject<ArgumentException>(() => new OutboundMessage(MessageChannel.Sms, " ", null, "Body"));
+        Reject<ArgumentException>(() => new OutboundMessage(MessageChannel.Email, "resident@example.test", null, "Body"));
+        Reject<ArgumentException>(() => new OutboundMessage(MessageChannel.Sms, "+15550001111", "Subject", "Body"));
+        var message = new OutboundMessage(MessageChannel.Email, " resident@example.test ", " Visit ", " Body ");
+        Assert(message.RecipientAddress == "resident@example.test" && message.Subject == "Visit" && message.Body == "Body");
     })
 };
 
