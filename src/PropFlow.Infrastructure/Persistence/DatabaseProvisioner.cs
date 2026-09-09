@@ -57,7 +57,7 @@ public static class DatabaseProvisioner
             GRANT UPDATE ON identity."AspNetUsers" TO propflow_app;
             GRANT SELECT ON operations."Vendors" TO propflow_app;
             GRANT SELECT ON operations."Employees", operations."Portfolios", operations."Properties", operations."Buildings", operations."Spaces" TO propflow_app;
-            GRANT SELECT, INSERT, UPDATE ON operations."WorkCategories", operations."Residents", operations."Occupancies" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."WorkCategories", operations."Residents", operations."Occupancies", operations."Assets" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."WorkItems" TO propflow_app;
             GRANT SELECT, INSERT ON operations."Timeline" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;

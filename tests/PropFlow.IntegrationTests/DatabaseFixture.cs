@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using PropFlow.Domain.Assets;
 using PropFlow.Domain.Communications;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
@@ -84,6 +85,8 @@ public sealed class Scenario : IAsyncDisposable
     public Guid SpaceB { get; } = Guid.NewGuid();
     public Guid ResidentA { get; } = Guid.NewGuid();
     public Guid ResidentB { get; } = Guid.NewGuid();
+    public Guid AssetA { get; } = Guid.NewGuid();
+    public Guid AssetB { get; } = Guid.NewGuid();
     public string Password { get; } = $"A!a9{Guid.NewGuid():N}";
     public string SlugA { get; } = $"org-a-{Guid.NewGuid():N}"[..20];
     public string SlugB { get; } = $"org-b-{Guid.NewGuid():N}"[..20];
@@ -126,6 +129,10 @@ public sealed class Scenario : IAsyncDisposable
         residentA.SetConsent(MessageChannel.Sms, granted: true, moveIn.ToDateTime(TimeOnly.MinValue));
         a.Residents.Add(residentA);
         a.Occupancies.Add(new Occupancy(OrganizationA, Guid.NewGuid(), ResidentA, SpaceA, moveIn));
+        var assetA = new Asset(OrganizationA, AssetA, PropertyA, SpaceA, AssetKind.Hvac, "Rooftop HVAC 1");
+        assetA.SetLifecycle(new DateOnly(2018, 6, 1), new DateOnly(2028, 6, 1), 15);
+        assetA.RecordCondition(AssetCondition.Good);
+        a.Assets.Add(assetA);
         a.WorkItems.Add(new WorkItem(OrganizationA, WorkA, "Pest control", PropertyA, AdminA));
         await a.SaveChangesAsync();
         await using var b = AdminStore(OrganizationB);
@@ -135,6 +142,7 @@ public sealed class Scenario : IAsyncDisposable
         b.Spaces.Add(new Space(OrganizationB, SpaceB, PropertyB, null, "B-1"));
         b.Residents.Add(new Resident(OrganizationB, ResidentB, "Sam Okafor", "sam@example.test", "+15550200202"));
         b.Occupancies.Add(new Occupancy(OrganizationB, Guid.NewGuid(), ResidentB, SpaceB, moveIn));
+        b.Assets.Add(new Asset(OrganizationB, AssetB, PropertyB, null, AssetKind.WaterHeater, "Basement water heater"));
         b.WorkItems.Add(new WorkItem(OrganizationB, WorkB, "Private work", PropertyB, AdminB));
         await b.SaveChangesAsync();
     }
