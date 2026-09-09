@@ -12,3 +12,4 @@
 /outputs/
 *.log
 **/TestResults/
+.claude/settings.local.json
