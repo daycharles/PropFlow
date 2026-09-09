@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
 using PropFlow.Application;
 using PropFlow.Application.Communications;
+using PropFlow.Application.Search;
 using PropFlow.Application.Work;
 using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Identity;
@@ -53,6 +54,7 @@ builder.Services.AddDbContext<CommunicationsStore>(options => options.UseNpgsql(
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
+builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
 builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
@@ -154,6 +156,7 @@ app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
+app.MapSearchEndpoints();
 app.Run();
 
 public partial class Program { }
