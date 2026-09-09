@@ -99,3 +99,21 @@ with the work-event wiring in a later task.
 Dispatcher behavior is configured under `Communications` (`PollInterval`, `RetryDelay`,
 `MaxDeliveryAttempts`, `StaleClaimTimeout`); defaults suit a single instance with mock
 providers.
+
+## Global search (milestone 6)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/search | `Work.Read`; `?q=` (2–100 characters after trimming, else 400) and optional `?limit=` (1–50, default 20); returns a ranked JSON array of hits |
+
+Each hit is `{ "type", "id", "label", "sublabel", "score" }`. `type` is one of `Property`,
+`Building`, `Space`, `Resident`, `Vendor`, `Employee`, `Category`, `Asset`, `Work`. `sublabel`
+is a secondary identifier where one exists (a resident's email or phone, an asset's serial
+number, an employee's email) and is otherwise `null`.
+
+Matching is case-insensitive. A substring match (backed by `pg_trgm` GIN indexes) always
+outranks a trigram-similarity-only match, so a query that is a typo of a name still finds it
+but ranks below any literal substring hit. Residents also match on email and phone, assets on
+serial number and model, employees on email. Every query runs through the tenant query filter
+and row-level security, so results never cross an organization. The result set is capped at
+`limit` hits total across all types.

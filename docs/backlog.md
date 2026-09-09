@@ -129,7 +129,7 @@ entities, and the integration abstraction exists (mocked).
 | PF-6.05 | "Repeat Repair Warning" surface: repair count, total repair cost, asset age; shown on work create and asset page | web | M | PF-6.04 |
 | PF-6.06 | Attention queue backend: rules for unassigned emergencies, overdue work, SLA breach, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk | application | L | PF-6.04 |
 | PF-6.07 | "Needs Your Attention" home screen: Critical / Warning / Informational cards, each click-through to a filtered work view | web | L | PF-6.06 |
-| PF-6.08 | Fuzzy global search across properties, buildings, units, residents, vendors, work orders, assets | api | L | PF-6.01 |
+| PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
 | PF-6.09 | Global search UI (keyboard-first) in web | web | M | PF-6.08 |
 | PF-6.10 | Integration adapter abstraction: canonical Property/Space/Person-Occupancy/Work/Asset objects, external ID + source system + last sync + sync status tracking; one mock adapter | application | L | PF-6.01 |
 | PF-6.11 | Integration Health screen foundation: connected system, status, last successful sync, failure count, unresolved conflicts | web | M | PF-6.10 |
