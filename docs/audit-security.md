@@ -66,11 +66,13 @@ transaction, or `RESET` on close) is deferred.
 No endpoint deletes either. RLS still confines any delete to the current tenant. Drop `DELETE`
 from those grants when confirming least-privilege; re-add per feature.
 
-### L-4 — No HSTS / HTTPS redirection / security response headers (Low) — accepted
+### L-4 — No HSTS / security response headers (Low) — resolved (API), open (web/edge)
 
-Cookies are `__Host-` + `Secure` + `HttpOnly` + `SameSite=Strict` and the API is JSON-only, so
-exposure is low. `UseHsts`/`UseHttpsRedirection` and `X-Content-Type-Options` / `Referrer-Policy`
-/ a web CSP are deferred to deployment hardening.
+**Resolution:** every API response now carries `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy:
+same-origin`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`; HSTS
+is added outside Development. The `apps/web` CSP and http→https redirection (an ingress/proxy
+concern) remain.
 
 ### L-5 — Login rate-limiter degrades to one global bucket when `RemoteIpAddress` is null (Low) — accepted
 

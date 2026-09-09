@@ -23,7 +23,6 @@ Next.js work list/detail) lands on `main`.
 | PF-4.07 — extended bulk work actions (schedule, status, priority, note, tag, close, reopen; bounded + all-or-nothing) | backlog.md M4 | unassigned | the bulk vendor-assignment endpoint (PF-3.16) exists on `main` |
 | PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | PF-4.07 + PF-4.03 + the M3 Next.js bulk vendor flow (PF-3.20) |
 | PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | the M3 Next.js work list/detail (PF-3.19) |
-| PF-4.02 — write endpoints for residents + consent | backlog.md M4; PR #83 | unassigned | not strictly M3-blocked; reduced to write endpoints only after consent was folded into `Resident` in PF-4.01 |
 
 ---
 
@@ -45,7 +44,7 @@ Recorded and accepted; revisit during the M7 hardening track or when a feature f
 | --- | --- | --- | --- |
 | Tenant GUC is session-scoped, not transaction-scoped (`set_config(..., false)`) | audit-security L-1 (accepted) | unassigned | Sound today (interceptor re-sets per checkout, Npgsql resets pooled connections). Fragile to a future Npgsql multiplexing / reset-disabled change; fix is `SET LOCAL` per transaction or `RESET` on close |
 | Runtime role holds unused `DELETE` on `WorkItems` / `OutboxMessages` | audit-security L-2 (accepted) | unassigned | No endpoint deletes either; RLS still confines any delete to the tenant. Drop from the grants when confirming least-privilege, re-add per feature |
-| No HSTS / HTTPS redirection / CSP / security response headers (`X-Content-Type-Options`, `Referrer-Policy`) | audit-security L-4 (accepted) | unassigned | Exposure low (`__Host-` + `Secure` + `HttpOnly` + `SameSite=Strict` cookies, JSON-only API). Add `UseHsts`/`UseHttpsRedirection` + headers + a web CSP at deployment |
+| Web CSP + HTTPS redirection at the edge | audit-security L-4 (API side done) | daycdev (web) / deployment | API now sends HSTS (non-Dev), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy`, and `Content-Security-Policy: default-src 'none'`. Still open: `apps/web` CSP and http→https redirect (left to the ingress/proxy) |
 | Login rate-limiter collapses to one global bucket when `RemoteIpAddress` is null; `/api/auth/csrf` is unrated | audit-security L-5 (accepted) | unassigned | Per-account lockout (5/15min) partially compensates. Fix needs care around the existing rate-limit test + trusted-proxy config |
 | `apps/web` has no lockfile and is outside CI | audit-security M-3 (open) | daycdev (M3 web work) | Non-reproducible frontend, no `npm audit` / `next build` in CI. See also the CI item under Tooling / process |
 | Capped-exponential backoff + transient/permanent error classification for real providers | audit-communications C3 (deferred) → PF-7.05 | unassigned | Current retry is fixed 2-min spacing, cap 8 (~14 min outage tolerance); config-bound |
@@ -82,7 +81,6 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 | CI does not run `tests/PropFlow.UnitTests` | code audit H1; `.github/workflows/ci.yml`; CLAUDE.md step 3 | unassigned | 85+ xUnit tests are compiled but never executed in CI (`verify` runs FoundationChecks + IntegrationTests only). One-line `ci.yml` fix; blocked because the PAT lacks the `workflow` scope — needs a token with Workflows:write or a manual apply. Also missing: an `apps/web` install/lint/build job and the Playwright e2e job (PF-3.25) |
 | `main` branch protection not configured | Slack #agent-updates 2026-09-09; CLAUDE.md ("Protected: `verify` must be green") | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI. This already broke `main` once (commit `8c88b20`, recovered by PR #79). Blocked because the PAT lacks the Administration scope |
 | PAT scope gaps | Slack #agent-updates 2026-09-09 | unassigned | Token lacks `workflow` (blocks the CI fix above) and Administration (blocks branch protection). Needs a re-scoped token |
-| RLS/grants review checklist not enforced in the PR template | backlog.md PF-7.06 | unassigned | Add to the PR template for every new business table |
 | `daycdev` pushes M3 directly to `main` rather than via PR into `develop` | CLAUDE.md branching rules; git log (`8c88b20` direct) | daycdev | Process drift; ties into branch protection above |
 
 ---

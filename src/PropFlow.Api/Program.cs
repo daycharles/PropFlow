@@ -111,6 +111,19 @@ builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
 
 var app = builder.Build();
 app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment())
+    app.UseHsts();
+// The API only ever returns JSON. Lock everything else down on every response.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Cross-Origin-Resource-Policy"] = "same-origin";
+    headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+    await next(context);
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
