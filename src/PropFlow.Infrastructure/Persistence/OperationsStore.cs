@@ -19,6 +19,8 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Property> Properties => Set<Property>();
     public DbSet<Building> Buildings => Set<Building>();
     public DbSet<Space> Spaces => Set<Space>();
+    public DbSet<Resident> Residents => Set<Resident>();
+    public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
@@ -54,6 +56,25 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         model.Entity<Property>(entity => { entity.ToTable("Properties"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired(); entity.HasOne<Portfolio>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PortfolioId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
         model.Entity<Building>(entity => { entity.ToTable("Buildings"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
         model.Entity<Space>(entity => { entity.ToTable("Spaces"); entity.Property(x => x.Code).HasMaxLength(50).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasOne<Building>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BuildingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<Resident>(entity =>
+        {
+            entity.ToTable("Residents");
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(254);
+            entity.Property(x => x.Phone).HasMaxLength(40);
+            entity.Property(x => x.SmsConsent).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.EmailConsent).HasConversion<string>().HasMaxLength(20).IsRequired();
+        });
+        model.Entity<Occupancy>(entity =>
+        {
+            entity.ToTable("Occupancies");
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.SpaceId });
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId });
+        });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<TimelineEntry>(entity =>
         {

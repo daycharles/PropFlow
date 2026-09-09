@@ -44,6 +44,22 @@ Application errors use Problem Details with a request trace ID; unexpected detai
 
 Enums serialize as their names (for example `"Sms"`, `"Email"`, `"Pending"`).
 
+### Residents
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/residents | `Work.Read`; up to 200 tenant-scoped residents ordered by name |
+| GET | /api/residents/{id} | `Work.Read`; one resident (name, email, phone, per-channel consent), or 404 including foreign-tenant IDs |
+| GET | /api/residents/{id}/occupancies | `Work.Read`; the resident's occupancies (space, move-in/out dates) newest first, or 404 |
+
+A resident carries `smsConsent` / `emailConsent` (`Unknown` / `Granted` / `Revoked`) with the
+decision timestamp. A message is only sent on a channel with an explicit `Granted` and a
+matching address. Occupancy dates are `date` values; the current occupancy has no move-out
+date. Residents and occupancies are managed (created/updated) through the property-operations
+admin surface, not yet exposed as write endpoints.
+
+### Templates
+
 | Method | Path | Behavior |
 | --- | --- | --- |
 | GET | /api/communication/templates | `Communications.ManageTemplates`; tenant-scoped message templates ordered by name |

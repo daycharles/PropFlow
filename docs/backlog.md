@@ -66,9 +66,12 @@ with a success summary, durable communication dispatch, and a full seeded demo d
 
 **Progress:** the Communications module core is in — `MessageTemplate` + renderer + consent
 type (#75), then the `CommunicationsStore` context, mock SMS/email senders, transactional
-outbox + dispatcher, template CRUD API, and their tests. PF-4.04, PF-4.05 and PF-4.12 are
-substantially done; PF-4.03 is done bar the resident-data wiring. PF-4.01, PF-4.06–4.11
-remain (they need milestone 3).
+outbox + dispatcher, template CRUD API, and their tests. **PF-4.01 is done** — `Resident`
+and `Occupancy` entities (contact fields + per-channel consent + `AllowsContact`), the
+`operations`-schema tables with forced RLS, read endpoints, and tests. PF-4.02 is largely
+folded into PF-4.01 (consent lives on `Resident`); it now only needs write endpoints.
+PF-4.04, PF-4.05 and PF-4.12 are substantially done; PF-4.03 is done bar the resident-data
+wiring. PF-4.06–4.11 remain (they need more of milestone 3).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
