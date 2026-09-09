@@ -44,7 +44,7 @@ The API must use the restricted propflow_app account. It has no schema ownership
 
 Assignment domain events retain event ID, organization, work, actor, UTC timestamp, previous vendor and new vendor. No-op assignments create no duplicate history. Assignment plus timeline insertion commit in one SaveChanges transaction. Timeline modifications/deletions are blocked by EF, runtime database permissions and a PostgreSQL trigger. No external communication is dispatched by this milestone.
 
-The in-process event dispatcher is a foundation, not a durable queue. A transactional outbox and idempotent communication handlers are milestone 4 work. Future adapters map external Property, Space, Person/Occupancy, Work and Asset records to canonical objects, retaining external IDs and sync status separately.
+The in-process event dispatcher is a foundation, not a durable queue. The Communications module (milestone 4) adds a `communications`-schema context with its own migration history, RLS on every table, a per-organization `OutboxMessage` queue with a unique idempotency key, and a background dispatcher that polls each organization on its own tenant context using the restricted runtime role — no privileged connection. Mock SMS and email providers record instead of sending. Enqueuing an outbox row inside the same transaction as the Operations change that triggers it, and idempotent real providers, are wired when work events start producing messages. Future adapters map external Property, Space, Person/Occupancy, Work and Asset records to canonical objects, retaining external IDs and sync status separately.
 
 ## Remaining decisions / boundaries
 

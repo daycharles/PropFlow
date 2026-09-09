@@ -4,8 +4,9 @@ public static class Capabilities
 {
     public const string ReadWork = "Work.Read";
     public const string AssignVendor = "Work.AssignVendor";
+    public const string ManageTemplates = "Communications.ManageTemplates";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, ManageTemplates];
 
     public static IReadOnlyList<string> ForRole(string role) => role switch
     {

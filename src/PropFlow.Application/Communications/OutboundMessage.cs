@@ -46,10 +46,11 @@ public sealed record MessageDeliveryResult(MessageDeliveryStatus Status, string?
 }
 
 // One implementation per channel. Milestone 4 ships mock SMS and email providers; real
-// providers slot in behind the same contract with the outbox unchanged.
+// providers slot in behind the same contract with the outbox unchanged. The idempotency key
+// lets a provider (or the mock) collapse a re-delivery after a transient failure.
 public interface IMessageSender
 {
     MessageChannel Channel { get; }
 
-    Task<MessageDeliveryResult> SendAsync(OutboundMessage message, CancellationToken cancellationToken);
+    Task<MessageDeliveryResult> SendAsync(OutboundMessage message, string idempotencyKey, CancellationToken cancellationToken);
 }

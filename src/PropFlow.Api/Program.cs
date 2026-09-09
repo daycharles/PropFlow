@@ -1,10 +1,13 @@
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
 using PropFlow.Application;
+using PropFlow.Application.Communications;
 using PropFlow.Application.Work;
+using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Identity;
 using PropFlow.Infrastructure.Persistence;
 
@@ -23,9 +26,18 @@ builder.Services.AddDbContext<IdentityStore>(options => options.UseNpgsql(connec
     postgres => postgres.MigrationsHistoryTable("__IdentityMigrations", "identity")));
 builder.Services.AddDbContext<OperationsStore>(options => options.UseNpgsql(connection,
     postgres => postgres.MigrationsHistoryTable("__OperationsMigrations", "operations")));
+builder.Services.AddDbContext<CommunicationsStore>(options => options.UseNpgsql(connection,
+    postgres => postgres.MigrationsHistoryTable("__CommunicationsMigrations", "communications")));
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
+builder.Services.AddScoped<IOutbox, EfOutbox>();
+builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
+builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
+builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
+builder.Services.AddHostedService<OutboxDispatcher>();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 {
     options.User.RequireUniqueEmail = true;
@@ -98,6 +110,7 @@ app.MapHealthChecks("/health/ready");
 app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
 app.MapWorkEndpoints();
+app.MapCommunicationEndpoints();
 app.Run();
 
 public partial class Program { }

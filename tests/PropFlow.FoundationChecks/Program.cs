@@ -103,6 +103,31 @@ var checks = new List<(string Name, Action Run)>
         Reject<ArgumentException>(() => new OutboundMessage(MessageChannel.Sms, "+15550001111", "Subject", "Body"));
         var message = new OutboundMessage(MessageChannel.Email, " resident@example.test ", " Visit ", " Body ");
         Assert(message.RecipientAddress == "resident@example.test" && message.Subject == "Visit" && message.Body == "Body");
+    }),
+    ("Outbox message validates input and starts pending", () =>
+    {
+        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, " ", null, "Body", "key", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, " ", "key", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", " ", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Email, "resident@example.test", null, "Body", "key", DateTimeOffset.UtcNow));
+        var message = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "On the way.", "work-42-otw", DateTimeOffset.UtcNow);
+        Assert(message.Status == OutboxStatus.Pending && message.AttemptCount == 0);
+    }),
+    ("Outbox message transitions record attempts and timestamps", () =>
+    {
+        var when = DateTimeOffset.Parse("2026-09-09T09:00:00-04:00");
+        var failed = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k1", when);
+        Reject<ArgumentException>(() => failed.MarkFailed(" ", when));
+        failed.MarkFailed("provider down", when);
+        Assert(failed.Status == OutboxStatus.Failed && failed.AttemptCount == 1 && failed.FailureReason == "provider down");
+        Assert(failed.LastAttemptAt == when && failed.LastAttemptAt!.Value.Offset == TimeSpan.Zero);
+
+        var sent = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k2", when);
+        Reject<ArgumentException>(() => sent.MarkSent(" ", when));
+        sent.MarkSent("mock-sms-1", when);
+        Assert(sent.Status == OutboxStatus.Sent && sent.AttemptCount == 1 && sent.ProviderReference == "mock-sms-1");
+        sent.MarkSent("mock-sms-2", when);
+        Assert(sent.AttemptCount == 1 && sent.ProviderReference == "mock-sms-1");
     })
 };
 

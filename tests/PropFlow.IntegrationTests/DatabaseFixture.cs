@@ -124,6 +124,10 @@ public sealed class Scenario : IAsyncDisposable
     public IdentityStore Identity() => DatabaseProvisioner.CreateIdentityStore(fixture.AdminConnection);
     public OperationsStore AdminStore(Guid organization) => DatabaseProvisioner.CreateOperationsStore(fixture.AdminConnection, organization);
     public OperationsStore Store(Guid organization) => DatabaseProvisioner.CreateOperationsStore(fixture.RuntimeConnection, organization);
+    public PropFlow.Infrastructure.Communications.CommunicationsStore Comms(Guid organization) =>
+        DatabaseProvisioner.CreateCommunicationsStore(fixture.RuntimeConnection, organization);
+    public PropFlow.Infrastructure.Communications.CommunicationsStore CommsAsAdmin(Guid organization) =>
+        DatabaseProvisioner.CreateCommunicationsStore(fixture.AdminConnection, organization);
 
     public async Task<string> RefreshCsrfAsync()
     {
