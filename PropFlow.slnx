@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PropFlow.FoundationChecks/PropFlow.FoundationChecks.csproj" />
+    <Project Path="tests/PropFlow.UnitTests/PropFlow.UnitTests.csproj" />
     <Project Path="tests/PropFlow.IntegrationTests/PropFlow.IntegrationTests.csproj" />
   </Folder>
   <Folder Name="/tools/">

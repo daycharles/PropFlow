@@ -45,6 +45,7 @@ Clients must preserve cookies and use HTTPS. There is no frontend yet. See `api.
 dotnet restore PropFlow.slnx --locked-mode
 dotnet build PropFlow.slnx --configuration Release --no-restore
 dotnet run --project tests/PropFlow.FoundationChecks --configuration Release --no-build
+dotnet test tests/PropFlow.UnitTests --configuration Release --no-build
 dotnet test tests/PropFlow.IntegrationTests --configuration Release --no-build
 ```
 
