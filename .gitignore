@@ -11,3 +11,4 @@
 /work/
 /outputs/
 *.log
+**/TestResults/

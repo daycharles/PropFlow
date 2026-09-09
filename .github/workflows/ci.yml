@@ -1,14 +1,22 @@
-name: Foundation checks
+name: Build and PostgreSQL integration tests
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
-  foundation:
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.3xx'
-      - run: dotnet build PropFlow.slnx --configuration Release
+      - run: dotnet restore PropFlow.slnx --locked-mode
+      - run: dotnet build PropFlow.slnx --configuration Release --no-restore
       - run: dotnet run --project tests/PropFlow.FoundationChecks --configuration Release --no-build
+      - run: dotnet test tests/PropFlow.IntegrationTests --configuration Release --no-build --logger trx --results-directory work/test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: work/test-results/*.trx

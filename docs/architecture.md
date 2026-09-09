@@ -1,45 +1,58 @@
-# Architecture proposal
+# Architecture
 
-## Decisions
+## Stack and boundaries
 
-Use a modular monolith: one ASP.NET Core API and one PostgreSQL database, with a separate Next.js/React/TypeScript/Tailwind frontend. .NET 10 is installed locally and satisfies the requested .NET 8+ baseline. No prior repository decisions existed. Dependency versions for the web application and EF Core will be selected and locked when those components are implemented.
+A modular monolith: one ASP.NET Core API, one PostgreSQL database, and a separate Next.js/React/TypeScript/Tailwind frontend planned for milestone 3. The repository pins the installed .NET 10 SDK feature band. NuGet versions are explicit and transitive dependencies are locked.
 
-Keep domain logic in domain objects and application services, not HTTP handlers. Organize each layer into modules as behavior is implemented: Identity, Organizations, Properties, People, Work, Assets, Communications, Automation, Timeline, Integrations. Avoid empty projects for every future module.
+Domain objects and application/persistence services hold behavior; HTTP endpoints bind requests and translate outcomes. Future modules remain Identity, Organizations, Properties, People, Work, Assets, Communications, Automation, Timeline and Integrations. Create module files as their behavior is implemented instead of empty projects.
 
 ```text
-apps/web/                         Next.js (milestone 3)
-src/PropFlow.Api/                  endpoints, auth, error translation
-src/PropFlow.Application/          use cases, tenant access, event contracts
-src/PropFlow.Domain/               tenant entities, domain events
-src/PropFlow.Infrastructure/       EF Core, adapters, outbox (milestone 2)
-tests/PropFlow.FoundationChecks/   foundation checks
-tests/PropFlow.IntegrationTests/   PostgreSQL/API tests (milestone 2)
-docs/
+apps/web/                         Next.js boundary (milestone 3)
+src/PropFlow.Api/                  endpoints, auth, errors, readiness
+src/PropFlow.Application/          capability policies, tenant and use-case contracts
+src/PropFlow.Domain/               tenant entities, assignment events, timeline
+src/PropFlow.Infrastructure/       Identity, EF contexts, migrations, PostgreSQL
+  Identity/                       global identity control plane
+  Persistence/                    tenant-scoped operations and RLS
+  Persistence/Migrations/         separate histories for each context
+tools/PropFlow.Admin/              explicit privileged administration
+tests/PropFlow.FoundationChecks/   domain/tenant/event checks
+tests/PropFlow.IntegrationTests/   real PostgreSQL + API tests
 ```
 
-## Tenant and permission boundaries
+## Identity and organization membership
 
-Every business entity inherits an immutable nonempty OrganizationId. Resolve the active organization from an authenticated principal after checking membership; never trust a tenant header, route parameter, or posted organization ID. The initial session resolver rejects unauthenticated, missing, invalid, or ambiguous organization claims. Membership validation and claim issuance belong to milestone 2.
+Users are global identity principals; a user can belong to multiple organizations. Organizations and memberships live in the separate Identity control-plane store. They are not business-query surfaces. Login accepts an organization ID as a selection, verifies the password through ASP.NET Identity, and requires an active membership in an active organization before issuing a cookie. No organization claim is accepted from a client header.
 
-EF Core must apply central tenant query filters and enforce tenant IDs on every write. Foreign keys between tenant-owned entities must include OrganizationId to prevent cross-tenant relationships. Raw SQL and background jobs must use explicit scoped tenant access. Filters alone are insufficient: verify change tracking, bulk writes, and relationship integrity. No business data endpoints ship before these checks pass.
+Every authenticated request checks the user/security stamp, lockout state, active organization and membership against the database. Capabilities are reconstructed from the current membership role. Changing a role or revoking membership takes effect on the next request. Logout changes the security stamp, revoking all of that user's existing sessions. Cookie lifetime is eight hours without sliding renewal.
 
-Authorize capabilities such as Work.AssignVendor. Map roles to capabilities in one policy layer. API cookies must not redirect unauthorized API requests to HTML pages. Login, secure cookie issuance, CSRF protection for writes, membership lookup, and production identity configuration are milestone 2 requirements.
+Organization Admin, Regional Manager, Property Manager and Maintenance Supervisor currently receive Work.Read and Work.AssignVendor. Read Only receives Work.Read. Unknown roles, Technician and Vendor receive neither until assignment/property-level scopes are implemented. Capabilities are mapped centrally, and endpoints do not compare role names.
 
-## Events, history, and integrations
+Login has a per-source-IP limit of ten attempts per minute and Identity lockout after five failed passwords for fifteen minutes. The API does not trust forwarded IP headers by default. A proxy deployment must configure trusted proxies deliberately. All API mutation requests, including login/logout, require a matching antiforgery cookie/header token. Cookies require HTTPS and are HttpOnly and SameSite Strict. Fetch a new request token after login. This follows ASP.NET's [antiforgery guidance](https://learn.microsoft.com/en-us/aspnet/core/security/anti-request-forgery?view=aspnetcore-10.0).
 
-Domain events contain an event ID, organization, actor, timestamp, and event type. Assignment events record both previous and new vendor IDs. No-op assignments create no history. Use application services to save aggregate changes, timeline entries, and an outbox atomically in PostgreSQL. Dispatch handlers after commit; delivery retries use event IDs as idempotency keys. The initial in-process dispatcher is a contract foundation, not a durable queue. Never use it to deliver external messages before transaction commit.
+## Business-data isolation
 
-Keep resident-visible communication separate from internal notes. Mock delivery must remain visibly labeled as mock. Define SMS/email interfaces and integration adapters around canonical Property, Space, Person/Occupancy, Work, and Asset objects; retain external ID, source system, sync status, and last sync separately.
+Every business entity has immutable OrganizationId and Id fields. OperationsStore applies tenant query filters centrally and validates added/modified/deleted entities in both sync and async SaveChanges. Tenant context is fixed per request from the verified principal; administrative jobs must provide an explicit nonempty context. The EF approach follows the documented [tenant-context query-filter pattern](https://learn.microsoft.com/en-us/ef/core/querying/filters).
 
-Bulk assignment validates every work ID and vendor in the active organization, checks permissions and concurrency, then writes all changes and audit entries in one transaction. Start with atomic all-or-nothing behavior and a bounded batch size. Return actionable validation errors before committing. Scheduling uses UTC instants plus the property's IANA time zone.
+Business primary keys include OrganizationId. Work-to-vendor and timeline-to-work foreign keys include the tenant key. Organizations are referenced at database level, and timeline actors must have a membership in the same organization. PostgreSQL xmin detects conflicting work updates. A failed audit insert or concurrency conflict rolls back the assignment transaction.
 
-## Risks and open decisions
+Database RLS is enabled and forced on every current business table. A connection interceptor sets the verified organization on each connection checkout. Pooled connections are reset and the organization is overwritten on every open. Without a database tenant context, business reads return no rows. Tests bypass EF query filters and execute raw SQL/bulk operations to verify the database boundary still applies.
 
-- Identity provider and invitations are undecided. Start with ASP.NET Identity behind an application abstraction; do not create fixed production demo credentials.
-- Portfolio/property-level access rules need definition beyond organization isolation.
-- Tenant isolation and bulk write consistency are release gates, not later hardening.
-- SMS consent, delivery callbacks, provider credentials, and retry behavior are required before real delivery; demo delivery is mocked.
-- Workflow retries must prevent duplicate notifications and recursive event loops.
-- Seed dates should be relative to the demo date so overdue and scheduled examples remain useful.
-- Attachment storage, malware scanning, retention, and permissions remain to be designed before uploads.
-- Native PMS integrations, accounting, payments, leasing, and predictive AI remain out of scope.
+The API must use the restricted propflow_app account. It has no schema ownership, superuser, RLS-bypass, role-management or database-creation privileges; startup rejects such configurations. Migrations and provisioning use a separate administrative connection. PostgreSQL documents [RLS behavior and privileged-role exceptions](https://www.postgresql.org/docs/17/ddl-rowsecurity.html). RLS protects against missing filters and accidental cross-tenant operations; it is not a defense against an attacker with arbitrary SQL execution who can change session configuration. SQL input remains parameterized, and no raw SQL endpoint exists.
+
+## Audit and events
+
+Assignment domain events retain event ID, organization, work, actor, UTC timestamp, previous vendor and new vendor. No-op assignments create no duplicate history. Assignment plus timeline insertion commit in one SaveChanges transaction. Timeline modifications/deletions are blocked by EF, runtime database permissions and a PostgreSQL trigger. No external communication is dispatched by this milestone.
+
+The in-process event dispatcher is a foundation, not a durable queue. A transactional outbox and idempotent communication handlers are milestone 4 work. Future adapters map external Property, Space, Person/Occupancy, Work and Asset records to canonical objects, retaining external IDs and sync status separately.
+
+## Remaining decisions / boundaries
+
+- Property- and assignment-level scope for regional, technician and vendor access remains to be defined before field workflows ship.
+- Invitations, self-service account recovery, MFA and organization switching are not included. Initial provisioning is an administrator-only command.
+- A multi-instance deployment needs shared encrypted Data Protection keys, trusted proxy configuration, managed secrets and PostgreSQL TLS; the local defaults are not a production deployment recipe.
+- RLS policies and grants must accompany every new business table; migrations are reviewed and explicitly applied, never run by the API.
+- Bulk all-or-nothing operations, bounded batches and client-facing concurrency tokens belong to milestone 3. The current API exposes only single-item assignment for persistence validation.
+- Scheduling uses UTC instants plus property IANA zones when implemented.
+- Message consent, provider callbacks, attachment storage/permissions, retention and workflow retry controls remain future work.
+- Accounting, payments, leasing, predictive AI and native production PMS integrations remain outside the MVP.

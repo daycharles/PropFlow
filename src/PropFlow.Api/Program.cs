@@ -1,56 +1,103 @@
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Diagnostics;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using PropFlow.Api;
 using PropFlow.Application;
+using PropFlow.Application.Work;
+using PropFlow.Infrastructure.Identity;
+using PropFlow.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+var connection = builder.Configuration.GetConnectionString("Database")
+    ?? throw new InvalidOperationException("Set ConnectionStrings__Database to the restricted PostgreSQL runtime account.");
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.Cookie.Name = "__Host-PropFlow";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Events.OnRedirectToLogin = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        };
-        options.Events.OnRedirectToAccessDenied = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return Task.CompletedTask;
-        };
-    });
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(TenantAccess.AssignVendor, policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim(TenantAccess.CapabilityClaim, TenantAccess.AssignVendor));
+builder.Services.AddOpenApi();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddDbContext<IdentityStore>(options => options.UseNpgsql(connection,
+    postgres => postgres.MigrationsHistoryTable("__IdentityMigrations", "identity")));
+builder.Services.AddDbContext<OperationsStore>(options => options.UseNpgsql(connection,
+    postgres => postgres.MigrationsHistoryTable("__OperationsMigrations", "operations")));
+builder.Services.AddScoped<MembershipAccess>();
+builder.Services.AddScoped<SessionAuthentication>();
+builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
+builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+{
+    options.User.RequireUniqueEmail = true;
+    options.Password.RequiredLength = 12;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+}).AddEntityFrameworkStores<IdentityStore>().AddDefaultTokenProviders();
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.Name = "__Host-PropFlow";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    options.SlidingExpiration = false;
+    options.Events.OnRedirectToLogin = context => { context.Response.StatusCode = 401; return Task.CompletedTask; };
+    options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = 403; return Task.CompletedTask; };
+    options.Events.OnValidatePrincipal = context => context.HttpContext.RequestServices
+        .GetRequiredService<SessionAuthentication>().ValidateCookieAsync(context);
+});
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "__Host-PropFlow-CSRF";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+});
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var capability in Capabilities.All)
+        options.AddPolicy(capability, policy => policy.RequireAuthenticatedUser()
+            .RequireClaim(TenantAccess.CapabilityClaim, capability));
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+    options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
+builder.Services.AddHostedService<RuntimeDatabaseGuard>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
 
 var app = builder.Build();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
+            && !HttpMethods.IsOptions(context.Request.Method))
+        {
+            try { await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context); }
+            catch (AntiforgeryValidationException)
+            {
+                await Results.Problem(statusCode: 400, title: "Invalid or missing CSRF token").ExecuteAsync(context);
+                return;
+            }
+        }
+    }
+    await next(context);
+});
 app.MapGet("/health/live", () => Results.Ok(new { status = "healthy", service = "PropFlow.Api" }));
-app.MapGet("/api/session", (HttpContext context) =>
-    Results.Ok(new { organizationId = TenantAccess.Resolve(context.User) }))
-    .RequireAuthorization();
+app.MapHealthChecks("/health/ready");
+app.MapOpenApi().RequireAuthorization();
+app.MapSessionEndpoints();
+app.MapWorkEndpoints();
 app.Run();
 
-internal sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExceptionHandler
-{
-    public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
-    {
-        var forbidden = exception is TenantAccessException;
-        if (!forbidden) logger.LogError(exception, "Request failed. TraceId: {TraceId}", context.TraceIdentifier);
-        await Results.Problem(
-            statusCode: forbidden ? 403 : 500,
-            title: forbidden ? "Organization access denied" : "An unexpected error occurred",
-            extensions: new Dictionary<string, object?> { ["traceId"] = context.TraceIdentifier })
-            .ExecuteAsync(context);
-        return true;
-    }
-}
+public partial class Program { }

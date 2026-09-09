@@ -10,6 +10,6 @@ public abstract class TenantEntity
         Id = id;
     }
 
-    public Guid OrganizationId { get; }
-    public Guid Id { get; }
+    public Guid OrganizationId { get; private set; }
+    public Guid Id { get; private set; }
 }

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "propflow.application": {
+        "type": "Project",
+        "dependencies": {
+          "PropFlow.Domain": "[1.0.0, )"
+        }
+      },
+      "propflow.domain": {
+        "type": "Project"
+      }
+    }
+  }
+}

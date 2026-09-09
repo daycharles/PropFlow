@@ -3,8 +3,13 @@
     <Project Path="src/PropFlow.Api/PropFlow.Api.csproj" />
     <Project Path="src/PropFlow.Application/PropFlow.Application.csproj" />
     <Project Path="src/PropFlow.Domain/PropFlow.Domain.csproj" />
+    <Project Path="src/PropFlow.Infrastructure/PropFlow.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PropFlow.FoundationChecks/PropFlow.FoundationChecks.csproj" />
+    <Project Path="tests/PropFlow.IntegrationTests/PropFlow.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PropFlow.Admin/PropFlow.Admin.csproj" />
   </Folder>
 </Solution>

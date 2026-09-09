@@ -4,9 +4,11 @@
 
 Initialize local Git, pin the SDK, create domain/application/API boundaries, add fail-closed tenant resolution and capability policy wiring, domain assignment/audit semantics, centralized HTTP errors, structured console logs, health endpoint, Compose database configuration, CI, and executable foundation checks. No login or persistent operations are represented as complete.
 
-## 2 — Tenant-aware identity and persistence
+## 2 — Tenant-aware identity and persistence (implemented)
 
 Add ASP.NET Identity, organization membership, capability mappings, cookie login/logout, CSRF protection, EF Core/PostgreSQL context, migrations, query/write isolation, composite tenant foreign keys, and database readiness. Add real PostgreSQL integration tests proving cross-tenant reads, writes, assignments, and spoofed tenant inputs are blocked.
+
+Delivered: explicit administrative provisioning, revocable secure-cookie sessions, current-membership capability checks, PostgreSQL RLS with a restricted runtime role, centrally scoped EF reads/writes, real migrations, single-item assignment with atomic append-only history, OpenAPI, local setup instructions, dependency locks and database-backed CI. The Next.js UI, bulk assignment and full property/demo data are still milestone 3.
 
 ## 3 — First usable vertical slice
 

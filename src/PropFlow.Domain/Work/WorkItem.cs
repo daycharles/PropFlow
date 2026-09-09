@@ -9,7 +9,7 @@ public sealed class WorkItem : TenantEntity
         Title = title.Trim();
     }
 
-    public string Title { get; }
+    public string Title { get; private set; }
     public Guid? VendorId { get; private set; }
 
     // Application services must resolve and authorize the vendor within the active tenant.

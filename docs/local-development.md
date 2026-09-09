@@ -1,0 +1,53 @@
+# Local development
+
+## First setup (Windows PowerShell)
+
+Prerequisites: .NET 10 SDK 10.0.3xx, Docker running Linux containers, and a free local port 5432. PostgreSQL binds only to loopback. No public registration or hard-coded demo credentials exist.
+
+```powershell
+./scripts/Initialize-Local.ps1 -AdminEmail 'you@example.com' -OrganizationName 'Tidewater Residential Management' -AdminPassword (Read-Host 'New administrator password' -AsSecureString)
+dotnet dev-certs https --trust
+dotnet run --project src/PropFlow.Api --urls https://localhost:7080
+```
+
+Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID needed for login and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
+
+On subsequent runs set `ConnectionStrings__Database` from your private local configuration and start the API. Do not point the API at the PostgreSQL owner/admin account: startup rejects superuser, RLS-bypass, administrative, and schema/table-owner roles.
+
+## Manual administration / other platforms
+
+Set environment variables in your shell or secret manager, then run the commands below. Do not commit connection strings or passwords. `dotnet` does not automatically read `.env`; Compose and the PowerShell helper do.
+
+| Command | Required environment variables |
+| --- | --- |
+| `dotnet run --project tools/PropFlow.Admin -- migrate` | `ConnectionStrings__Admin` |
+| `dotnet run --project tools/PropFlow.Admin -- configure-runtime` | `ConnectionStrings__Admin`, `Runtime__Password` (20+ characters) |
+| `dotnet run --project tools/PropFlow.Admin -- bootstrap` | `ConnectionStrings__Admin`, `Bootstrap__Organization`, `Bootstrap__Email`, `Bootstrap__Password` |
+| `dotnet run --project src/PropFlow.Api --urls https://localhost:7080` | `ConnectionStrings__Database` (username `propflow_app`) |
+
+Migration order is Identity, then Operations. The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
+
+Local connection format: `Host=localhost;Database=propflow;Username=propflow_app;Password=<private runtime password>`. Use TLS with certificate validation for non-local PostgreSQL and HTTPS for API traffic. For multiple API instances, configure a shared encrypted ASP.NET Data Protection key store; keys and cookies must not be baked into images. The current default is single-host local key storage.
+
+## Login API
+
+1. GET `/api/auth/csrf`; retain the secure antiforgery cookie and returned `token`.
+2. POST `/api/auth/login` with that token in `X-CSRF-TOKEN` and JSON containing `email`, `password`, and `organizationId`.
+3. After a 204 response, GET `/api/auth/csrf` again to get a token bound to the signed-in identity.
+4. GET `/api/session` to inspect the verified organization and capabilities.
+5. Include the new CSRF token with every POST, including logout and vendor assignment.
+
+Clients must preserve cookies and use HTTPS. There is no frontend yet. See `api.md` for endpoints and semantics.
+
+## Verification
+
+```powershell
+dotnet restore PropFlow.slnx --locked-mode
+dotnet build PropFlow.slnx --configuration Release --no-restore
+dotnet run --project tests/PropFlow.FoundationChecks --configuration Release --no-build
+dotnet test tests/PropFlow.IntegrationTests --configuration Release --no-build
+```
+
+Integration tests provision a disposable PostgreSQL 17 container with random credentials, apply real migrations, configure the restricted runtime account, and exercise the actual API with ASP.NET's test host over HTTPS semantics. Docker must be accessible. Each test creates separate organizations; no existing development data is changed. Testcontainers removes the test database/container afterward.
+
+To add migrations, run `dotnet tool restore`, then `dotnet ef migrations add NAME --project src/PropFlow.Infrastructure --context IdentityStore` (or `OperationsStore`). Keep each context's migrations in its existing subfolder. Every new business table needs the central EF tenant convention, a composite tenant foreign key where appropriate, and a reviewed PostgreSQL RLS policy. Schema changes are not auto-applied on API startup.
