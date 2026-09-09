@@ -52,6 +52,7 @@ Recorded and accepted; revisit during the M7 hardening track or when a feature f
 | Templates do not flag an unterminated `{{` (`"arriving at {{time"` renders literally) | audit-communications C12 (accepted) | unassigned | Low impact for authored templates; revisit if templates become user-generated at scale |
 | `M3Operations` migration is not safe against a populated milestone-2 database | milestones.md M3 migration note; audit-communications C-audit M6 | daycdev | Adds NOT NULL `PropertyId`/`CreatorId` + FK in one step with a `Guid.Empty` default and backfills `Vendors.IsActive = false`. Applies cleanly only to a DB with no pre-M3 `WorkItems`/`Vendors` rows. Squash/rewrite (nullable → backfill → NOT NULL → FK) before first real deployment |
 | Response DTOs — expose the `xmin` concurrency token on work responses; stop returning entities directly | backlog.md PF-3.15 | unassigned | Endpoints currently return domain entities (`Resident`, work) straight out |
+| Global search (`EfGlobalSearch`) issues 9 sequential round-trips (one per entity type) and ranks in memory | PF-6.08; `src/PropFlow.Infrastructure/Persistence/EfGlobalSearch.cs` | unassigned | Fine at seed-data scale. Revisit with a single `UNION ALL` query (or a materialized search view) if p95 latency or DB load warrants. Also: `limit` is applied per type then again globally, so a type can crowd out others up to `limit`; a per-type floor may be wanted once the PF-6.09 UI groups results |
 
 ---
 
