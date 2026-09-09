@@ -22,7 +22,7 @@ tests/PropFlow.IntegrationTests/   real PostgreSQL + API tests
 
 ## Identity and organization membership
 
-Users are global identity principals; a user can belong to multiple organizations. Organizations and memberships live in the separate Identity control-plane store. They are not business-query surfaces. Login accepts an organization ID as a selection, verifies the password through ASP.NET Identity, and requires an active membership in an active organization before issuing a cookie. No organization claim is accepted from a client header.
+Users are global identity principals; a user can belong to multiple organizations. Organizations and memberships live in the separate Identity control-plane store. They are not business-query surfaces. Login accepts an organization slug as a selection, verifies the password through ASP.NET Identity, and requires an active membership in an active organization before issuing a cookie. The slug is generated from the organization name at provisioning and is unique. No organization claim is accepted from a client header.
 
 Every authenticated request checks the user/security stamp, lockout state, active organization and membership against the database. Capabilities are reconstructed from the current membership role. Changing a role or revoking membership takes effect on the next request. Logout changes the security stamp, revoking all of that user's existing sessions. Cookie lifetime is eight hours without sliding renewal.
 
