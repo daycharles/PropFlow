@@ -4,18 +4,22 @@ public enum OutboxStatus
 {
     Pending = 0,
     Sent = 1,
-    Failed = 2
+    Failed = 2,
+    Sending = 3
 }
 
-// A queued resident message. Written in the same transaction as the change that triggers it,
-// then delivered out of band by the dispatcher. Idempotency is enforced per organization.
+// A queued resident message. Enqueued in the transaction that triggers it, then delivered out
+// of band by the dispatcher. Idempotency is enforced per organization by the idempotency key;
+// the xmin concurrency token lets competing dispatchers claim a message exactly once.
 public sealed class OutboxMessage : TenantEntity
 {
-    // EF materialization.
+    public const int MaxDeliveryAttempts = 5;
+
+    // EF materialization only.
     private OutboxMessage(Guid organizationId, Guid id) : base(organizationId, id) { }
 
-    public OutboxMessage(Guid organizationId, Guid id, MessageChannel channel, string recipientAddress,
-        string? subject, string body, string idempotencyKey, DateTimeOffset createdAt) : base(organizationId, id)
+    public static OutboxMessage Create(Guid organizationId, Guid id, MessageChannel channel, string recipientAddress,
+        string? subject, string body, string idempotencyKey, DateTimeOffset createdAt)
     {
         if (string.IsNullOrWhiteSpace(recipientAddress) || recipientAddress.Trim().Length > 320)
             throw new ArgumentException("Recipient address must contain 1 to 320 characters.", nameof(recipientAddress));
@@ -30,13 +34,16 @@ public sealed class OutboxMessage : TenantEntity
         if (channel == MessageChannel.Sms && trimmedSubject is not null)
             throw new ArgumentException("SMS messages must not carry a subject.", nameof(subject));
 
-        Channel = channel;
-        RecipientAddress = recipientAddress.Trim();
-        Subject = trimmedSubject;
-        Body = body.Trim();
-        IdempotencyKey = idempotencyKey.Trim();
-        Status = OutboxStatus.Pending;
-        CreatedAt = createdAt.ToUniversalTime();
+        return new OutboxMessage(organizationId, id)
+        {
+            Channel = channel,
+            RecipientAddress = recipientAddress.Trim(),
+            Subject = trimmedSubject,
+            Body = body.Trim(),
+            IdempotencyKey = idempotencyKey.Trim(),
+            Status = OutboxStatus.Pending,
+            CreatedAt = createdAt.ToUniversalTime()
+        };
     }
 
     public MessageChannel Channel { get; private set; }
@@ -51,25 +58,39 @@ public sealed class OutboxMessage : TenantEntity
     public string? ProviderReference { get; private set; }
     public string? FailureReason { get; private set; }
 
+    public bool IsClaimable(DateTimeOffset now, TimeSpan staleClaimTimeout) =>
+        Status == OutboxStatus.Pending ||
+        (Status == OutboxStatus.Sending && LastAttemptAt is { } last && last <= now.ToUniversalTime() - staleClaimTimeout);
+
+    // Claims the message for a delivery attempt. Saved under the concurrency token before the
+    // provider is contacted so only one dispatcher proceeds.
+    public void BeginDelivery(DateTimeOffset at)
+    {
+        if (Status is not (OutboxStatus.Pending or OutboxStatus.Sending))
+            throw new InvalidOperationException($"A {Status} message cannot be delivered.");
+        AttemptCount++;
+        Status = OutboxStatus.Sending;
+        LastAttemptAt = at.ToUniversalTime();
+    }
+
     public void MarkSent(string providerReference, DateTimeOffset at)
     {
         if (Status == OutboxStatus.Sent) return;
         if (string.IsNullOrWhiteSpace(providerReference))
             throw new ArgumentException("A provider reference is required.", nameof(providerReference));
-        AttemptCount++;
         Status = OutboxStatus.Sent;
         ProviderReference = providerReference.Trim();
         FailureReason = null;
         LastAttemptAt = at.ToUniversalTime();
     }
 
-    public void MarkFailed(string reason, DateTimeOffset at)
+    // Records a failed attempt. The message stays retryable until the attempt cap, then fails.
+    public void RecordFailedAttempt(string reason, DateTimeOffset at)
     {
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A failure reason is required.", nameof(reason));
-        AttemptCount++;
-        Status = OutboxStatus.Failed;
         FailureReason = reason.Trim();
         LastAttemptAt = at.ToUniversalTime();
+        Status = AttemptCount >= MaxDeliveryAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
     }
 }

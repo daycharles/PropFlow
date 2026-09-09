@@ -29,7 +29,7 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Subject).HasMaxLength(200);
             entity.Property(x => x.Body).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
         });
 
@@ -40,10 +40,11 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
             entity.Property(x => x.Subject).HasMaxLength(200);
             entity.Property(x => x.Body).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.IdempotencyKey).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.Property(x => x.ProviderReference).HasMaxLength(200);
             entity.Property(x => x.FailureReason).HasMaxLength(1000);
+            entity.Property<uint>("Version").IsRowVersion();
             entity.HasIndex(x => new { x.OrganizationId, x.IdempotencyKey }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });

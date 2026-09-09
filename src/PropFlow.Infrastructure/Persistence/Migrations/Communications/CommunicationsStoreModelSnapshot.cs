@@ -38,8 +38,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
 
                     b.Property<string>("Channel")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -79,8 +79,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
 
                     b.Property<string>("Channel")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -108,12 +108,18 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("Subject")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("OrganizationId", "Id");
 

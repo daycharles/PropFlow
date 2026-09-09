@@ -12,7 +12,7 @@ public sealed class EfOutbox(CommunicationsStore store, TimeProvider clock) : IO
         if (await store.OutboxMessages.AnyAsync(x => x.IdempotencyKey == submission.IdempotencyKey, cancellationToken))
             return false;
 
-        store.OutboxMessages.Add(new OutboxMessage(store.OrganizationId, Guid.NewGuid(), submission.Channel,
+        store.OutboxMessages.Add(OutboxMessage.Create(store.OrganizationId, Guid.NewGuid(), submission.Channel,
             submission.RecipientAddress, submission.Subject, submission.Body, submission.IdempotencyKey, clock.GetUtcNow()));
 
         try

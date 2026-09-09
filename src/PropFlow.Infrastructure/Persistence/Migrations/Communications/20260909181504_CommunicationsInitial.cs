@@ -22,7 +22,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                     OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Channel = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Channel = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     Subject = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     Body = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false)
@@ -39,17 +39,18 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                 {
                     OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Channel = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Channel = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     RecipientAddress = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
                     Subject = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     Body = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     IdempotencyKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     AttemptCount = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     LastAttemptAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     ProviderReference = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    FailureReason = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true)
+                    FailureReason = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {

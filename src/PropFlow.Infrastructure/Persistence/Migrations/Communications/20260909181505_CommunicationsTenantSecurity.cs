@@ -6,7 +6,7 @@ using PropFlow.Infrastructure.Communications;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Communications;
 
 [DbContext(typeof(CommunicationsStore))]
-[Migration("20260909175919_CommunicationsTenantSecurity")]
+[Migration("20260909181505_CommunicationsTenantSecurity")]
 public sealed class CommunicationsTenantSecurity : Migration
 {
     private static readonly string[] Tables = ["MessageTemplates", "OutboxMessages"];

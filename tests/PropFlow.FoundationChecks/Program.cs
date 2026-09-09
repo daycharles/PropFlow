@@ -106,28 +106,48 @@ var checks = new List<(string Name, Action Run)>
     }),
     ("Outbox message validates input and starts pending", () =>
     {
-        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, " ", null, "Body", "key", DateTimeOffset.UtcNow));
-        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, " ", "key", DateTimeOffset.UtcNow));
-        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", " ", DateTimeOffset.UtcNow));
-        Reject<ArgumentException>(() => new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Email, "resident@example.test", null, "Body", "key", DateTimeOffset.UtcNow));
-        var message = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "On the way.", "work-42-otw", DateTimeOffset.UtcNow);
+        Reject<ArgumentException>(() => OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, " ", null, "Body", "key", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, " ", "key", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", " ", DateTimeOffset.UtcNow));
+        Reject<ArgumentException>(() => OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Email, "resident@example.test", null, "Body", "key", DateTimeOffset.UtcNow));
+        var message = OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "On the way.", "work-42-otw", DateTimeOffset.UtcNow);
         Assert(message.Status == OutboxStatus.Pending && message.AttemptCount == 0);
     }),
-    ("Outbox message transitions record attempts and timestamps", () =>
+    ("Outbox delivery claims, retries, then fails at the attempt cap", () =>
     {
         var when = DateTimeOffset.Parse("2026-09-09T09:00:00-04:00");
-        var failed = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k1", when);
-        Reject<ArgumentException>(() => failed.MarkFailed(" ", when));
-        failed.MarkFailed("provider down", when);
-        Assert(failed.Status == OutboxStatus.Failed && failed.AttemptCount == 1 && failed.FailureReason == "provider down");
-        Assert(failed.LastAttemptAt == when && failed.LastAttemptAt!.Value.Offset == TimeSpan.Zero);
-
-        var sent = new OutboxMessage(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k2", when);
-        Reject<ArgumentException>(() => sent.MarkSent(" ", when));
-        sent.MarkSent("mock-sms-1", when);
-        Assert(sent.Status == OutboxStatus.Sent && sent.AttemptCount == 1 && sent.ProviderReference == "mock-sms-1");
-        sent.MarkSent("mock-sms-2", when);
-        Assert(sent.AttemptCount == 1 && sent.ProviderReference == "mock-sms-1");
+        var message = OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k1", when);
+        for (var attempt = 1; attempt <= OutboxMessage.MaxDeliveryAttempts; attempt++)
+        {
+            message.BeginDelivery(when);
+            Assert(message.Status == OutboxStatus.Sending && message.AttemptCount == attempt);
+            Reject<ArgumentException>(() => message.RecordFailedAttempt(" ", when));
+            message.RecordFailedAttempt("provider down", when);
+            var expected = attempt >= OutboxMessage.MaxDeliveryAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
+            Assert(message.Status == expected && message.FailureReason == "provider down");
+        }
+        Assert(message.LastAttemptAt == when && message.LastAttemptAt!.Value.Offset == TimeSpan.Zero);
+        Reject<InvalidOperationException>(() => message.BeginDelivery(when));
+    }),
+    ("Outbox message records a successful send once", () =>
+    {
+        var when = DateTimeOffset.Parse("2026-09-09T09:00:00-04:00");
+        var message = OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k2", when);
+        message.BeginDelivery(when);
+        Reject<ArgumentException>(() => message.MarkSent(" ", when));
+        message.MarkSent("mock-sms-1", when);
+        Assert(message.Status == OutboxStatus.Sent && message.AttemptCount == 1 && message.ProviderReference == "mock-sms-1");
+        message.MarkSent("mock-sms-2", when);
+        Assert(message.AttemptCount == 1 && message.ProviderReference == "mock-sms-1");
+    }),
+    ("Outbox stale-claim detection only reclaims an old Sending message", () =>
+    {
+        var now = DateTimeOffset.Parse("2026-09-09T09:00:00Z");
+        var message = OutboxMessage.Create(organization, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "Body", "k3", now.AddHours(-1));
+        Assert(message.IsClaimable(now, TimeSpan.FromMinutes(5)));
+        message.BeginDelivery(now);
+        Assert(!message.IsClaimable(now, TimeSpan.FromMinutes(5)));
+        Assert(message.IsClaimable(now.AddMinutes(6), TimeSpan.FromMinutes(5)));
     })
 };
 

@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using PropFlow.Application.Communications;
 using PropFlow.Domain.Communications;
@@ -19,25 +21,29 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         return (log, [new MockSmsSender(log), new MockEmailSender(log)]);
     }
 
+    private sealed class RejectingSender(MessageChannel channel) : IMessageSender
+    {
+        public MessageChannel Channel { get; } = channel;
+        public Task<MessageDeliveryResult> SendAsync(OutboundMessage message, string idempotencyKey, CancellationToken cancellationToken) =>
+            Task.FromResult(MessageDeliveryResult.Rejected("provider unavailable"));
+    }
+
     [Fact]
     public async Task Outbox_delivers_pending_messages_through_the_matching_sender()
     {
         await using var s = await fixture.CreateScenarioAsync();
         await using (var store = s.Comms(s.OrganizationA))
         {
-            store.OutboxMessages.Add(new OutboxMessage(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
                 "+15550001111", null, "Pest control is on the way.", "work-1-otw", DateTimeOffset.UtcNow));
-            store.OutboxMessages.Add(new OutboxMessage(s.OrganizationA, Guid.NewGuid(), MessageChannel.Email,
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Email,
                 "resident@example.test", "Visit scheduled", "Your visit is Friday.", "work-2-sched", DateTimeOffset.UtcNow));
             await store.SaveChangesAsync();
         }
 
         var (log, senders) = Senders();
         await using (var store = s.Comms(s.OrganizationA))
-        {
-            var processed = await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default);
-            Assert.Equal(2, processed);
-        }
+            Assert.Equal(2, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
 
         await using var verify = s.Comms(s.OrganizationA);
         var messages = await verify.OutboxMessages.OrderBy(x => x.IdempotencyKey).ToListAsync();
@@ -69,7 +75,7 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         await using var s = await fixture.CreateScenarioAsync();
         await using (var store = s.Comms(s.OrganizationA))
         {
-            store.OutboxMessages.Add(new OutboxMessage(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
                 "+15550003333", null, "Completed.", "work-3-done", DateTimeOffset.UtcNow));
             await store.SaveChangesAsync();
         }
@@ -82,10 +88,100 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
 
         Assert.Single(log.Sent);
 
-        // The sender itself collapses a duplicate delivery for the same idempotency key.
         var outbound = new OutboundMessage(MessageChannel.Sms, "+15550003333", null, "Completed.");
         await senders[0].SendAsync(outbound, "work-3-done", default);
         Assert.Single(log.Sent);
+    }
+
+    [Fact]
+    public async Task Failed_delivery_retries_then_fails_at_the_attempt_cap()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.Comms(s.OrganizationA))
+        {
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+                "+15550005555", null, "Flaky.", "work-5-flaky", DateTimeOffset.UtcNow));
+            await store.SaveChangesAsync();
+        }
+
+        IMessageSender[] senders = [new RejectingSender(MessageChannel.Sms)];
+        for (var attempt = 1; attempt <= OutboxMessage.MaxDeliveryAttempts; attempt++)
+        {
+            await using var store = s.Comms(s.OrganizationA);
+            Assert.Equal(0, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+        }
+
+        await using var verify = s.Comms(s.OrganizationA);
+        var message = await verify.OutboxMessages.SingleAsync();
+        Assert.Equal(OutboxStatus.Failed, message.Status);
+        Assert.Equal(OutboxMessage.MaxDeliveryAttempts, message.AttemptCount);
+        Assert.Equal("provider unavailable", message.FailureReason);
+    }
+
+    [Fact]
+    public async Task Competing_dispatchers_claim_a_message_at_most_once()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.Comms(s.OrganizationA))
+        {
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+                "+15550006666", null, "Only once.", "work-6-once", DateTimeOffset.UtcNow));
+            await store.SaveChangesAsync();
+        }
+
+        await using var first = s.Comms(s.OrganizationA);
+        await using var second = s.Comms(s.OrganizationA);
+        var firstMessage = await first.OutboxMessages.SingleAsync(x => x.Status == OutboxStatus.Pending);
+        var secondMessage = await second.OutboxMessages.SingleAsync(x => x.Status == OutboxStatus.Pending);
+
+        firstMessage.BeginDelivery(DateTimeOffset.UtcNow);
+        await first.SaveChangesAsync();
+
+        secondMessage.BeginDelivery(DateTimeOffset.UtcNow);
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+
+        firstMessage.MarkSent("mock-sms-final", DateTimeOffset.UtcNow);
+        await first.SaveChangesAsync();
+
+        await using var verify = s.Comms(s.OrganizationA);
+        var delivered = await verify.OutboxMessages.SingleAsync();
+        Assert.Equal(OutboxStatus.Sent, delivered.Status);
+        Assert.Equal(1, delivered.AttemptCount);
+    }
+
+    [Fact]
+    public async Task Relay_delivers_every_organization_on_its_own_tenant_context()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.Comms(s.OrganizationA))
+        {
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+                "+15550007777", null, "For A.", "a-relay", DateTimeOffset.UtcNow));
+            await store.SaveChangesAsync();
+        }
+        await using (var store = s.Comms(s.OrganizationB))
+        {
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationB, Guid.NewGuid(), MessageChannel.Email,
+                "b@example.test", "For B", "For B.", "b-relay", DateTimeOffset.UtcNow));
+            await store.SaveChangesAsync();
+        }
+
+        var (log, senders) = Senders();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Database"] = fixture.RuntimeConnection })
+            .Build();
+        var relay = new OutboxRelay(configuration, senders, TimeProvider.System, NullLogger<OutboxRelay>.Instance);
+
+        // The database is shared across the collection, so other organizations may also have
+        // pending messages; assert on the two this test enqueued rather than the global count.
+        Assert.True(await relay.RelayPendingAsync(default) >= 2);
+        Assert.Contains(log.Sent, m => m.IdempotencyKey == "a-relay");
+        Assert.Contains(log.Sent, m => m.IdempotencyKey == "b-relay");
+
+        await using var verifyA = s.Comms(s.OrganizationA);
+        await using var verifyB = s.Comms(s.OrganizationB);
+        Assert.Equal(OutboxStatus.Sent, (await verifyA.OutboxMessages.SingleAsync(x => x.IdempotencyKey == "a-relay")).Status);
+        Assert.Equal(OutboxStatus.Sent, (await verifyB.OutboxMessages.SingleAsync(x => x.IdempotencyKey == "b-relay")).Status);
     }
 
     [Fact]
@@ -94,7 +190,7 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         await using var s = await fixture.CreateScenarioAsync();
         await using (var store = s.Comms(s.OrganizationA))
         {
-            store.OutboxMessages.Add(new OutboxMessage(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
                 "+15550004444", null, "Private to A.", "a-only", DateTimeOffset.UtcNow));
             await store.SaveChangesAsync();
         }

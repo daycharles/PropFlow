@@ -4,16 +4,18 @@ using PropFlow.Domain.Communications;
 
 namespace PropFlow.Infrastructure.Communications;
 
-// Thread-safe in-memory record of "delivered" messages. Singleton for the life of the host.
+// Thread-safe in-memory record of "delivered" messages. Singleton for the life of the host;
+// bounded so a long-running process cannot grow it without limit.
 public sealed class InMemorySentMessageLog : ISentMessageLog
 {
+    private const int Capacity = 500;
     private readonly Lock gate = new();
-    private readonly List<SentMessage> sent = [];
+    private readonly LinkedList<SentMessage> sent = [];
     private readonly Dictionary<string, SentMessage> byKey = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SentMessage> Sent
     {
-        get { lock (gate) { return sent.ToArray(); } }
+        get { lock (gate) { return [.. sent]; } }
     }
 
     public void Record(SentMessage message)
@@ -21,7 +23,13 @@ public sealed class InMemorySentMessageLog : ISentMessageLog
         lock (gate)
         {
             if (!byKey.TryAdd(message.IdempotencyKey, message)) return;
-            sent.Add(message);
+            sent.AddLast(message);
+            if (sent.Count > Capacity)
+            {
+                var evicted = sent.First!.Value;
+                sent.RemoveFirst();
+                byKey.Remove(evicted.IdempotencyKey);
+            }
         }
     }
 
