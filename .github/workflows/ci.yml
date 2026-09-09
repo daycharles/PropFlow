@@ -146,3 +146,27 @@ jobs:
       - name: Stop database
         if: always()
         run: docker compose down -v
+      # Posts the outcome to Slack #agent-updates. Only on push: `on: [push, pull_request]`
+      # fires twice for a PR branch, and two identical messages per commit is noise.
+      # continue-on-error so a missing secret or a Slack outage cannot redden a green build --
+      # the script still exits non-zero and says why in the log.
+      - name: Notify Slack
+        if: always() && github.event_name == 'push'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          PROPFLOW_SLACK_WEBHOOK_URL: ${{ secrets.PROPFLOW_SLACK_WEBHOOK_URL }}
+          # Every value the message interpolates arrives as an environment variable, never as
+          # a ${{ }} expression inside the script body: a commit subject is attacker-controlled
+          # text and would otherwise be executed as PowerShell.
+          JOB_STATUS: ${{ job.status }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $status = if ($env:JOB_STATUS -eq 'success') { 'ok' } else { 'fail' }
+          $subject = ("$env:COMMIT_SUBJECT" -split "`n")[0].Trim()
+          $short = "$env:COMMIT_SHA".Substring(0, 7)
+          $text = "*verify $env:JOB_STATUS* on ``$env:REF_NAME`` ($short) — $subject"
+          ./scripts/Send-SlackUpdate.ps1 -Status $status -Text $text -Link $env:RUN_URL
