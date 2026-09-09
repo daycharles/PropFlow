@@ -20,6 +20,8 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Slug).HasMaxLength(63);
+            entity.HasIndex(x => x.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
         });
         model.Entity<OrganizationMembership>(entity =>
         {

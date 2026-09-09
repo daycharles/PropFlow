@@ -1,0 +1,11 @@
+"use client";
+import { FormEvent, useEffect, useState } from "react";
+type Work = { id:string; title:string; status:string; priority:string; version?:number };
+export default function Home() {
+  const [session, setSession] = useState<any>(); const [items, setItems] = useState<Work[]>([]); const [selected, setSelected] = useState<Work>(); const [message,setMessage]=useState("");
+  async function load() { const s=await fetch("/api/session"); if(!s.ok) return; setSession(await s.json()); const w=await fetch("/api/work/?page=1&pageSize=100"); if(w.ok) { const data=await w.json(); setItems(data.items ?? data); } }
+  useEffect(()=>{ load(); },[]);
+  async function login(e:FormEvent<HTMLFormElement>) { e.preventDefault(); const f=new FormData(e.currentTarget); const csrf=await (await fetch("/api/auth/csrf")).json(); const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-TOKEN":csrf.token},body:JSON.stringify({organizationSlug:f.get("organizationSlug"),email:f.get("email"),password:f.get("password")})}); setMessage(r.ok?"Signed in.":"Unable to sign in."); if(r.ok) load(); }
+  if(!session) return <main className="login"><h1>PropFlow</h1><p>Internal property operations pilot</p><form onSubmit={login}><input name="organizationSlug" placeholder="Organization slug" required/><input name="email" type="email" placeholder="Email" required/><input name="password" type="password" placeholder="Password" required/><button>Sign in</button></form><p>{message}</p></main>;
+  return <main><header><strong>PropFlow</strong><span>{session.role}</span><a href="/settings/categories">Category settings</a></header><section className="workspace"><div><h1>Work</h1><input placeholder="Search title or description"/><table><thead><tr><th>Title</th><th>Status</th><th>Priority</th></tr></thead><tbody>{items.map(item=><tr key={item.id} onClick={()=>setSelected(item)}><td>{item.title}</td><td>{item.status}</td><td>{item.priority}</td></tr>)}</tbody></table></div><aside>{selected ? <><h2>{selected.title}</h2><p>{selected.status} · {selected.priority}</p><p>Changes save with the current version. Confirm assignments, scheduling, and status changes before they are sent.</p></> : <p>Select a work item to open its workspace.</p>}</aside></section></main>;
+}

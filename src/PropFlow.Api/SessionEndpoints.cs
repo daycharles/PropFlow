@@ -14,9 +14,9 @@ public static class SessionEndpoints
         app.MapPost("/api/auth/login", async (LoginRequest request, SessionAuthentication authentication, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 254 ||
-                string.IsNullOrEmpty(request.Password) || request.Password.Length > 1024 || request.OrganizationId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Email, password, and organization ID are required");
-            return await authentication.LoginAsync(request.Email.Trim(), request.Password, request.OrganizationId, ct)
+                string.IsNullOrEmpty(request.Password) || request.Password.Length > 1024 || string.IsNullOrWhiteSpace(request.OrganizationSlug))
+                return Results.Problem(statusCode: 400, title: "Organization slug, email, and password are required");
+            return await authentication.LoginAsync(request.Email.Trim(), request.Password, request.OrganizationSlug, ct)
                 ? Results.NoContent() : Results.Problem(statusCode: 401, title: "Unable to sign in with those credentials and organization");
         }).AllowAnonymous().RequireRateLimiting("login");
         app.MapPost("/api/auth/logout", async (ClaimsPrincipal user, SessionAuthentication authentication) =>
@@ -33,4 +33,4 @@ public static class SessionEndpoints
         })).RequireAuthorization();
     }
 }
-public sealed record LoginRequest(string Email, string Password, Guid OrganizationId);
+public sealed record LoginRequest(string OrganizationSlug, string Email, string Password);

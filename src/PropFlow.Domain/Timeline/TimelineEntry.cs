@@ -1,6 +1,6 @@
-using PropFlow.Domain.Work;
-
 namespace PropFlow.Domain.Timeline;
+
+using PropFlow.Domain.Work;
 
 public sealed class TimelineEntry : TenantEntity
 {
@@ -10,16 +10,15 @@ public sealed class TimelineEntry : TenantEntity
     public Guid ActorId { get; private set; }
     public DateTimeOffset OccurredAt { get; private set; }
     public string EventType { get; private set; } = "";
-    public Guid? PreviousVendorId { get; private set; }
-    public Guid VendorId { get; private set; }
+    public string Changes { get; private set; } = "{}";
 
-    public static TimelineEntry From(VendorAssigned change) => new(change.OrganizationId, change.EventId)
+    public static TimelineEntry Create(Guid organizationId, Guid workId, Guid actorId,
+        DateTimeOffset occurredAt, string eventType, string changes) => new(organizationId, Guid.NewGuid())
     {
-        WorkId = change.WorkId,
-        ActorId = change.ActorId,
-        OccurredAt = change.OccurredAt,
-        EventType = nameof(VendorAssigned),
-        PreviousVendorId = change.PreviousVendorId,
-        VendorId = change.VendorId
+        WorkId = workId, ActorId = actorId, OccurredAt = occurredAt.ToUniversalTime(),
+        EventType = eventType, Changes = changes
     };
+    public Guid? PreviousVendorId { get; private set; }
+    public Guid? VendorId { get; private set; }
+    public static TimelineEntry From(VendorAssigned change) => new(change.OrganizationId, change.EventId) { WorkId = change.WorkId, ActorId = change.ActorId, OccurredAt = change.OccurredAt, EventType = nameof(VendorAssigned), PreviousVendorId = change.PreviousVendorId, VendorId = change.VendorId };
 }

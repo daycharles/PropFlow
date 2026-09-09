@@ -20,6 +20,18 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
         return true;
     }
 
+    public async Task<bool> LoginAsync(string email, string password, string organizationSlug, CancellationToken ct)
+    {
+        var user = await users.FindByEmailAsync(email);
+        if (user is null) return false;
+        var result = await signIn.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
+        if (!result.Succeeded) return false;
+        var membership = await memberships.FindActiveBySlugAsync(user.Id, organizationSlug.Trim().ToLowerInvariant(), ct);
+        if (membership is null) return false;
+        await signIn.SignInWithClaimsAsync(user, isPersistent: false, TenantClaims(membership));
+        return true;
+    }
+
     public async Task ValidateCookieAsync(CookieValidatePrincipalContext context)
     {
         var principal = context.Principal;

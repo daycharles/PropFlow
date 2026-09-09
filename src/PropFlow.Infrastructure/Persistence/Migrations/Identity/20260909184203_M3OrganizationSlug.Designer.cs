@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Identity;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Identity;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Identity
 {
     [DbContext(typeof(IdentityStore))]
-    partial class IdentityStoreModelSnapshot : ModelSnapshot
+    [Migration("20260909184203_M3OrganizationSlug")]
+    partial class M3OrganizationSlug
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

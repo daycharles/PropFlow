@@ -10,4 +10,7 @@ public sealed class Vendor : TenantEntity
     }
 
     public string Name { get; private set; }
+    public string? Email { get; private set; }
+    public string? Phone { get; private set; }
+    public bool IsActive { get; private set; } = true;
 }

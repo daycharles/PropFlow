@@ -5,17 +5,20 @@ public static class Capabilities
     public const string ReadWork = "Work.Read";
     public const string AssignVendor = "Work.AssignVendor";
     public const string ManageTemplates = "Communications.ManageTemplates";
+    public const string AssignEmployee = "Work.AssignEmployee";
+    public const string CreateWork = "Work.Create";
+    public const string UpdateWork = "Work.Update";
+    public const string ManageCategories = "Settings.ManageCategories";
 
-    // Every capability that exists, for registering authorization policies.
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, ManageTemplates];
-
-    private static readonly string[] WorkManagement = [ReadWork, AssignVendor];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageTemplates];
+    private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork];
+    private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories];
 
     public static IReadOnlyList<string> ForRole(string role) => role switch
     {
-        // Template management is limited to Organization Admin and Property Manager.
         "Organization Admin" or "Property Manager" => All,
-        "Regional Manager" or "Maintenance Supervisor" => WorkManagement,
+        "Regional Manager" => CategoryManagement,
+        "Maintenance Supervisor" => WorkManagement,
         "Read Only" => [ReadWork],
         // Field/vendor access needs assignment-level scoping in milestone 3. Deny until implemented.
         "Technician" or "Vendor" => [],

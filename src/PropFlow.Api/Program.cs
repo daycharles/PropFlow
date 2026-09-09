@@ -114,6 +114,7 @@ app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
 app.MapWorkEndpoints();
 app.MapCommunicationEndpoints();
+app.MapCategoryEndpoints();
 app.Run();
 
 public partial class Program { }

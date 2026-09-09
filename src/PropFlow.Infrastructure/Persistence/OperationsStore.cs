@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
 using PropFlow.Domain.People;
+using PropFlow.Domain.Properties;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 
@@ -13,6 +14,12 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public Guid OrganizationId => tenant.OrganizationId;
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<Portfolio> Portfolios => Set<Portfolio>();
+    public DbSet<Property> Properties => Set<Property>();
+    public DbSet<Building> Buildings => Set<Building>();
+    public DbSet<Space> Spaces => Set<Space>();
+    public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
@@ -25,19 +32,34 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         {
             entity.ToTable("WorkItems");
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
             entity.Property<uint>("Version").IsRowVersion();
             entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.EmployeeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Building>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BuildingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<WorkCategory>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.CategoryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<Vendor>(entity =>
         {
             entity.ToTable("Vendors");
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(254);
+            entity.Property(x => x.Phone).HasMaxLength(40);
         });
+        model.Entity<Employee>(entity => { entity.ToTable("Employees"); entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254); entity.Property(x => x.Phone).HasMaxLength(40); });
+        model.Entity<Portfolio>(entity => { entity.ToTable("Portfolios"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); });
+        model.Entity<Property>(entity => { entity.ToTable("Properties"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired(); entity.HasOne<Portfolio>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PortfolioId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<Building>(entity => { entity.ToTable("Buildings"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<Space>(entity => { entity.ToTable("Spaces"); entity.Property(x => x.Code).HasMaxLength(50).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasOne<Building>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BuildingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<TimelineEntry>(entity =>
         {
             entity.ToTable("Timeline");
             entity.Property(x => x.EventType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Changes).HasColumnType("jsonb").IsRequired();
             entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.OccurredAt });
