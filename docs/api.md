@@ -59,3 +59,7 @@ transaction that produces them, then delivered out of band by a background worke
 each organization on its own tenant context. Milestone 4 ships mock SMS and email providers
 that record rather than send. No HTTP endpoint enqueues resident messages yet; that arrives
 with the work-event wiring in a later task.
+
+Dispatcher behavior is configured under `Communications` (`PollInterval`, `RetryDelay`,
+`MaxDeliveryAttempts`, `StaleClaimTimeout`); defaults suit a single instance with mock
+providers.

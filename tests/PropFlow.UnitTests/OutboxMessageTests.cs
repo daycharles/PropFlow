@@ -7,6 +7,9 @@ public sealed class OutboxMessageTests
 {
     private static readonly Guid Org = Guid.NewGuid();
     private static readonly DateTimeOffset When = DateTimeOffset.Parse("2026-09-09T09:00:00-04:00");
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan StaleTimeout = TimeSpan.FromMinutes(5);
+    private const int MaxAttempts = 8;
 
     private static OutboxMessage Sms(DateTimeOffset? createdAt = null) => OutboxMessage.Create(
         Org, Guid.NewGuid(), MessageChannel.Sms, "+15550001111", null, "On the way.", "k-" + Guid.NewGuid(),
@@ -93,40 +96,65 @@ public sealed class OutboxMessageTests
     {
         var message = Sms();
 
-        for (var attempt = 1; attempt <= OutboxMessage.MaxDeliveryAttempts; attempt++)
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             message.BeginDelivery(When);
-            message.RecordFailedAttempt("provider down", When);
+            message.RecordFailedAttempt("provider down", When, MaxAttempts);
 
-            var expected = attempt >= OutboxMessage.MaxDeliveryAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
+            var expected = attempt >= MaxAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
             Assert.Equal(expected, message.Status);
             Assert.Equal("provider down", message.FailureReason);
         }
     }
 
     [Fact]
-    public void RecordFailedAttempt_requires_a_reason()
+    public void RecordFailedAttempt_validates_its_arguments()
     {
         var message = Sms();
         message.BeginDelivery(When);
-        Assert.Throws<ArgumentException>(() => message.RecordFailedAttempt(" ", When));
+        Assert.Throws<ArgumentException>(() => message.RecordFailedAttempt(" ", When, MaxAttempts));
+        Assert.Throws<ArgumentOutOfRangeException>(() => message.RecordFailedAttempt("x", When, 0));
     }
 
     [Fact]
-    public void IsClaimable_covers_pending_and_stale_sending_only()
+    public void A_first_attempt_is_claimable_immediately()
+    {
+        Assert.True(Sms().IsClaimable(When, RetryDelay, StaleTimeout));
+    }
+
+    [Fact]
+    public void A_failed_attempt_is_not_reclaimable_until_the_retry_delay_elapses()
     {
         var now = DateTimeOffset.Parse("2026-09-09T09:00:00Z");
-        var stale = TimeSpan.FromMinutes(5);
         var message = Sms(now.AddHours(-1));
-
-        Assert.True(message.IsClaimable(now, stale));
-
         message.BeginDelivery(now);
-        Assert.False(message.IsClaimable(now, stale));
-        Assert.False(message.IsClaimable(now.AddMinutes(4), stale));
-        Assert.True(message.IsClaimable(now.AddMinutes(6), stale));
+        message.RecordFailedAttempt("down", now, MaxAttempts);
 
-        message.MarkSent("ref", now.AddMinutes(6));
-        Assert.False(message.IsClaimable(now.AddDays(1), stale));
+        Assert.Equal(OutboxStatus.Pending, message.Status);
+        Assert.False(message.IsClaimable(now, RetryDelay, StaleTimeout));
+        Assert.False(message.IsClaimable(now.AddMinutes(1), RetryDelay, StaleTimeout));
+        Assert.True(message.IsClaimable(now.AddMinutes(2), RetryDelay, StaleTimeout));
+    }
+
+    [Fact]
+    public void A_claimed_message_is_only_reclaimable_once_the_claim_goes_stale()
+    {
+        var now = DateTimeOffset.Parse("2026-09-09T09:00:00Z");
+        var message = Sms(now.AddHours(-1));
+        message.BeginDelivery(now);
+
+        Assert.False(message.IsClaimable(now, RetryDelay, StaleTimeout));
+        Assert.False(message.IsClaimable(now.AddMinutes(4), RetryDelay, StaleTimeout));
+        Assert.True(message.IsClaimable(now.AddMinutes(6), RetryDelay, StaleTimeout));
+    }
+
+    [Fact]
+    public void A_terminal_message_is_never_claimable()
+    {
+        var message = Sms();
+        message.BeginDelivery(When);
+        message.MarkSent("ref", When);
+
+        Assert.False(message.IsClaimable(When.AddDays(1), RetryDelay, StaleTimeout));
     }
 }

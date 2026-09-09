@@ -33,8 +33,13 @@ exception is recorded as a delivery failure and the loop continues.
 The first failed send moved a message straight to `Failed` with no retry, so a momentary
 provider or network blip permanently dropped a resident notification.
 
-**Resolution:** a failed attempt keeps the message `Pending` and increments `AttemptCount`
-until `MaxDeliveryAttempts` (5), then moves it to `Failed` with the last error retained.
+**Resolution:** a failed attempt keeps the message `Pending` and increments `AttemptCount`,
+and the next attempt is held off by a retry delay, until the attempt cap is reached and the
+message moves to `Failed` with the last error retained. Defaults — 2-minute retry delay, cap
+of 8 (≈14 minutes of outage tolerance) — are bound from the `Communications` configuration
+section (`CommunicationsOptions`), as are the poll interval and stale-claim timeout.
+Capped-exponential backoff and transient/permanent error classification are deferred to
+PF-7.05 (real providers).
 
 ### C4 — Multi-instance dispatch could double-send (Medium) — resolved
 
