@@ -16,7 +16,10 @@
     no-ops is worse than one that is obviously broken.
 
 .PARAMETER Text
-    The message body. Slack mrkdwn is supported (*bold*, `code`, <url|label>).
+    The message body. Slack mrkdwn formatting is supported (*bold*, _italic_, `code`).
+    The three characters Slack reserves -- & < > -- are escaped, because callers pass
+    arbitrary text through here (a commit subject, a test failure message). That means
+    link syntax written into -Text renders literally; pass a URL as -Link instead.
 
 .PARAMETER Status
     ok | fail | info. Drives the leading emoji and the attachment colour.
@@ -77,10 +80,15 @@ $decoration = switch ($Status) {
     default { @{ Emoji = ':information_source:'; Color = '#1d9bd1' } }
 }
 
+# Escape the three characters Slack reserves in mrkdwn, ampersand first so the entities
+# the next two replacements introduce are not themselves re-escaped.
+$safeText = $Text.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
+$headline = "$($decoration.Emoji) $safeText"
+
 $blocks = @(
     @{
         type = 'section'
-        text = @{ type = 'mrkdwn'; text = "$($decoration.Emoji) $Text" }
+        text = @{ type = 'mrkdwn'; text = $headline }
     }
 )
 
@@ -95,7 +103,7 @@ $blocks += @{
 
 # fallback_text is what a notification or a client without Block Kit renders.
 $payload = @{
-    text        = "$($decoration.Emoji) $Text"
+    text        = $headline
     attachments = @(
         @{
             color  = $decoration.Color
