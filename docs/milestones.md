@@ -1,5 +1,9 @@
 # Implementation milestones
 
+This file defines the milestones. The epic and task-level breakdown for the
+remaining work (milestones 3 onward), including a cross-cutting hardening track,
+lives in [backlog.md](backlog.md) and is the source for GitHub milestones and issues.
+
 ## 1 — Repository and foundation (implemented)
 
 Initialize local Git, pin the SDK, create domain/application/API boundaries, add fail-closed tenant resolution and capability policy wiring, domain assignment/audit semantics, centralized HTTP errors, structured console logs, health endpoint, Compose database configuration, CI, and executable foundation checks. No login or persistent operations are represented as complete.
