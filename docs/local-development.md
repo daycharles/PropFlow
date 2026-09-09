@@ -58,3 +58,40 @@ dotnet test tests/PropFlow.IntegrationTests --configuration Release --no-build
 Integration tests provision a disposable PostgreSQL 17 container with random credentials, apply real migrations, configure the restricted runtime account, and exercise the actual API with ASP.NET's test host over HTTPS semantics. Docker must be accessible. Each test creates separate organizations; no existing development data is changed. Testcontainers removes the test database/container afterward.
 
 To add migrations, run `dotnet tool restore`, then `dotnet ef migrations add NAME --project src/PropFlow.Infrastructure --context IdentityStore` (or `OperationsStore`). Keep each context's migrations in its existing subfolder. Every new business table needs the central EF tenant convention, a composite tenant foreign key where appropriate, and a reviewed PostgreSQL RLS policy. Schema changes are not auto-applied on API startup.
+
+## Slack build notifications
+
+`scripts/Send-SlackUpdate.ps1` posts build/test/PR status to the Slack `#agent-updates` channel
+through a Slack incoming webhook. The CI `verify` job calls it as its last step
+(`.github/workflows/ci.yml`), on `push` events only — `on: [push, pull_request]` fires twice for
+a PR branch, and two identical messages per commit is noise.
+
+The webhook URL is a credential and is never committed. Two places supply it:
+
+- **CI** — repository secret `PROPFLOW_SLACK_WEBHOOK_URL`:
+
+  ```powershell
+  gh secret set PROPFLOW_SLACK_WEBHOOK_URL --repo daycharles/PropFlow
+  ```
+
+- **Locally** — the gitignored `.claude/settings.local.json`:
+
+  ```json
+  { "env": { "PROPFLOW_SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/..." } }
+  ```
+
+Create the webhook at <https://api.slack.com/apps> → your app → **Incoming Webhooks** →
+**Activate Incoming Webhooks** → **Add New Webhook to Workspace** → pick `#agent-updates`. It is
+post-only and Slack binds it to that one channel, so it cannot read the channel or post anywhere
+else.
+
+Run it by hand with:
+
+```powershell
+./scripts/Send-SlackUpdate.ps1 -Status info -Text 'PropFlow agent connected'
+./scripts/Send-SlackUpdate.ps1 -Status fail -Text 'IntegrationTests: 3 failed' -Link $runUrl
+```
+
+The script exits non-zero when the URL is unset or is not a `hooks.slack.com` URL, rather than
+silently doing nothing. The CI step is `continue-on-error: true` so that a missing secret or a
+Slack outage cannot redden an otherwise green build; the failure is still visible in the step log.
