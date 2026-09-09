@@ -73,3 +73,9 @@ there as append-only and rebase rather than resolve conflicts destructively.
 
 `docs/backlog.md` is the task source. GitHub milestones `M3`–`M7`, epic issues `#1`–`#5`,
 task issues `#6`–`#73`. Reference the `PF-x.yy` id in branch names, commits, and PRs.
+
+Keep the tracker in step with git, and **assign the task issue to the account your session is
+authed as** so the board shows whose agent did what: assign + move to *In progress* when you
+branch, close with a PR-linking comment when it merges. Full procedure, ids, and the
+fine-grained-PAT fallback (Issues write, no Projects access) are in
+`.claude/rules/workflow.md` → *Tracker status mirrors git*.

@@ -42,18 +42,50 @@ A merged branch left standing is the reason the next session cannot tell what is
 
 ## Tracker status mirrors git
 
-- merged to `develop` → the issue moves out of in-progress,
+- branch created, work in flight → the issue is **assigned** and **In progress**,
+- merged to `develop` (or `main`) → the issue is **closed** with a comment linking the PR,
 - feature branch only → the issue stays in-progress,
 - code shipping in a build while its issue says in-progress is not allowed. Either the work is
   flag-off and the issue says so, or the status moves.
 
+### Assign the issue to the session's account — every time
+
+The board and the issue list are how a human tells **whose agent did what**. An unassigned
+closed issue loses that. So, as the first step of picking up a task and before opening the PR:
+
+```bash
+gh issue edit <n> --add-assignee @me      # @me = the account gh is authed as for this session
+```
+
+- Assign to the account **this session authenticates as** (the human whose machine/agent it is),
+  not to whoever the issue was filed under. `daycharles`'s sessions assign `daycharles`;
+  `daycdev`'s sessions assign `daycdev`.
+- On merge, close the issue from the PR or by hand with a comment that names the PR and says an
+  agent session did it:
+  ```bash
+  gh issue close <n> --reason completed \
+    --comment "Done in PR #NN (merged to <branch>). <account> Claude Code session. <one line>."
+  ```
+- Partial / blocked work: assign it, comment what landed and what remains, leave it open.
+
 ### The board, and the commands that read and move it
 
 The tracker is GitHub Projects **project 2**, owner `daycharles` — *@daycharles's PropFlow*,
-project id `PVT_kwHOA6-kA84Bi9VY`. `gh` 2.97.0 is installed and authed as `daycharles` with the
-`project` scope, so this is readable and writable from a session without extra setup. All ids
-below were read with `gh project field-list` on 2026-09-09; re-read them if the board is
-reconfigured.
+project id `PVT_kwHOA6-kA84Bi9VY`. All ids below were read with `gh project field-list` on
+2026-09-09; re-read them if the board is reconfigured.
+
+**Two environments, two capability levels:**
+
+- A session whose `gh`/token carries the **`project`** scope (or a fine-grained PAT with the
+  **Projects: write** permission) can move cards directly with `gh project item-edit` — use the
+  ids below.
+- The macOS box currently has **`gh` 2.63.2 in `~/.local/bin`** authed by a fine-grained PAT
+  (`GH_TOKEN`, read from the gitignored token file) that has **Issues: write but no Projects
+  permission**. `gh project …` returns `Resource not accessible by personal access token`
+  there. That session still does the assignee + close + comment above via `gh issue …`; the
+  board's built-in workflows (*item added → Backlog*, *item closed → Done*) then move the card,
+  and a `project`-scoped session reconciles anything the workflows miss. Fixing this properly =
+  add Projects access to the fine-grained PAT (see `docs/followups.md`).
 
 ```bash
 # Read the board. --limit defaults to 30 and truncates silently — always pass it.
@@ -79,9 +111,9 @@ The three policy lines above map onto those options:
 | draft or open PR into `develop` | `In review` |
 | merged to `develop` | `Done` |
 
-Reads are allowlisted in `.claude/settings.json`. `gh project item-edit`, `gh issue edit` and
-`gh pr create` are deliberately **not** — they sit in `ask`, so a board write surfaces for
-approval instead of happening silently.
+Reads are allowlisted in `.claude/settings.json`. `gh project item-edit`, `gh issue edit`,
+`gh issue close` and `gh pr create` are deliberately **not** — they sit in `ask`, so a tracker
+write surfaces for approval instead of happening silently.
 
 ## Docs are reconciled in the same change
 
