@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --check ."
   },
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "24.0.0",
     "@types/react": "19.2.0",
     "eslint": "9.39.1",

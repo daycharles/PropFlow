@@ -38,3 +38,51 @@ jobs:
       - run: npm run format
       - run: npm run lint
       - run: npm run build
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [verify, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.3xx'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: dotnet restore PropFlow.slnx --locked-mode
+      - run: dotnet build PropFlow.slnx --no-restore
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Start seeded API and web app
+        env:
+          POSTGRES_PASSWORD: propflow-e2e
+          ConnectionStrings__Admin: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow;Password=propflow-e2e
+          Runtime__Password: runtime-e2e
+          Demo__Password: DemoPassword!123
+          ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow_app;Password=runtime-e2e
+          ASPNETCORE_URLS: http://127.0.0.1:5001
+          PROPFLOW_API_ORIGIN: http://127.0.0.1:5001
+        run: |
+          docker compose up -d --wait
+          dotnet run --project tools/PropFlow.Admin --no-build -- migrate
+          dotnet run --project tools/PropFlow.Admin --no-build -- configure-runtime
+          dotnet run --project tools/PropFlow.Admin --no-build -- seed-demo
+          dotnet run --project src/PropFlow.Api --no-build > /tmp/propflow-api.log 2>&1 &
+          (cd apps/web && npm run dev -- --hostname 127.0.0.1 > /tmp/propflow-web.log 2>&1) &
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:3000 >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3000 >/dev/null
+      - run: npm run e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+      - name: Stop database
+        if: always()
+        run: docker compose down -v

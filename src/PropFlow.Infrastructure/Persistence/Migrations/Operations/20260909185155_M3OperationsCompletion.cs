@@ -115,35 +115,11 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 maxLength: 100,
                 nullable: true);
 
-            // M3 entities were added after the initial tenant-security migration.  Each
-            // must have the same database-enforced tenant boundary as the original tables.
-            foreach (var table in new[] { "Employees", "Portfolios", "Properties", "Buildings", "Spaces", "WorkCategories" })
-            {
-                migrationBuilder.Sql($"""
-                    ALTER TABLE operations."{table}"
-                      ADD CONSTRAINT "FK_{table}_Organization" FOREIGN KEY ("OrganizationId")
-                      REFERENCES identity."Organizations" ("Id") ON DELETE RESTRICT;
-                    ALTER TABLE operations."{table}" ENABLE ROW LEVEL SECURITY;
-                    ALTER TABLE operations."{table}" FORCE ROW LEVEL SECURITY;
-                    CREATE POLICY tenant_isolation ON operations."{table}"
-                      USING ("OrganizationId" = nullif(current_setting('app.organization_id', true), '')::uuid)
-                      WITH CHECK ("OrganizationId" = nullif(current_setting('app.organization_id', true), '')::uuid);
-                    """);
-            }
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            foreach (var table in new[] { "Employees", "Portfolios", "Properties", "Buildings", "Spaces", "WorkCategories" })
-            {
-                migrationBuilder.Sql($"""
-                    DROP POLICY tenant_isolation ON operations."{table}";
-                    ALTER TABLE operations."{table}" DISABLE ROW LEVEL SECURITY;
-                    ALTER TABLE operations."{table}" DROP CONSTRAINT "FK_{table}_Organization";
-                    """);
-            }
-
             migrationBuilder.DropColumn(
                 name: "Cost",
                 schema: "operations",

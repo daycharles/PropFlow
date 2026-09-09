@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Domain.People;
+using PropFlow.Domain.Properties;
 using PropFlow.Domain.Work;
 using Xunit;
 
@@ -36,7 +37,8 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         var otherVendor = Guid.NewGuid();
         await using (var store = s.AdminStore(s.OrganizationA))
         {
-            store.WorkItems.Add(new WorkItem(s.OrganizationA, second, "Second pest control"));
+            var propertyId = AddProperty(store, s.OrganizationA);
+            store.WorkItems.Add(new WorkItem(s.OrganizationA, second, "Second pest control", propertyId, s.AdminA));
             store.Vendors.Add(new Vendor(s.OrganizationA, otherVendor, "Other vendor"));
             await store.SaveChangesAsync();
         }
@@ -61,8 +63,9 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         await using var s = await fixture.CreateScenarioAsync();
         await using (var store = s.AdminStore(s.OrganizationA))
         {
-            var first = new WorkItem(s.OrganizationA, Guid.NewGuid(), "Alpha plumbing"); first.Edit("Alpha plumbing", "leak", null, WorkPriority.High);
-            var second = new WorkItem(s.OrganizationA, Guid.NewGuid(), "Zulu pest"); second.Edit("Zulu pest", "pest control", null, WorkPriority.Low);
+            var propertyId = AddProperty(store, s.OrganizationA);
+            var first = new WorkItem(s.OrganizationA, Guid.NewGuid(), "Alpha plumbing", propertyId, s.AdminA); first.Edit("Alpha plumbing", "leak", null, WorkPriority.High);
+            var second = new WorkItem(s.OrganizationA, Guid.NewGuid(), "Zulu pest", propertyId, s.AdminA); second.Edit("Zulu pest", "pest control", null, WorkPriority.Low);
             store.WorkItems.AddRange(first, second); await store.SaveChangesAsync();
         }
         await s.LoginAsync();
@@ -87,5 +90,13 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
     {
         var json = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{workId}");
         return json.GetProperty("version").GetUInt32();
+    }
+
+    private static Guid AddProperty(PropFlow.Infrastructure.Persistence.OperationsStore store, Guid organization)
+    {
+        var portfolioId = Guid.NewGuid(); var propertyId = Guid.NewGuid();
+        store.Portfolios.Add(new Portfolio(organization, portfolioId, "Test portfolio"));
+        store.Properties.Add(new Property(organization, propertyId, portfolioId, "Test property", "America/New_York"));
+        return propertyId;
     }
 }
