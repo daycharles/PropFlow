@@ -28,13 +28,20 @@ Open PRs as **draft** until CI passes, then mark ready.
 - .NET SDK **10.0.303** installed at `~/.dotnet` (pinned band `10.0.3xx`, see `global.json`).
   `~/.zshrc` exports `DOTNET_ROOT` and adds `~/.dotnet` + `~/.dotnet/tools` to `PATH`.
 - `dotnet tool restore` provides `dotnet-ef` (10.0.12) for migrations.
-- **Docker is not installed** on this machine — integration tests run on CI only.
+- **Docker** runs via Colima (no admin rights needed): `colima` / `limactl` / `docker` are in
+  `~/.local/bin`, the VM uses Apple's Virtualization.framework. Start it with `colima start`
+  (state persists; `colima stop` to release resources). `~/.testcontainers.properties` sets
+  `docker.socket.override=/var/run/docker.sock` so the Testcontainers Ryuk reaper mounts the
+  in-VM socket path instead of the host path.
 
 ```bash
 dotnet tool restore
 dotnet restore PropFlow.slnx --locked-mode
 dotnet build PropFlow.slnx -c Release --no-restore
 dotnet run --project tests/PropFlow.FoundationChecks -c Release --no-build
+
+colima start                                   # once per boot; Docker for the next command
+dotnet test tests/PropFlow.IntegrationTests -c Release --no-build
 ```
 
 ## Persistence rules (from docs/architecture.md)
