@@ -28,12 +28,14 @@ public sealed class DatabaseReadiness(IConfiguration configuration) : IHealthChe
             command.CommandText = """
                 SELECT to_regclass('identity."AspNetUsers"') IS NOT NULL
                   AND to_regclass('identity."Memberships"') IS NOT NULL
-                  AND (SELECT count(*) = 3 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity)
+                  AND (SELECT count(*) >= 9
+                         AND count(*) FILTER (WHERE NOT (c.relrowsecurity AND c.relforcerowsecurity)) = 0
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
-                       WHERE n.nspname = 'operations' AND c.relname IN ('WorkItems', 'Vendors', 'Timeline'))
-                  AND (SELECT count(*) = 2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity)
+                       WHERE n.nspname = 'operations' AND c.relkind = 'r' AND c.relname <> '__OperationsMigrations')
+                  AND (SELECT count(*) >= 2
+                         AND count(*) FILTER (WHERE NOT (c.relrowsecurity AND c.relforcerowsecurity)) = 0
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
-                       WHERE n.nspname = 'communications' AND c.relname IN ('MessageTemplates', 'OutboxMessages'))
+                       WHERE n.nspname = 'communications' AND c.relkind = 'r' AND c.relname <> '__CommunicationsMigrations')
                 """;
             return await command.ExecuteScalarAsync(ct) is true ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy();
         }

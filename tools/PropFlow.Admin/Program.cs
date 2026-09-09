@@ -43,7 +43,10 @@ try
     if (await users.FindByEmailAsync(email) is not null)
         throw new ArgumentException("That user already exists. Bootstrap will not change existing accounts or credentials.");
     await using var transaction = await store.Database.BeginTransactionAsync();
-    var organization = new Organization { Id = Guid.NewGuid(), Name = name };
+    var slug = OrganizationSlug.From(name);
+    if (await store.Organizations.AnyAsync(x => x.Slug == slug))
+        slug = $"{slug[..Math.Min(slug.Length, OrganizationSlug.MaxLength - 7)]}-{Guid.NewGuid():N}"[..OrganizationSlug.MaxLength].TrimEnd('-');
+    var organization = new Organization { Id = Guid.NewGuid(), Name = name, Slug = slug };
     var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, LockoutEnabled = true };
     var result = await users.CreateAsync(user, password);
     if (!result.Succeeded) throw new ArgumentException(string.Join("; ", result.Errors.Select(x => x.Code)));
@@ -54,7 +57,7 @@ try
     });
     await store.SaveChangesAsync();
     await transaction.CommitAsync();
-    Console.WriteLine($"Created organization {organization.Id} and administrator {email}.");
+    Console.WriteLine($"Created organization {organization.Id} (slug '{organization.Slug}') and administrator {email}.");
     return 0;
 }
 catch (ArgumentException exception)

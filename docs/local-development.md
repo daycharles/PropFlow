@@ -10,7 +10,7 @@ dotnet dev-certs https --trust
 dotnet run --project src/PropFlow.Api --urls https://localhost:7080
 ```
 
-Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID needed for login and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
+Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID and slug (the slug is used for login) and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
 
 On subsequent runs set `ConnectionStrings__Database` from your private local configuration and start the API. Do not point the API at the PostgreSQL owner/admin account: startup rejects superuser, RLS-bypass, administrative, and schema/table-owner roles.
 
@@ -32,7 +32,7 @@ Local connection format: `Host=localhost;Database=propflow;Username=propflow_app
 ## Login API
 
 1. GET `/api/auth/csrf`; retain the secure antiforgery cookie and returned `token`.
-2. POST `/api/auth/login` with that token in `X-CSRF-TOKEN` and JSON containing `email`, `password`, and `organizationId`.
+2. POST `/api/auth/login` with that token in `X-CSRF-TOKEN` and JSON containing `organizationSlug`, `email`, and `password`.
 3. After a 204 response, GET `/api/auth/csrf` again to get a token bound to the signed-in identity.
 4. GET `/api/session` to inspect the verified organization and capabilities.
 5. Include the new CSRF token with every POST, including logout and vendor assignment.

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using PropFlow.Domain.People;
+using PropFlow.Domain.Properties;
 using PropFlow.Domain.Work;
 using PropFlow.Infrastructure.Identity;
 using PropFlow.Infrastructure.Persistence;
@@ -74,10 +75,21 @@ public sealed class Scenario : IAsyncDisposable
     public Guid WorkB { get; } = Guid.NewGuid();
     public Guid VendorA { get; } = Guid.NewGuid();
     public Guid VendorB { get; } = Guid.NewGuid();
+    public Guid PortfolioA { get; } = Guid.NewGuid();
+    public Guid PortfolioB { get; } = Guid.NewGuid();
+    public Guid PropertyA { get; } = Guid.NewGuid();
+    public Guid PropertyB { get; } = Guid.NewGuid();
     public string Password { get; } = $"A!a9{Guid.NewGuid():N}";
+    public string SlugA { get; } = $"org-a-{Guid.NewGuid():N}"[..20];
+    public string SlugB { get; } = $"org-b-{Guid.NewGuid():N}"[..20];
     public string EmailA => $"{AdminA:N}@example.test";
     public string EmailB => $"{AdminB:N}@example.test";
     public string ReaderEmail => $"{ReaderA:N}@example.test";
+
+    private string SlugFor(Guid organization) =>
+        organization == OrganizationA ? SlugA
+        : organization == OrganizationB ? SlugB
+        : $"missing-{organization:N}"[..20];
 
     public Scenario(DatabaseFixture fixture)
     {
@@ -92,19 +104,24 @@ public sealed class Scenario : IAsyncDisposable
     public async Task SeedAsync()
     {
         await using var identity = Identity();
-        identity.Organizations.AddRange(new Organization { Id = OrganizationA, Name = "Harbor Management" },
-            new Organization { Id = OrganizationB, Name = "Other Management" });
+        identity.Organizations.AddRange(
+            new Organization { Id = OrganizationA, Name = "Harbor Management", Slug = SlugA },
+            new Organization { Id = OrganizationB, Name = "Other Management", Slug = SlugB });
         AddUser(identity, AdminA, EmailA, OrganizationA, "Organization Admin");
         AddUser(identity, AdminB, EmailB, OrganizationB, "Organization Admin");
         AddUser(identity, ReaderA, ReaderEmail, OrganizationA, "Read Only");
         await identity.SaveChangesAsync();
         await using var a = AdminStore(OrganizationA);
         a.Vendors.Add(new Vendor(OrganizationA, VendorA, "Tidewater Pest Services"));
-        a.WorkItems.Add(new WorkItem(OrganizationA, WorkA, "Pest control"));
+        a.Portfolios.Add(new Portfolio(OrganizationA, PortfolioA, "Norfolk Residential"));
+        a.Properties.Add(new Property(OrganizationA, PropertyA, PortfolioA, "Harbor Point Apartments", "America/New_York"));
+        a.WorkItems.Add(new WorkItem(OrganizationA, WorkA, "Pest control", PropertyA, AdminA));
         await a.SaveChangesAsync();
         await using var b = AdminStore(OrganizationB);
         b.Vendors.Add(new Vendor(OrganizationB, VendorB, "Other Vendor"));
-        b.WorkItems.Add(new WorkItem(OrganizationB, WorkB, "Private work"));
+        b.Portfolios.Add(new Portfolio(OrganizationB, PortfolioB, "Other Portfolio"));
+        b.Properties.Add(new Property(OrganizationB, PropertyB, PortfolioB, "Other Property", "America/Chicago"));
+        b.WorkItems.Add(new WorkItem(OrganizationB, WorkB, "Private work", PropertyB, AdminB));
         await b.SaveChangesAsync();
     }
 
@@ -140,7 +157,8 @@ public sealed class Scenario : IAsyncDisposable
     public async Task<HttpResponseMessage> AttemptLoginAsync(string email, Guid organization, string? password = null)
     {
         await RefreshCsrfAsync();
-        return await Client.PostAsJsonAsync("/api/auth/login", new { email, password = password ?? Password, organizationId = organization });
+        return await Client.PostAsJsonAsync("/api/auth/login",
+            new { organizationSlug = SlugFor(organization), email, password = password ?? Password });
     }
     public async Task LoginAsync(bool reader = false)
     {

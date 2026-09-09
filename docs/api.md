@@ -7,7 +7,7 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /health/live | 200 process liveness JSON |
 | GET | /health/ready | 200 when database security/schema checks pass, otherwise 503 |
 | GET | /api/auth/csrf | Public; returns `{ "token": "..." }` and secure antiforgery cookie |
-| POST | /api/auth/login | CSRF required; email/password/organizationId; 204 success, 400 invalid input/CSRF, 401 rejected credentials or membership, 429 rate limit |
+| POST | /api/auth/login | CSRF required; organizationSlug/email/password; 204 success, 400 invalid input/CSRF, 401 rejected credentials or membership, 429 rate limit |
 | POST | /api/auth/logout | Auth + CSRF; 204; revokes all sessions for the current user |
 | GET | /api/session | Auth; userId, organizationId, role and capabilities |
 | GET | /api/work/ | Work.Read; up to 100 tenant-scoped work items ordered by title and ID |
@@ -20,9 +20,9 @@ Login body:
 
 ```json
 {
+  "organizationSlug": "<organization slug printed during provisioning>",
   "email": "you@example.com",
-  "password": "<your private password>",
-  "organizationId": "<organization GUID printed during provisioning>"
+  "password": "<your private password>"
 }
 ```
 

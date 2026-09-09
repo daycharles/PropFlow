@@ -1,3 +1,4 @@
+using System.Reflection;
 using PropFlow.Application;
 using Xunit;
 
@@ -43,10 +44,16 @@ public sealed class CapabilitiesTests
     }
 
     [Fact]
-    public void All_lists_every_named_capability()
+    public void All_contains_every_capability_constant_without_duplicates()
     {
-        Assert.Equal(
-            [Capabilities.ReadWork, Capabilities.AssignVendor, Capabilities.ManageTemplates],
-            Capabilities.All);
+        var constants = typeof(Capabilities)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f is { IsLiteral: true, IsInitOnly: false } && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToArray();
+
+        Assert.NotEmpty(constants);
+        Assert.All(constants, c => Assert.Contains(c, Capabilities.All));
+        Assert.Equal(Capabilities.All.Count, Capabilities.All.Distinct().Count());
     }
 }

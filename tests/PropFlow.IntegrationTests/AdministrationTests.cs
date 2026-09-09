@@ -26,13 +26,14 @@ public sealed class AdministrationTests(DatabaseFixture fixture)
         var password = $"A!a9{Guid.NewGuid():N}";
         var first = await RunBootstrapAsync(email, password);
         Assert.True(first.ExitCode == 0, first.Output);
-        Guid organization;
+        string? slug;
         await using (var identity = PropFlow.Infrastructure.Persistence.DatabaseProvisioner.CreateIdentityStore(fixture.AdminConnection))
         {
             var user = await identity.Users.SingleAsync(x => x.Email == email);
             var membership = await identity.Memberships.SingleAsync(x => x.UserId == user.Id);
-            organization = membership.OrganizationId;
+            slug = (await identity.Organizations.SingleAsync(x => x.Id == membership.OrganizationId)).Slug;
             Assert.Equal("Organization Admin", membership.Role);
+            Assert.False(string.IsNullOrWhiteSpace(slug));
             Assert.NotEqual(password, user.PasswordHash);
         }
         var repeat = await RunBootstrapAsync(email, "Different!Password99");
@@ -42,7 +43,7 @@ public sealed class AdministrationTests(DatabaseFixture fixture)
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost"), HandleCookies = true });
         var csrf = await client.GetFromJsonAsync<JsonElement>("/api/auth/csrf");
         client.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password, organizationId = organization });
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { organizationSlug = slug, email, password });
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
     }
 
