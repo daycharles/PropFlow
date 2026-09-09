@@ -1,11 +1,582 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
-type Work = { id:string; title:string; status:string; priority:string; version?:number };
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  api,
+  ApiError,
+  type Session,
+  type Vendor,
+  type SavedView,
+  type WorkItem,
+  type WorkListQuery,
+} from "../lib/api";
+import { hasCapability } from "../lib/capabilities";
+import { AppShell } from "./components/app-shell";
+
+const statuses = [
+  "Draft",
+  "New",
+  "Assigned",
+  "Scheduled",
+  "InProgress",
+  "OnHold",
+  "Completed",
+  "Cancelled",
+];
+const priorities = ["Low", "Normal", "High", "Critical"];
+type Sort = "title" | "status" | "priority" | "dueDate";
+
 export default function Home() {
-  const [session, setSession] = useState<any>(); const [items, setItems] = useState<Work[]>([]); const [selected, setSelected] = useState<Work>(); const [message,setMessage]=useState("");
-  async function load() { const s=await fetch("/api/session"); if(!s.ok) return; setSession(await s.json()); const w=await fetch("/api/work/?page=1&pageSize=100"); if(w.ok) { const data=await w.json(); setItems(data.items ?? data); } }
-  useEffect(()=>{ load(); },[]);
-  async function login(e:FormEvent<HTMLFormElement>) { e.preventDefault(); const f=new FormData(e.currentTarget); const csrf=await (await fetch("/api/auth/csrf")).json(); const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-TOKEN":csrf.token},body:JSON.stringify({organizationSlug:f.get("organizationSlug"),email:f.get("email"),password:f.get("password")})}); setMessage(r.ok?"Signed in.":"Unable to sign in."); if(r.ok) load(); }
-  if(!session) return <main className="login"><h1>PropFlow</h1><p>Internal property operations pilot</p><form onSubmit={login}><input name="organizationSlug" placeholder="Organization slug" required/><input name="email" type="email" placeholder="Email" required/><input name="password" type="password" placeholder="Password" required/><button>Sign in</button></form><p>{message}</p></main>;
-  return <main><header><strong>PropFlow</strong><span>{session.role}</span><a href="/settings/categories">Category settings</a></header><section className="workspace"><div><h1>Work</h1><input placeholder="Search title or description"/><table><thead><tr><th>Title</th><th>Status</th><th>Priority</th></tr></thead><tbody>{items.map(item=><tr key={item.id} onClick={()=>setSelected(item)}><td>{item.title}</td><td>{item.status}</td><td>{item.priority}</td></tr>)}</tbody></table></div><aside>{selected ? <><h2>{selected.title}</h2><p>{selected.status} · {selected.priority}</p><p>Changes save with the current version. Confirm assignments, scheduling, and status changes before they are sent.</p></> : <p>Select a work item to open its workspace.</p>}</aside></section></main>;
+  const [session, setSession] = useState<Session | null>(null);
+  const [ready, setReady] = useState(false);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  async function bootstrap() {
+    try {
+      setSession(await api.session());
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 401))
+        setMessage("We could not load your session. Please try again.");
+    } finally {
+      setReady(true);
+    }
+  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => void bootstrap(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await api.auth.login({
+        organizationSlug: String(values.get("organizationSlug") ?? ""),
+        email: String(values.get("email") ?? ""),
+        password: String(values.get("password") ?? ""),
+      });
+      await bootstrap();
+    } catch (error) {
+      setMessage(
+        error instanceof ApiError && error.status === 429
+          ? "Too many attempts. Please wait and try again."
+          : "Unable to sign in with those credentials and organization.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  if (!ready)
+    return (
+      <main className="centered">
+        <p>Loading PropFlow…</p>
+      </main>
+    );
+  if (!session)
+    return (
+      <main className="login">
+        <h1>PropFlow</h1>
+        <p>Internal property operations</p>
+        <form onSubmit={login}>
+          <label>
+            Organization slug
+            <input name="organizationSlug" autoComplete="organization" required />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autoComplete="current-password" required />
+          </label>
+          <button disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
+        </form>
+        {message && (
+          <p className="message" role="alert">
+            {message}
+          </p>
+        )}
+      </main>
+    );
+  return (
+    <AppShell session={session} onLogout={() => setSession(null)}>
+      <WorkList session={session} />
+    </AppShell>
+  );
+}
+
+function WorkList({ session }: { session: Session }) {
+  const [work, setWork] = useState<WorkItem[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [query, setQuery] = useState<WorkListQuery>({ sort: "title", page: 1, pageSize: 100 });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [vendorId, setVendorId] = useState("");
+  const [flow, setFlow] = useState<"choose" | "confirm" | "success" | null>(null);
+  const [result, setResult] = useState<{
+    changed: number;
+    unchanged: number;
+    total: number;
+  } | null>(null);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [viewName, setViewName] = useState("");
+  async function saveView() {
+    const name = viewName.trim();
+    if (!name) return;
+    try {
+      const created = await api.savedViews.create({ name, filters: query });
+      setSavedViews((current) => [...current, created]);
+      setViewName("");
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Unable to save this view.");
+    }
+  }
+  async function deleteView(id: string) {
+    try {
+      await api.savedViews.delete(id);
+      setSavedViews((current) => current.filter((view) => view.id !== id));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Unable to delete this view.");
+    }
+  }
+  const visibleSelected = useMemo(
+    () => work.filter((item) => selected.has(item.id)),
+    [work, selected],
+  );
+  const categoryNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          work.map((item) => item.categoryName).filter((name): name is string => Boolean(name)),
+        ),
+      ).sort(),
+    [work],
+  );
+  async function load(next = query) {
+    setLoading(true);
+    setError("");
+    try {
+      const [listed, vendorList, viewList] = await Promise.all([
+        api.work.list(next),
+        api.vendors.list(),
+        api.savedViews.list(),
+      ]);
+      setWork(listed.items);
+      setVendors(vendorList.filter((vendor) => vendor.isActive));
+      setSavedViews(viewList);
+      setSelected(
+        (current) =>
+          new Set([...current].filter((id) => listed.items.some((item) => item.id === id))),
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "Unable to load work. Please refresh and try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+    // load reads the query from this render; its identity is not part of the request trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+  function updateQuery(changes: Partial<WorkListQuery>) {
+    setQuery((current) => ({ ...current, ...changes, page: 1 }));
+  }
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function sortBy(sort: Sort) {
+    setQuery((current) => ({
+      ...current,
+      sort,
+      descending: current.sort === sort ? !current.descending : false,
+    }));
+  }
+  async function assign() {
+    if (!vendorId) return;
+    setError("");
+    try {
+      const concurrencyTokens = Object.fromEntries(
+        visibleSelected
+          .filter((item) => item.rowVersion)
+          .map((item) => [item.id, item.rowVersion!]),
+      );
+      const response = await api.work.bulkAssignVendor({
+        workIds: visibleSelected.map((item) => item.id),
+        vendorId,
+        concurrencyTokens,
+      });
+      setResult(response);
+      setFlow("success");
+      await load();
+    } catch (cause) {
+      setFlow(null);
+      setError(
+        cause instanceof ApiError && cause.status === 409
+          ? "Some selected work changed. The list was refreshed; review it and try again."
+          : cause instanceof ApiError
+            ? cause.message
+            : "Vendor assignment could not be completed.",
+      );
+      await load();
+    }
+  }
+  const allSelected = work.length > 0 && work.every((item) => selected.has(item.id));
+  const chosenVendor = vendors.find((vendor) => vendor.id === vendorId);
+  if (!hasCapability(session, "Work.Read"))
+    return (
+      <section className="panel">
+        <h1>Work</h1>
+        <p>You do not have access to work items.</p>
+      </section>
+    );
+  return (
+    <section className="panel work-panel">
+      <div className="work-heading">
+        <div>
+          <h1>Work</h1>
+          <p>Find, prioritize, and assign operational work.</p>
+        </div>
+        <button className="secondary" onClick={() => void load()} disabled={loading}>
+          Refresh
+        </button>
+      </div>
+      {error && (
+        <p className="message" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="filters" aria-label="Work filters">
+        <label>
+          Search
+          <input
+            value={query.search ?? ""}
+            onChange={(event) => updateQuery({ search: event.target.value })}
+            placeholder="Title, resident, or unit"
+          />
+        </label>
+        <label>
+          Status
+          <select
+            value={query.status ?? ""}
+            onChange={(event) => updateQuery({ status: event.target.value || undefined })}
+          >
+            <option value="">All statuses</option>
+            {statuses.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Priority
+          <select
+            value={query.priority ?? ""}
+            onChange={(event) => updateQuery({ priority: event.target.value || undefined })}
+          >
+            <option value="">All priorities</option>
+            {priorities.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Category
+          <select
+            value={query.categoryId ?? ""}
+            onChange={(event) => updateQuery({ categoryId: event.target.value || undefined })}
+          >
+            <option value="">All categories</option>
+            {categoryNames.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="secondary filter-clear"
+          onClick={() => setQuery({ sort: "title", page: 1, pageSize: 100 })}
+        >
+          Clear filters
+        </button>
+      </div>
+      <div className="saved-views" aria-label="Saved views">
+        <strong>Saved views</strong>
+        <select
+          aria-label="Apply saved view"
+          defaultValue=""
+          onChange={(event) => {
+            const view = savedViews.find((item) => item.id === event.target.value);
+            if (view) {
+              try {
+                setQuery(JSON.parse(view.filters) as WorkListQuery);
+              } catch {
+                setError("This saved view has invalid filters.");
+              }
+            }
+            event.currentTarget.value = "";
+          }}
+        >
+          <option value="">Apply a view…</option>
+          {savedViews.map((view) => (
+            <option key={view.id} value={view.id}>
+              {view.name}
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label="Saved view name"
+          value={viewName}
+          onChange={(event) => setViewName(event.target.value)}
+          placeholder="View name"
+        />
+        <button className="secondary" onClick={() => void saveView()} disabled={!viewName.trim()}>
+          Save current view
+        </button>
+        {savedViews.length > 0 && (
+          <select
+            aria-label="Delete saved view"
+            defaultValue=""
+            onChange={(event) => {
+              if (event.target.value) void deleteView(event.target.value);
+              event.currentTarget.value = "";
+            }}
+          >
+            <option value="">Delete a view…</option>
+            {savedViews.map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {selected.size > 0 && (
+        <div className="bulk-toolbar" role="status">
+          <strong>{selected.size} selected</strong>
+          <button
+            onClick={() => {
+              setVendorId("");
+              setFlow("choose");
+            }}
+            disabled={!hasCapability(session, "Work.AssignVendor")}
+          >
+            Assign vendor
+          </button>
+          <button className="secondary" onClick={() => setSelected(new Set())}>
+            Clear selection
+          </button>
+        </div>
+      )}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>
+                <input
+                  aria-label="Select all visible work"
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() =>
+                    setSelected(allSelected ? new Set() : new Set(work.map((item) => item.id)))
+                  }
+                />
+              </th>
+              <SortHeader
+                label="Title"
+                sort="title"
+                active={query.sort}
+                descending={query.descending}
+                onSort={sortBy}
+              />
+              <SortHeader
+                label="Status"
+                sort="status"
+                active={query.sort}
+                descending={query.descending}
+                onSort={sortBy}
+              />
+              <SortHeader
+                label="Priority"
+                sort="priority"
+                active={query.sort}
+                descending={query.descending}
+                onSort={sortBy}
+              />
+              <th>Vendor</th>
+              <SortHeader
+                label="Due"
+                sort="dueDate"
+                active={query.sort}
+                descending={query.descending}
+                onSort={sortBy}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={7}>Loading work…</td>
+              </tr>
+            ) : work.length === 0 ? (
+              <tr>
+                <td colSpan={7}>No work matches these filters.</td>
+              </tr>
+            ) : (
+              work.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <input
+                      aria-label={`Select ${item.title}`}
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggle(item.id)}
+                    />
+                  </td>
+                  <td>
+                    <Link href={`/work/${item.id}`}>
+                      <strong>{item.title}</strong>
+                    </Link>
+                    {item.propertyName && <small>{item.propertyName}</small>}
+                  </td>
+                  <td>
+                    <span className="badge">{item.status}</span>
+                  </td>
+                  <td>
+                    <span className={`priority priority-${item.priority.toLowerCase()}`}>
+                      {item.priority}
+                    </span>
+                  </td>
+                  <td>{item.vendorName ?? "Unassigned"}</td>
+                  <td>{formatDate(item.dueDate)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {flow && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assignment-title"
+          >
+            {flow === "choose" && (
+              <>
+                <h2 id="assignment-title">Assign vendor</h2>
+                <p>
+                  Assign a vendor to {visibleSelected.length} selected work{" "}
+                  {visibleSelected.length === 1 ? "item" : "items"}.
+                </p>
+                <label>
+                  Vendor
+                  <select value={vendorId} onChange={(event) => setVendorId(event.target.value)}>
+                    <option value="">Choose a vendor</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="modal-actions">
+                  <button className="secondary" onClick={() => setFlow(null)}>
+                    Cancel
+                  </button>
+                  <button disabled={!vendorId} onClick={() => setFlow("confirm")}>
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+            {flow === "confirm" && (
+              <>
+                <h2 id="assignment-title">Confirm assignment</h2>
+                <p>
+                  <strong>{chosenVendor?.name}</strong> will be assigned to {visibleSelected.length}{" "}
+                  work {visibleSelected.length === 1 ? "item" : "items"}. This updates assignment
+                  history for each item.
+                </p>
+                <div className="modal-actions">
+                  <button className="secondary" onClick={() => setFlow("choose")}>
+                    Back
+                  </button>
+                  <button onClick={() => void assign()}>Confirm assignment</button>
+                </div>
+              </>
+            )}
+            {flow === "success" && (
+              <>
+                <h2 id="assignment-title">Vendor assigned</h2>
+                <p>
+                  {result?.changed ?? result?.total ?? visibleSelected.length} work{" "}
+                  {visibleSelected.length === 1 ? "item was" : "items were"} assigned to{" "}
+                  {chosenVendor?.name}. The list has been refreshed.
+                </p>
+                {result && result.unchanged > 0 && (
+                  <p>{result.unchanged} already had this vendor.</p>
+                )}
+                <div className="modal-actions">
+                  <button
+                    onClick={() => {
+                      setSelected(new Set());
+                      setFlow(null);
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+function SortHeader({
+  label,
+  sort,
+  active,
+  descending,
+  onSort,
+}: {
+  label: string;
+  sort: Sort;
+  active?: string;
+  descending?: boolean;
+  onSort: (sort: Sort) => void;
+}) {
+  return (
+    <th>
+      <button className="sort-button" onClick={() => onSort(sort)}>
+        {label}
+        {active === sort ? (descending ? " ↓" : " ↑") : ""}
+      </button>
+    </th>
+  );
+}
+function formatDate(value?: string | null) {
+  return value
+    ? new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(value))
+    : "—";
 }

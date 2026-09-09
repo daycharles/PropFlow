@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    partial class OperationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260909193703_M3SavedViews")]
+    partial class M3SavedViews
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,73 +25,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("PropFlow.Domain.Assets.Asset", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Condition")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<int?>("ExpectedServiceLifeYears")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("InstalledOn")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Manufacturer")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Model")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("ReplacementCostEstimate")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)");
-
-                    b.Property<string>("SerialNumber")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("SpaceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly?>("WarrantyExpiresOn")
-                        .HasColumnType("date");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PropertyId");
-
-                    b.HasIndex("OrganizationId", "SpaceId");
-
-                    b.ToTable("Assets", "operations");
-                });
 
             modelBuilder.Entity("PropFlow.Domain.People.Employee", b =>
                 {
@@ -117,77 +53,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasKey("OrganizationId", "Id");
 
                     b.ToTable("Employees", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.People.Occupancy", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("MovedInOn")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("MovedOutOn")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("ResidentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SpaceId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ResidentId");
-
-                    b.HasIndex("OrganizationId", "SpaceId");
-
-                    b.ToTable("Occupancies", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.People.Resident", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Email")
-                        .HasMaxLength(254)
-                        .HasColumnType("character varying(254)");
-
-                    b.Property<string>("EmailConsent")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset?>("EmailConsentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("SmsConsent")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset?>("SmsConsentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.ToTable("Residents", "operations");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.People.Vendor", b =>
@@ -540,35 +405,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "VendorId");
 
                     b.ToTable("WorkItems", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Assets.Asset", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Properties.Property", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PropertyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Properties.Space", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "SpaceId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.People.Occupancy", b =>
-                {
-                    b.HasOne("PropFlow.Domain.People.Resident", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ResidentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Properties.Space", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "SpaceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Properties.Building", b =>

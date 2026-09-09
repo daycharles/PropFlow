@@ -152,11 +152,13 @@ app.MapHealthChecks("/health/ready");
 app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
 app.MapWorkEndpoints();
+app.MapReferenceEndpoints();
 app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapSearchEndpoints();
+app.MapSavedViewEndpoints();
 app.Run();
 
 public partial class Program { }

@@ -1,4 +1,4 @@
-# Milestone 2 API
+# Milestone 3 API
 
 Use HTTPS and retain cookies. API responses are JSON except successful 204s and the minimal readiness endpoint. API session/data responses use Cache-Control: no-store. Authentication failures return 401, authorization failures return 403; no HTML login redirects are used.
 
@@ -14,6 +14,15 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /api/work/{id} | Work.Read; work record, or 404 including foreign-tenant IDs |
 | GET | /api/work/{id}/timeline | Work.Read; chronological audit entries, or 404 |
 | POST | /api/work/{id}/vendor | Work.AssignVendor + Work.Read + CSRF; accepts vendorId; atomically saves assignment and audit |
+| GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup |
+| GET | /api/vendors/{id} | Work.Read; vendor lookup, or 404 |
+| GET | /api/employees/ | Work.Read; tenant-scoped employee lookup |
+| GET | /api/properties/ | Work.Read; tenant-scoped property lookup |
+| GET | /api/properties/{id} | Work.Read; property with its buildings and spaces, or 404 |
+| GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name |
+| POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category |
+| PUT | /api/categories/{id} | Settings.ManageCategories + CSRF; renames/reorders a category |
+| POST | /api/categories/{id}/archive | Settings.ManageCategories + CSRF; archives a category |
 | GET | /openapi/v1.json | Authenticated generated OpenAPI contract |
 
 Login body:
@@ -36,7 +45,7 @@ Vendor assignment body:
 
 Success is `{ "changed": true }`; repeating the same assignment returns `{ "changed": false }` and creates no duplicate timeline entry. Unknown work/vendor IDs, including other organizations' IDs, return 404. Invalid IDs return 400. A database concurrency conflict returns 409 and requires a reload. Tenant, actor and permissions come only from the session; extra JSON fields, query strings and tenant headers cannot override them.
 
-The API does not yet expose work/vendor creation or bulk assignment. Integration tests provision data explicitly; the web workflow and demo dataset arrive in milestone 3. There is no public registration endpoint. Use the administrative bootstrap command to create the first organization and account.
+There is no public registration endpoint. Use the administrative bootstrap command to create the first organization and account. Work create/update, filtered/paginated list, client-facing concurrency tokens, bulk assignment, saved views, and the demo-data command are delivered as their M3 tasks land; do not rely on undocumented shapes while those changes are being integrated.
 
 Application errors use Problem Details with a request trace ID; unexpected details stay in server logs. Routing/authentication 401/403/404 and readiness responses may be empty/plain-text. Never log passwords, cookies or connection strings. OpenAPI documents endpoint shapes; these CSRF and capability requirements also apply even where generated metadata does not express them.
 
