@@ -22,14 +22,19 @@ public sealed class OrganizationSlugTests
         Assert.Equal("organization", OrganizationSlug.From("!!! ---"));
     }
 
-    [Fact]
-    public void Never_exceeds_the_maximum_length_or_has_edge_separators()
+    [Theory]
+    [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx tail")]
+    // A separator lands exactly at the length boundary (62 chars, space, then more letters):
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbb")]
+    [InlineData("word one two three four five six seven eight nine ten eleven twelve thirteen")]
+    public void Never_exceeds_the_maximum_length_or_has_edge_separators(string name)
     {
-        var slug = OrganizationSlug.From(new string('x', 200) + " tail");
+        var slug = OrganizationSlug.From(name);
 
-        Assert.True(slug.Length <= OrganizationSlug.MaxLength);
+        Assert.True(slug.Length <= OrganizationSlug.MaxLength, $"slug was {slug.Length} chars: '{slug}'");
         Assert.False(slug.StartsWith('-'));
         Assert.False(slug.EndsWith('-'));
+        Assert.DoesNotContain("--", slug);
     }
 
     [Fact]

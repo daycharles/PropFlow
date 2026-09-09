@@ -18,6 +18,8 @@ Delivered: explicit administrative provisioning, revocable secure-cookie session
 
 Create Next.js UI, property/space/vendor/work persistence, seed two organizations for isolation tests, and implement login → work list → multi-select → assign vendor → confirm → updated timeline. Provide search/filtering and a unified work detail workspace. Test rollback, unauthorized assignment, stale updates, and successful audit creation end to end.
 
+> **Migration note:** the `M3Operations` migration adds required `WorkItems` columns (`PropertyId`, `CreatorId`) and their foreign keys in one step with a `Guid.Empty` default, and backfills `Vendors.IsActive` to `false`. It applies cleanly only to a database with no pre-M3 `WorkItems`/`Vendors` rows. Before the first real deployment the M3 migration set must be squashed or rewritten to be safe against a populated milestone-2 database (nullable column → backfill → set NOT NULL → add FK).
+
 ## 4 — Polished pest-control workflow
 
 Bulk scheduling and assignment, resident templates, mock SMS/email, durable outbox, idempotent dispatch, success summary, saved views, and mobile interaction. Seed Tidewater Residential Management with 3 properties, approximately 10 buildings, 80 spaces, 70 residents, 6 vendors, 5 employees, 100 work items, and 60 assets. Include at least 18 pest-control requests.
