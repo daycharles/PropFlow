@@ -35,6 +35,8 @@ builder.Services.AddScoped<IOutbox, EfOutbox>();
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
 builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
 builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
+builder.Services.AddSingleton(builder.Configuration.GetSection(CommunicationsOptions.SectionName)
+    .Get<CommunicationsOptions>() ?? new CommunicationsOptions());
 builder.Services.AddSingleton<OutboxRelay>();
 // The background poller is off under integration tests, which drive OutboxRelay directly.
 if (!builder.Environment.IsEnvironment("Testing"))

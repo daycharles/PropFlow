@@ -21,6 +21,16 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         return (log, [new MockSmsSender(log), new MockEmailSender(log)]);
     }
 
+    // Retry delay is zeroed so a test can drive successive attempts without advancing a clock.
+    private static CommunicationsOptions Options(int maxAttempts = 8) => new()
+    {
+        RetryDelay = TimeSpan.Zero,
+        MaxDeliveryAttempts = maxAttempts
+    };
+
+    private static OutboxProcessor Processor(CommunicationsStore store, IMessageSender[] senders, CommunicationsOptions? options = null) =>
+        new(store, senders, TimeProvider.System, options ?? Options());
+
     private sealed class RejectingSender(MessageChannel channel) : IMessageSender
     {
         public MessageChannel Channel { get; } = channel;
@@ -43,7 +53,7 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
 
         var (log, senders) = Senders();
         await using (var store = s.Comms(s.OrganizationA))
-            Assert.Equal(2, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+            Assert.Equal(2, await Processor(store, senders).ProcessPendingAsync(default));
 
         await using var verify = s.Comms(s.OrganizationA);
         var messages = await verify.OutboxMessages.OrderBy(x => x.IdempotencyKey).ToListAsync();
@@ -82,9 +92,9 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
 
         var (log, senders) = Senders();
         await using (var store = s.Comms(s.OrganizationA))
-            Assert.Equal(1, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+            Assert.Equal(1, await Processor(store, senders).ProcessPendingAsync(default));
         await using (var store = s.Comms(s.OrganizationA))
-            Assert.Equal(0, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+            Assert.Equal(0, await Processor(store, senders).ProcessPendingAsync(default));
 
         Assert.Single(log.Sent);
 
@@ -105,16 +115,17 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         }
 
         IMessageSender[] senders = [new RejectingSender(MessageChannel.Sms)];
-        for (var attempt = 1; attempt <= OutboxMessage.MaxDeliveryAttempts; attempt++)
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             await using var store = s.Comms(s.OrganizationA);
-            Assert.Equal(0, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+            Assert.Equal(0, await Processor(store, senders, Options(maxAttempts)).ProcessPendingAsync(default));
         }
 
         await using var verify = s.Comms(s.OrganizationA);
         var message = await verify.OutboxMessages.SingleAsync();
         Assert.Equal(OutboxStatus.Failed, message.Status);
-        Assert.Equal(OutboxMessage.MaxDeliveryAttempts, message.AttemptCount);
+        Assert.Equal(maxAttempts, message.AttemptCount);
         Assert.Equal("provider unavailable", message.FailureReason);
     }
 
@@ -170,7 +181,7 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Database"] = fixture.RuntimeConnection })
             .Build();
-        var relay = new OutboxRelay(configuration, senders, TimeProvider.System, NullLogger<OutboxRelay>.Instance);
+        var relay = new OutboxRelay(configuration, senders, TimeProvider.System, new CommunicationsOptions(), NullLogger<OutboxRelay>.Instance);
 
         // The database is shared across the collection, so other organizations may also have
         // pending messages; assert on the two this test enqueued rather than the global count.
@@ -197,7 +208,7 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
 
         var (_, senders) = Senders();
         await using (var store = s.Comms(s.OrganizationB))
-            Assert.Equal(0, await new OutboxProcessor(store, senders, TimeProvider.System).ProcessPendingAsync(default));
+            Assert.Equal(0, await Processor(store, senders).ProcessPendingAsync(default));
 
         await using (var store = s.Comms(s.OrganizationB))
             Assert.Empty(await store.OutboxMessages.IgnoreQueryFilters().ToListAsync());

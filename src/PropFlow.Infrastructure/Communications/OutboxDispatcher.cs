@@ -1,17 +1,17 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PropFlow.Application.Communications;
 
 namespace PropFlow.Infrastructure.Communications;
 
 // Runs the outbox relay on a fixed interval. Delivery logic and per-tenant iteration live in
 // OutboxRelay; this type only owns the schedule and failure isolation.
-public sealed class OutboxDispatcher(OutboxRelay relay, ILogger<OutboxDispatcher> logger) : BackgroundService
+public sealed class OutboxDispatcher(OutboxRelay relay, CommunicationsOptions options, ILogger<OutboxDispatcher> logger)
+    : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(10);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(Interval);
+        using var timer = new PeriodicTimer(options.PollInterval);
         do
         {
             try

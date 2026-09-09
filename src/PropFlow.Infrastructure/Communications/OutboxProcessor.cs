@@ -6,20 +6,25 @@ namespace PropFlow.Infrastructure.Communications;
 
 // Delivers outbox messages for one tenant context. Each message is claimed under the
 // concurrency token before the provider is contacted, so competing dispatchers deliver it at
-// most once; a message left Sending by a crashed worker is reclaimed after StaleClaimTimeout.
-// Delivery failures keep the message retryable until OutboxMessage.MaxDeliveryAttempts.
-public sealed class OutboxProcessor(CommunicationsStore store, IEnumerable<IMessageSender> senders, TimeProvider clock)
+// most once; a message left Sending by a crashed worker is reclaimed after
+// options.StaleClaimTimeout. A failed attempt stays retryable, spaced by options.RetryDelay,
+// until options.MaxDeliveryAttempts.
+public sealed class OutboxProcessor(
+    CommunicationsStore store,
+    IEnumerable<IMessageSender> senders,
+    TimeProvider clock,
+    CommunicationsOptions options)
 {
     private const int BatchSize = 50;
-    private static readonly TimeSpan StaleClaimTimeout = TimeSpan.FromMinutes(5);
 
     public async Task<int> ProcessPendingAsync(CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        var cutoff = now - StaleClaimTimeout;
+        var retryCutoff = now - options.RetryDelay;
+        var staleCutoff = now - options.StaleClaimTimeout;
         var candidates = await store.OutboxMessages
-            .Where(x => x.Status == OutboxStatus.Pending
-                || (x.Status == OutboxStatus.Sending && x.LastAttemptAt != null && x.LastAttemptAt <= cutoff))
+            .Where(x => (x.Status == OutboxStatus.Pending && (x.LastAttemptAt == null || x.LastAttemptAt <= retryCutoff))
+                || (x.Status == OutboxStatus.Sending && x.LastAttemptAt != null && x.LastAttemptAt <= staleCutoff))
             .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
             .Take(BatchSize)
             .ToListAsync(cancellationToken);
@@ -27,7 +32,7 @@ public sealed class OutboxProcessor(CommunicationsStore store, IEnumerable<IMess
         var delivered = 0;
         foreach (var message in candidates)
         {
-            if (!message.IsClaimable(now, StaleClaimTimeout))
+            if (!message.IsClaimable(now, options.RetryDelay, options.StaleClaimTimeout))
                 continue;
 
             message.BeginDelivery(clock.GetUtcNow());
@@ -67,7 +72,8 @@ public sealed class OutboxProcessor(CommunicationsStore store, IEnumerable<IMess
             var sender = senders.FirstOrDefault(x => x.Channel == message.Channel);
             if (sender is null)
             {
-                message.RecordFailedAttempt($"No sender registered for channel {message.Channel}.", clock.GetUtcNow());
+                message.RecordFailedAttempt($"No sender registered for channel {message.Channel}.",
+                    clock.GetUtcNow(), options.MaxDeliveryAttempts);
                 return;
             }
 
@@ -76,7 +82,7 @@ public sealed class OutboxProcessor(CommunicationsStore store, IEnumerable<IMess
             if (result.Status == MessageDeliveryStatus.Sent)
                 message.MarkSent(result.ProviderReference ?? "unknown", clock.GetUtcNow());
             else
-                message.RecordFailedAttempt(result.FailureReason ?? "unknown", clock.GetUtcNow());
+                message.RecordFailedAttempt(result.FailureReason ?? "unknown", clock.GetUtcNow(), options.MaxDeliveryAttempts);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -84,7 +90,7 @@ public sealed class OutboxProcessor(CommunicationsStore store, IEnumerable<IMess
         }
         catch (Exception exception)
         {
-            message.RecordFailedAttempt(exception.Message, clock.GetUtcNow());
+            message.RecordFailedAttempt(exception.Message, clock.GetUtcNow(), options.MaxDeliveryAttempts);
         }
     }
 }

@@ -13,8 +13,6 @@ public enum OutboxStatus
 // the xmin concurrency token lets competing dispatchers claim a message exactly once.
 public sealed class OutboxMessage : TenantEntity
 {
-    public const int MaxDeliveryAttempts = 5;
-
     // EF materialization only.
     private OutboxMessage(Guid organizationId, Guid id) : base(organizationId, id) { }
 
@@ -58,9 +56,18 @@ public sealed class OutboxMessage : TenantEntity
     public string? ProviderReference { get; private set; }
     public string? FailureReason { get; private set; }
 
-    public bool IsClaimable(DateTimeOffset now, TimeSpan staleClaimTimeout) =>
-        Status == OutboxStatus.Pending ||
-        (Status == OutboxStatus.Sending && LastAttemptAt is { } last && last <= now.ToUniversalTime() - staleClaimTimeout);
+    // Pending: eligible once RetryDelay has elapsed since the last attempt (immediately on the
+    // first). Sending: eligible only if the prior claim has gone stale.
+    public bool IsClaimable(DateTimeOffset now, TimeSpan retryDelay, TimeSpan staleClaimTimeout)
+    {
+        var utcNow = now.ToUniversalTime();
+        return Status switch
+        {
+            OutboxStatus.Pending => LastAttemptAt is not { } last || last <= utcNow - retryDelay,
+            OutboxStatus.Sending => LastAttemptAt is { } claimed && claimed <= utcNow - staleClaimTimeout,
+            _ => false
+        };
+    }
 
     // Claims the message for a delivery attempt. Saved under the concurrency token before the
     // provider is contacted so only one dispatcher proceeds.
@@ -85,12 +92,14 @@ public sealed class OutboxMessage : TenantEntity
     }
 
     // Records a failed attempt. The message stays retryable until the attempt cap, then fails.
-    public void RecordFailedAttempt(string reason, DateTimeOffset at)
+    public void RecordFailedAttempt(string reason, DateTimeOffset at, int maxAttempts)
     {
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A failure reason is required.", nameof(reason));
+        if (maxAttempts < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), "At least one attempt is required.");
         FailureReason = reason.Trim();
         LastAttemptAt = at.ToUniversalTime();
-        Status = AttemptCount >= MaxDeliveryAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
+        Status = AttemptCount >= maxAttempts ? OutboxStatus.Failed : OutboxStatus.Pending;
     }
 }

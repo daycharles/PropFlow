@@ -9,8 +9,10 @@ namespace PropFlow.Infrastructure.Communications;
 // Delivers the outbox for every organization, each on its own tenant context using the
 // restricted runtime role. Separated from the hosted service so it can be exercised directly.
 public sealed class OutboxRelay(IConfiguration configuration, IEnumerable<IMessageSender> senders,
-    TimeProvider clock, ILogger<OutboxRelay> logger)
+    TimeProvider clock, CommunicationsOptions options, ILogger<OutboxRelay> logger)
 {
+    public CommunicationsOptions Options => options;
+
     public async Task<int> RelayPendingAsync(CancellationToken cancellationToken)
     {
         var connection = configuration.GetConnectionString("Database");
@@ -30,7 +32,7 @@ public sealed class OutboxRelay(IConfiguration configuration, IEnumerable<IMessa
         foreach (var organization in organizations)
         {
             await using var store = DatabaseProvisioner.CreateCommunicationsStore(connection, organization);
-            var count = await new OutboxProcessor(store, senders, clock).ProcessPendingAsync(cancellationToken);
+            var count = await new OutboxProcessor(store, senders, clock, options).ProcessPendingAsync(cancellationToken);
             if (count > 0)
                 logger.LogInformation("Delivered {Count} outbox message(s) for organization {Organization}.", count, organization);
             delivered += count;
