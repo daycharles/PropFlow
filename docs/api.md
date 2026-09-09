@@ -52,7 +52,7 @@ Enums serialize as their names (for example `"Sms"`, `"Email"`, `"Pending"`).
 | PUT | /api/communication/templates/{id} | `Communications.ManageTemplates` + CSRF; `name`, `subject`, `body`, `isActive`; the channel is immutable; 200, 400, or 404 |
 | DELETE | /api/communication/templates/{id} | `Communications.ManageTemplates` + CSRF; 204 or 404 |
 
-`Communications.ManageTemplates` is granted to Organization Admin, Regional Manager, Property Manager and Maintenance Supervisor.
+`Communications.ManageTemplates` is granted to Organization Admin and Property Manager only.
 
 The transactional outbox and its dispatcher are internal: messages are enqueued in the tenant
 transaction that produces them, then delivered out of band by a background worker that polls
