@@ -13,22 +13,21 @@ public static class OrganizationSlug
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var builder = new StringBuilder(name.Length);
+        var builder = new StringBuilder();
         var pendingSeparator = false;
         foreach (var ch in name.Trim().ToLowerInvariant())
         {
+            if (builder.Length >= MaxLength) break;
             if (char.IsLetterOrDigit(ch))
             {
-                if (pendingSeparator && builder.Length > 0) builder.Append('-');
+                if (pendingSeparator && builder.Length is > 0 and < MaxLength) builder.Append('-');
                 pendingSeparator = false;
-                builder.Append(ch);
+                if (builder.Length < MaxLength) builder.Append(ch);
             }
             else
             {
                 pendingSeparator = true;
             }
-
-            if (builder.Length >= MaxLength) break;
         }
 
         var slug = builder.ToString().Trim('-');
