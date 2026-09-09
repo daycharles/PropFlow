@@ -25,6 +25,10 @@ public static class MessageText
         return trimmed;
     }
 
+    // A free-text note: null/blank is allowed, anything present is validated as a body.
+    public static string? OptionalBody(string? value, string parameter, int maxLength) =>
+        string.IsNullOrWhiteSpace(value) ? null : RequireBody(value, parameter, maxLength);
+
     private static bool ContainsControlCharacter(string value, bool allowWhitespace)
     {
         foreach (var ch in value)

@@ -63,6 +63,21 @@ matching address. Occupancy dates are `date` values; the current occupancy has n
 date. `People.Manage` is granted to Organization Admin and Property Manager. Contact fields
 reject control characters (a resident name is a template substitution value).
 
+### Assets
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/assets | `Work.Read`; up to 500 tenant-scoped assets ordered by name; optional `?propertyId=` filter |
+| GET | /api/assets/{id} | `Work.Read`; one asset, or 404 including foreign-tenant IDs |
+| POST | /api/assets | `Assets.Manage` + CSRF; `kind`, `name`, `propertyId`, `spaceId`, and the optional make/model/serial, `installedOn`/`warrantyExpiresOn`/`expectedServiceLifeYears`, `condition`, `replacementCostEstimate`, `notes`; 201, 400 for invalid text / a warranty before installation / a foreign or unknown property or space |
+| PUT | /api/assets/{id} | `Assets.Manage` + CSRF; same body; the property and space are fixed at creation; 200, 400, or 404 |
+
+`kind` is one of `Hvac`, `WaterHeater`, `Appliance`, `Roof`, `ElectricalPanel`,
+`PlumbingFixture`, `Generator`, `Other`; `condition` is `Unknown`/`New`/`Good`/`Fair`/`Poor`/
+`EndOfLife`. Dates are `date` values; `replacementCostEstimate` is money rounded to cents.
+`Assets.Manage` is granted to Organization Admin, Property Manager, Regional Manager and
+Maintenance Supervisor.
+
 ### Templates
 
 | Method | Path | Behavior |

@@ -153,6 +153,7 @@ app.MapWorkEndpoints();
 app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
+app.MapAssetEndpoints();
 app.Run();
 
 public partial class Program { }

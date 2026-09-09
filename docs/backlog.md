@@ -122,7 +122,7 @@ entities, and the integration abstraction exists (mocked).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-6.01 | `Asset` domain: type, manufacturer, model, serial, install date, warranty expiration, expected service life, condition, replacement cost estimate, notes, photos; migrations + RLS | domain | L | PF-3.06 |
+| PF-6.01 | ✅ `Asset` domain: type, manufacturer, model, serial, install date, warranty expiration, expected service life, condition, replacement cost estimate, notes; migrations + RLS; read/write API. Photos deferred to PF-7.01 (attachments). | domain | L | PF-3.06 |
 | PF-6.02 | Link work items to an optional asset; expose on work create/update and detail workspace | api | M | PF-6.01, PF-3.13 |
 | PF-6.03 | Asset detail page with complete maintenance history (all linked work + costs) | web | M | PF-6.02 |
 | PF-6.04 | Configurable repeat-repair detection (default: 3 repairs on an asset within 120 days; category-similarity option) | application | M | PF-6.02 |

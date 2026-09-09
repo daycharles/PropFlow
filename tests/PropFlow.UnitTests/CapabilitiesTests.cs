@@ -21,11 +21,12 @@ public sealed class CapabilitiesTests
     [Theory]
     [InlineData("Regional Manager")]
     [InlineData("Maintenance Supervisor")]
-    public void Other_managers_assign_work_but_do_not_manage_templates_or_people(string role)
+    public void Other_managers_assign_work_and_assets_but_not_templates_or_people(string role)
     {
         var capabilities = Capabilities.ForRole(role);
         Assert.Contains(Capabilities.ReadWork, capabilities);
         Assert.Contains(Capabilities.AssignVendor, capabilities);
+        Assert.Contains(Capabilities.ManageAssets, capabilities);
         Assert.DoesNotContain(Capabilities.ManageTemplates, capabilities);
         Assert.DoesNotContain(Capabilities.ManagePeople, capabilities);
     }

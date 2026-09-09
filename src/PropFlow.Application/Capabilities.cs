@@ -10,10 +10,11 @@ public static class Capabilities
     public const string UpdateWork = "Work.Update";
     public const string ManageCategories = "Settings.ManageCategories";
     public const string ManagePeople = "People.Manage";
+    public const string ManageAssets = "Assets.Manage";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageTemplates, ManagePeople];
-    private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork];
-    private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageTemplates, ManagePeople, ManageAssets];
+    private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets];
+    private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets];
 
     public static IReadOnlyList<string> ForRole(string role) => role switch
     {

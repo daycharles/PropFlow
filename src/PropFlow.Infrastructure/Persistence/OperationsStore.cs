@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
+using PropFlow.Domain.Assets;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Timeline;
@@ -21,6 +22,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Space> Spaces => Set<Space>();
     public DbSet<Resident> Residents => Set<Resident>();
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
+    public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
@@ -74,6 +76,23 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.SpaceId });
             entity.HasIndex(x => new { x.OrganizationId, x.ResidentId });
+        });
+        model.Entity<Asset>(entity =>
+        {
+            entity.ToTable("Assets");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Manufacturer).HasMaxLength(200);
+            entity.Property(x => x.Model).HasMaxLength(200);
+            entity.Property(x => x.SerialNumber).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Condition).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ReplacementCostEstimate).HasPrecision(12, 2);
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId });
         });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<TimelineEntry>(entity =>
