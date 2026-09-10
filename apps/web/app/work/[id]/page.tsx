@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { RepeatRepairWarning } from "../../components/repeat-repair-warning";
 import {
   api,
   ApiError,
@@ -290,9 +291,12 @@ function Detail({ session, id }: { session: Session; id: string }) {
             </select>
           </label>
           {work.assetId ? (
-            <Link className="hint" href={`/assets/${work.assetId}`}>
-              View asset maintenance history →
-            </Link>
+            <>
+              <RepeatRepairWarning assetId={work.assetId} categoryId={work.categoryId} compact />
+              <Link className="hint" href={`/assets/${work.assetId}`}>
+                View asset maintenance history →
+              </Link>
+            </>
           ) : null}
           <button disabled={saving || !hasCapability(session, "Work.Update")}>
             {saving ? "Saving…" : "Save details"}

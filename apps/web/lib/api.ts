@@ -115,6 +115,16 @@ export type AssetHistory = {
   totalCost: number;
   history: AssetHistoryItem[];
 };
+export type RepeatRepairAssessment = {
+  repairThreshold: number;
+  windowDays: number;
+  matchByCategory: boolean;
+  repairCount: number;
+  since: string;
+  totalCostInWindow: number;
+  ageInYears?: number | null;
+  isRepeatRepair: boolean;
+};
 export type WorkListQuery = {
   search?: string;
   status?: string;
@@ -329,6 +339,10 @@ export const api = {
       request<Asset[]>(`/api/assets/${propertyId ? `?propertyId=${propertyId}` : ""}`),
     get: (id: string) => request<Asset>(`/api/assets/${id}`),
     history: (id: string) => request<AssetHistory>(`/api/assets/${id}/history`),
+    repeatRepair: (id: string, categoryId?: string | null) =>
+      request<RepeatRepairAssessment>(
+        `/api/assets/${id}/repeat-repair${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`,
+      ),
   },
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),

@@ -81,6 +81,8 @@ public sealed class RepeatRepairDetectionTests(DatabaseFixture fixture)
         Assert.Equal(3, assessment.GetProperty("repairCount").GetInt32());
         Assert.Equal(525m, assessment.GetProperty("totalCostInWindow").GetDecimal());
         Assert.True(assessment.GetProperty("isRepeatRepair").GetBoolean());
+        // AssetA was installed 2018-06-01 (DatabaseFixture) — at least 7 years old.
+        Assert.True(assessment.GetProperty("ageInYears").GetInt32() >= 7);
 
         // An asset with no work is not a repeat repair.
         var quiet = await s.Client.GetFromJsonAsync<JsonElement>($"/api/assets/{s.AssetA}/repeat-repair?categoryId={Guid.NewGuid()}");

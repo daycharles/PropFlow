@@ -391,6 +391,44 @@ td small {
 .notes {
   grid-column: 1 / -1;
 }
+.repeat-repair-warning {
+  border: 1px solid var(--terracotta);
+  border-radius: 12px;
+  background: var(--terracotta-tint);
+  color: var(--terracotta);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.repeat-repair-warning h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.repeat-repair-warning dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 8px 0 0;
+}
+.repeat-repair-warning dt {
+  font-weight: 700;
+  color: inherit;
+}
+.repeat-repair-warning dd {
+  margin: 0;
+  font-weight: 800;
+  font-size: 15px;
+}
+.repeat-repair-warning.compact dl {
+  grid-template-columns: repeat(3, minmax(0, auto));
+}
+@media (max-width: 700px) {
+  .repeat-repair-warning dl {
+    grid-template-columns: 1fr 1fr;
+  }
+}
 .two-column {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

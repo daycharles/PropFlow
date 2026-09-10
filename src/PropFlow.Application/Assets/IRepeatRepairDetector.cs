@@ -15,6 +15,7 @@ public sealed record RepeatRepairAssessment(
     int RepairCount,
     DateTimeOffset Since,
     decimal TotalCostInWindow,
+    int? AgeInYears,
     bool IsRepeatRepair);
 
 public interface IRepeatRepairDetector
