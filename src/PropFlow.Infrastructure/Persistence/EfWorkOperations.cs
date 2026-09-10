@@ -155,6 +155,15 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
             return new(AssignmentOutcome.NotAssignable, 0, 0, total);
 
         var byId = items.ToDictionary(x => x.WorkId);
+
+        // Explicit per-item concurrency check up front: the `note` action does not mutate the
+        // work row, so it would not otherwise trip the store's optimistic-concurrency guard.
+        if (works.Any(w => (uint)store.Entry(w).Property("Version").CurrentValue! != byId[w.Id].Version))
+        {
+            await transaction.RollbackAsync(ct);
+            return new(AssignmentOutcome.Conflict, 0, 0, total);
+        }
+
         var now = clock.GetUtcNow();
         var changed = 0;
         foreach (var work in works)
@@ -198,6 +207,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
                 return true;
             case BulkWorkAction.Schedule:
                 var oldStart = work.ScheduledStart;
+                if (work.Status == WorkStatus.Scheduled && oldStart == c.ScheduledStart!.Value && work.ScheduledEnd == c.ScheduledEnd) return false;
                 work.Schedule(c.ScheduledStart!.Value, c.ScheduledEnd);
                 store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
                 return true;

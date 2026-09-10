@@ -22,12 +22,15 @@ public static class WorkEndpoints
         group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Property ID is required");
+            if (!Enum.IsDefined(request.WorkType) || !Enum.IsDefined(request.Priority)) return Results.Problem(statusCode: 400, title: "A valid work type and priority are required");
             try { var item = await work.CreateAsync(request.ToCommand(Actor(user)), ct); return Results.Created($"/api/work/{item.Id}", new WorkResponse(item, (await work.VersionAsync(item.Id, ct))!.Value)); }
             catch (KeyNotFoundException) { return Results.NotFound(); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); }
         }).RequireAuthorization(Capabilities.CreateWork);
         group.MapPut("/{id:guid}", async (Guid id, UpdateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (id == Guid.Empty || request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Work and property IDs are required");
+            if (!Enum.IsDefined(request.Priority) || (request.Status is { } st && !Enum.IsDefined(st)))
+                return Results.Problem(statusCode: 400, title: "A valid priority and status are required");
             try { var outcome = await work.UpdateAsync(id, request.ToCommand(Actor(user)), ct); return outcome switch { WorkWriteOutcome.NotFound => Results.NotFound(), WorkWriteOutcome.Conflict => Results.Problem(statusCode: 409, title: "Work item was changed by another user"), _ => Results.Ok(new WorkResponse((await work.GetAsync(id, ct))!, (await work.VersionAsync(id, ct))!.Value)) }; }
             catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } catch (InvalidOperationException e) { return Results.Problem(statusCode: 400, title: e.Message); }
@@ -54,7 +57,8 @@ public static class WorkEndpoints
         group.MapPost("/bulk/status", async (BulkStatusRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (!ValidBatch(request.Items)) return Results.Problem(statusCode: 400, title: "1 to 100 work items are required");
-            if (request.Status is WorkStatus.Draft) return Results.Problem(statusCode: 400, title: "Work cannot be moved back to Draft");
+            if (!Enum.IsDefined(request.Status) || request.Status is WorkStatus.Draft)
+                return Results.Problem(statusCode: 400, title: "A valid target status other than Draft is required");
             var summary = await work.BulkApplyAsync(new(BulkWorkAction.Status, Refs(request.Items!), Actor(user), Status: request.Status), ct);
             return BulkResult(summary, "Completed and cancelled work is terminal; reopen it first");
         }).RequireAuthorization(Capabilities.UpdateWork);
@@ -62,6 +66,7 @@ public static class WorkEndpoints
         group.MapPost("/bulk/priority", async (BulkPriorityRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (!ValidBatch(request.Items)) return Results.Problem(statusCode: 400, title: "1 to 100 work items are required");
+            if (!Enum.IsDefined(request.Priority)) return Results.Problem(statusCode: 400, title: "A valid priority is required");
             var summary = await work.BulkApplyAsync(new(BulkWorkAction.Priority, Refs(request.Items!), Actor(user), Priority: request.Priority), ct);
             return BulkResult(summary, "Completed and cancelled work is terminal; reopen it first");
         }).RequireAuthorization(Capabilities.UpdateWork);
@@ -93,7 +98,8 @@ public static class WorkEndpoints
     }
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private const string TerminalTitle = "Completed and cancelled work cannot be assigned";
-    private static bool ValidBatch(List<BulkWorkVersion>? items) => items is { Count: > 0 and <= 100 };
+    private static bool ValidBatch(List<BulkWorkVersion>? items) =>
+        items is { Count: > 0 and <= 100 } && items.All(i => i is not null && i.WorkId != Guid.Empty);
     private static BulkWorkItemRef[] Refs(List<BulkWorkVersion> items) => items.Select(x => new BulkWorkItemRef(x.WorkId, x.Version)).ToArray();
     private static IResult BulkResult(BulkAssignmentSummary summary, string notAssignableTitle) => summary.Outcome switch
     {

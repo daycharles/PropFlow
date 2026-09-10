@@ -8,9 +8,8 @@ namespace PropFlow.Infrastructure.Persistence;
 // substring match (index-backed by the gin_trgm_ops indexes) outranks a trigram-only match.
 public sealed class EfGlobalSearch(OperationsStore store) : IGlobalSearch
 {
-    // The fuzzy-match floor. Kept in sync in two forms: the double for ranking comparisons and
-    // the SQL literal for `SET LOCAL` (which takes no parameter).
-    private const double Threshold = 0.25;
+    // The fuzzy-match floor. `SET LOCAL` takes no parameter, so it is a literal; the `q <% col`
+    // filter (TrigramsAreWordSimilar) then means word_similarity(q, col) >= this value.
     private const string ThresholdSql = "SET LOCAL pg_trgm.word_similarity_threshold = 0.25";
     private const string Escape = "\\";
 

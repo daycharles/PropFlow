@@ -16,18 +16,26 @@ unmerged fork). "unassigned" = no owner yet.
 M4 tasks that cannot start until the M3 slice (work API, generalized timeline, bulk actions,
 Next.js work list/detail) lands on `main`.
 
-The slice itself is complete on the `feat/pf-3-m3-vertical-slice` branch — bulk vendor
-assignment (PF-3.16), the work list/detail UI (PF-3.19) and the demo seed (PF-3.22) all exist
-there. These rows stay blocked only until that branch is promoted to `main`, except PF-4.06,
-which additionally needs the `TimelineEntry` generalization finished.
+The M3 API **and** web slice are already on `develop` (work list + `work/[id]` detail,
+categories settings, the `m3-workflow` e2e spec, bulk vendor assignment, saved views). "M3
+complete" now means the `#6`–`#31` issues are closed and `develop` is promoted to `main`. Most
+of the rows below are therefore buildable against `develop` today — verify the M3 dependency is
+actually present, don't wait for the promote.
+
+### Do these once M3 is called complete (2026-09-10)
+
+1. **Promote `develop` → `main`** via PR — it is ~5 commits ahead (audit A-1..A-4, PF-6.10,
+   PF-4.07, tooling, and PR #103 once merged). Nothing on `develop` is flag-gated.
+2. **Close `#6`–`#31`** with PR-linking comments, keeping them assigned to `daycharles` (the M3
+   track marker — see `.claude/rules/workflow.md`).
+3. Re-check each row below: its M3 dependency is likely already on `develop`.
 
 | Item | Source | Owner | Unblocks when |
 | --- | --- | --- | --- |
-| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | `TimelineEntry` fully generalized (PF-3.10) — today it is half-done: `Create(...)` overload exists but is unused/dead, `From(VendorAssigned)` still writes legacy `PreviousVendorId`/`VendorId` |
+| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The real remaining blocker.** `TimelineEntry` is still half-generalized on `develop` — `PreviousVendorId`/`VendorId` legacy columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead. Finish PF-3.10 (daycdev tech debt below) first |
 | PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | work events start producing messages; needs the M3 work-use-case layer + idempotent real providers |
-| PF-4.07 — **only `add tag` remains** | backlog.md M4; PR for #38 | mday440 | `bulk/status` `bulk/priority` `bulk/schedule` `bulk/note` `bulk/reopen` shipped. `add tag` waits on the tag-vocabulary product question (below). A bulk-note carries `internal`/`resident` visibility but full note-visibility enforcement is PF-5.06 |
-| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | PF-4.07 + PF-4.03 + the M3 Next.js bulk vendor flow (PF-3.20) |
-| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | the M3 Next.js work list/detail (PF-3.19) |
+| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Likely buildable now.** PF-4.07 ✓, PF-4.03 ✓, the M3 web work list + bulk-vendor flow are on `develop`. Confirm the web bulk flow (PF-3.20) is complete enough, then start |
+| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — the M3 `apps/web` work list and `work/[id]` detail are on `develop`; this is a responsiveness pass over them |
 
 ---
 
@@ -60,7 +68,10 @@ Recorded and accepted; revisit during the M7 hardening track or when a feature f
 | Integration adapter — external records are tracked but not reconciled | PF-6.10; `src/PropFlow.Infrastructure/Integrations/EfIntegrationOperations.cs` | unassigned | A sync upserts one `ExternalRecordLink` per external record (id + content hash + sync state) but does not create/update the corresponding `Property` / `Space` / `Occupancy` / `WorkItem` / `Asset`. That mapping (and its conflict handling — the "unresolved conflicts" count PF-6.11 wants) is the next task. `SyncReport.failed` and per-record `Failed` state exist for it but stay 0 until then |
 | Integration sync is manual-trigger only, and stale external records are never retired | PF-6.10 | unassigned | `POST /api/integrations/{id}/sync` is the only way to run a pull — no scheduler / background worker. A link whose external record disappears from a later snapshot keeps its last state forever (no "deleted upstream" marker) |
 | Integration connections store no credentials | PF-6.10; `IntegrationConnection` | unassigned | The mock adapter needs none. A real adapter's secrets must come from the secret store keyed by connection id (ties into PF-7.02 managed secrets), not from a column |
-| Full offset paging for the vendor/employee/property lookup lists | audit-2026-09-10 A-6 (narrowed) | unassigned | `/api/integrations/{id}/records` now pages properly; `/api/vendors`, `/api/employees`, `/api/properties` gained a `?q=` filter but keep the flat-array shape (the web client depends on it) capped at 500. Real `page`/`pageSize` for those three needs a coordinated `apps/web` change — do it when they get dedicated screens |
+| Full offset paging for the vendor/employee/property lookup lists | audit-2026-09-10 A-6 (narrowed) | unassigned | `/api/integrations/{id}/records` now pages properly; `/api/vendors`, `/api/employees`, `/api/properties` gained a `?q=` filter but keep the flat-array shape (the web client depends on it) capped at 500. Real `page`/`pageSize` for those three needs a coordinated `apps/web` change — do it when they get dedicated screens. The `?q=` value also has no length bound (audit B-8) |
+| Work location refs are not hierarchy-checked | audit-2026-09-10 B-6; `EfWorkOperations.EnsureChildReferencesAsync` / `WorkItem.SetLocation` | unassigned | Create/update now verify `BuildingId`/`SpaceId`/`ResidentId`/`CategoryId` *exist* in the tenant but not that the space/building actually belongs to the named property. Add a `SpaceId → PropertyId` (and building) consistency check |
+| Bulk `WorkNote` visibility is a marker, not enforced | audit-2026-09-10 B-7; PF-5.06 | unassigned | `POST /api/work/bulk/note` stores `internal`/`resident` in the timeline entry's `Changes`, but nothing filters resident-visible vs internal on reads yet (PF-5.06). Note text also has no control-char guard (renders in the React timeline, which escapes) |
+| `WorkReopened.EventId` is dead, and `Reopen` doesn't set `CreatedAt` | audit-2026-09-10 B-9 | unassigned | The timeline entry gets its own id via `Event()`, so `WorkReopened.EventId` is unused. Reopening a never-published `Draft → Cancelled` item leaves `CreatedAt` at `default` — folds into the existing "`CreatedAt` only set in `Publish`" debt below |
 
 ---
 
@@ -125,3 +136,4 @@ Kept so the same gap is not re-filed. Each row names the evidence checked when i
 | `seed-demo` covers only four of the eight `WorkStatus` values | 2026-09-09, PF-3.22 | `tools/PropFlow.Admin/Program.cs` now seeds 12 work items per organization spanning all eight statuses and all four priorities, four of them left in `New` |
 | Work create/update accept unvalidated `BuildingId`/`SpaceId`/`ResidentId`/`CategoryId` (audit A-5) | 2026-09-10, audit follow-ups | `EfWorkOperations.EnsureChildReferencesAsync` validates all four (tenant-filtered) on create + update; `UpdateAsync` also checks `PropertyId`; test `Creating_or_updating_work_rejects_a_child_reference_outside_the_tenant` |
 | Global search trigram branch is not index-backed (audit A-7) | 2026-09-10, audit follow-ups | `EfGlobalSearch` filters with `q <% col` (`TrigramsAreWordSimilar`) under a `SET LOCAL pg_trgm.word_similarity_threshold = 0.25`; the `<%` operator uses `gin_trgm_ops`. Threshold and recall unchanged |
+| Bulk endpoints: null `items` entry → 500, undefined enum accepted, note skipped concurrency, schedule no-op noise (audit 2nd pass B-1..B-5) | 2026-09-10, PF-4.07 review | `ValidBatch` rejects null/empty-guid entries; `Enum.IsDefined` guards on `bulk/status`, `bulk/priority`, and `POST`/`PUT /api/work`; `BulkApplyAsync` does an explicit up-front `xmin` check for every item; `ApplyOne` skips a true schedule no-op. Tests in `BulkWorkActionsTests` |
