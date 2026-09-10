@@ -46,7 +46,10 @@ public sealed class AutomationRule : TenantEntity
         Update(name, trigger, conditions, actions, createdAt);
     }
 
-    private AutomationRule() : base(Guid.Empty, Guid.Empty) { }
+    // EF materialization only. The ids must be constructor parameters so EF binds them from the
+    // columns — a parameterless ctor would hand TenantEntity Guid.Empty and trip its guard on
+    // every read (see AutomationRuleIntegrationTests.Saved_rule_materialises_back_out_of_postgres).
+    private AutomationRule(Guid organizationId, Guid id) : base(organizationId, id) { }
 
     public string Name { get; private set; } = null!;
     public AutomationTrigger Trigger { get; private set; }
