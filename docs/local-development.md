@@ -67,7 +67,8 @@ Cancelled) and **all four** `WorkPriority` values (Low, Normal, High, Critical),
 the active middle of the pipeline, with 30 pest-control requests and a third of the open items
 overdue. Sixteen stay in `New`, so a "filter to New, select all, assign vendor" demo always has
 work to act on. `Draft` rows are never published — `WorkItem.ChangeStatus` refuses a move back
-to `Draft`.
+to `Draft`. It also seeds **3 active message templates** (`Visit scheduled` SMS + email,
+`Work completed` SMS) so the web **Assign &amp; notify** flow has something to send.
 
 **The isolation tenant** (`demo-admin@isolation.example.test`, same password) keeps a minimal
 seed — one portfolio/property/building/space, one vendor, one employee, two categories, and 12

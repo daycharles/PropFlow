@@ -14,6 +14,7 @@ import {
 } from "../lib/api";
 import { hasCapability } from "../lib/capabilities";
 import { AppShell } from "./components/app-shell";
+import { AssignNotifyFlow } from "./components/assign-notify";
 
 const statuses = [
   "Draft",
@@ -120,6 +121,7 @@ function WorkList({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [assignNotify, setAssignNotify] = useState(false);
   const [flow, setFlow] = useState<"choose" | "confirm" | "success" | null>(null);
   const [result, setResult] = useState<{
     changed: number;
@@ -441,13 +443,20 @@ function WorkList({ session }: { session: Session }) {
         <div className="bulk-toolbar" role="status">
           <strong>{selected.size} selected</strong>
           <button
+            onClick={() => setAssignNotify(true)}
+            disabled={!hasCapability(session, "Work.AssignVendor")}
+          >
+            Assign &amp; notify
+          </button>
+          <button
+            className="secondary"
             onClick={() => {
               setVendorId("");
               setFlow("choose");
             }}
             disabled={!hasCapability(session, "Work.AssignVendor")}
           >
-            Assign vendor
+            Assign vendor only
           </button>
           <button className="secondary" onClick={() => setSelected(new Set())}>
             Clear selection
@@ -541,6 +550,20 @@ function WorkList({ session }: { session: Session }) {
           </tbody>
         </table>
       </div>
+      {assignNotify && (
+        <AssignNotifyFlow
+          session={session}
+          items={visibleSelected}
+          vendors={vendors}
+          onClose={(reload) => {
+            setAssignNotify(false);
+            if (reload) {
+              setSelected(new Set());
+              void loadWork();
+            }
+          }}
+        />
+      )}
       {flow && (
         <div className="modal-backdrop" role="presentation">
           <section

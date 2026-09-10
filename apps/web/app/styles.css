@@ -277,6 +277,23 @@ td small {
   justify-content: flex-end;
   margin-top: 22px;
 }
+.flow-group {
+  margin: 14px 0 0;
+  padding: 12px 14px 4px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+}
+.flow-group legend {
+  padding: 0 6px;
+  color: #526077;
+  font-weight: 600;
+}
+.flow-summary {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
 @media (max-width: 700px) {
   main {
     padding: 18px;
