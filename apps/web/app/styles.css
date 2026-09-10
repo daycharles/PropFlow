@@ -497,7 +497,137 @@ td small {
   display: grid;
   gap: 8px;
 }
+.attention-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 4px 0 8px;
+}
+.attention-card {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--muted);
+  border-radius: 14px;
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.attention-card:hover {
+  border-color: var(--ink);
+}
+.attention-card.active {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+.attention-card.severity-critical {
+  border-left-color: var(--terracotta);
+}
+.attention-card.severity-warning {
+  border-left-color: #b3801f;
+}
+.attention-card.severity-informational {
+  border-left-color: var(--green);
+}
+.attention-count {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+.attention-card-label {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+.attention-card-blurb {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.attention-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.attention-list-heading h2 {
+  margin: 0;
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--terracotta);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.attention-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.attention-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 10px 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--muted);
+  border-radius: 12px;
+}
+.attention-row.severity-critical {
+  border-left-color: var(--terracotta);
+}
+.attention-row.severity-warning {
+  border-left-color: #b3801f;
+}
+.attention-row.severity-informational {
+  border-left-color: var(--green);
+}
+.attention-row-main {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.attention-reason {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+.attention-detail {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 13px;
+}
+.attention-row-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.attention-row-meta dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+.attention-row-meta dd {
+  margin: 0;
+}
 @media (max-width: 700px) {
+  .attention-cards {
+    grid-template-columns: 1fr;
+  }
+  .attention-row {
+    grid-template-columns: 1fr;
+  }
   main {
     padding: 18px;
   }

@@ -34,6 +34,9 @@ export function AppShell({
           <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
             Work
           </Link>
+          <Link href="/attention" aria-current={pathname === "/attention" ? "page" : undefined}>
+            Needs attention
+          </Link>
           {hasCapability(session, "Settings.ManageCategories") && (
             <Link
               href="/settings/categories"

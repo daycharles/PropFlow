@@ -125,6 +125,33 @@ export type RepeatRepairAssessment = {
   ageInYears?: number | null;
   isRepeatRepair: boolean;
 };
+export type AttentionSeverity = "Critical" | "Warning" | "Informational";
+export type AttentionReason =
+  | "UnassignedEmergency"
+  | "SlaBreach"
+  | "Overdue"
+  | "WaitingOnVendor"
+  | "WaitingOnResident"
+  | "RepeatRepair"
+  | "UnitTurnAtRisk";
+export type AttentionItem = {
+  workId: string;
+  title: string;
+  propertyId: string;
+  propertyName?: string | null;
+  status: string;
+  priority: string;
+  dueDate?: string | null;
+  reason: AttentionReason;
+  severity: AttentionSeverity;
+  detail: string;
+};
+export type AttentionQueue = {
+  items: AttentionItem[];
+  criticalCount: number;
+  warningCount: number;
+  informationalCount: number;
+};
 export type WorkListQuery = {
   search?: string;
   status?: string;
@@ -343,6 +370,9 @@ export const api = {
       request<RepeatRepairAssessment>(
         `/api/assets/${id}/repeat-repair${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`,
       ),
+  },
+  attention: {
+    get: () => request<AttentionQueue>("/api/attention"),
   },
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
