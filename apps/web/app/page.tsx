@@ -114,13 +114,37 @@ export default function Home() {
 
 const defaultQuery: WorkListQuery = { sort: "title", page: 1, pageSize: 100 };
 
+// The global search palette deep-links here with a filter in the URL (e.g. ?propertyId=…).
+const urlFilterKeys = [
+  "search",
+  "status",
+  "priority",
+  "categoryId",
+  "propertyId",
+  "spaceId",
+] as const;
+function queryFromUrl(): Partial<WorkListQuery> {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const picked: Partial<WorkListQuery> = {};
+  for (const key of urlFilterKeys) {
+    const value = params.get(key);
+    if (value) picked[key] = value;
+  }
+  return picked;
+}
+
 function WorkList({ session }: { session: Session }) {
   const [work, setWork] = useState<WorkItem[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [query, setQuery] = useState<WorkListQuery>(defaultQuery);
+  // A filter carried in the URL (a global-search click-through) seeds the query and, below,
+  // stops a saved default view from overriding it. WorkList only ever renders on the client
+  // (Home shows the login form until the session loads), so reading the URL here is safe.
+  const urlSeed = queryFromUrl();
+  const [query, setQuery] = useState<WorkListQuery>(() => ({ ...defaultQuery, ...urlSeed }));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -140,7 +164,7 @@ function WorkList({ session }: { session: Session }) {
   const [viewIsDefault, setViewIsDefault] = useState(false);
   // The default view is applied once, when reference data first arrives. Any user-driven query
   // change also sets this, so a late default view cannot clobber filters already on screen.
-  const defaultViewApplied = useRef(false);
+  const defaultViewApplied = useRef(Object.keys(urlSeed).length > 0);
   async function saveView() {
     const name = viewName.trim();
     if (!name) return;
