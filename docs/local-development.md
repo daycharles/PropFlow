@@ -47,7 +47,7 @@ Set environment variables in your shell or secret manager, then run the commands
 | `dotnet run --project tools/PropFlow.Admin -- seed-demo` | `ConnectionStrings__Admin`, `Demo__Password` (12+ characters) |
 | `dotnet run --project src/PropFlow.Api --urls https://localhost:7080` | `ConnectionStrings__Database` (username `propflow_app`) |
 
-Migration order is Identity, then Operations, then Communications — three contexts with three separate histories (`src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs:14-19`). The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
+Migration order is Identity, then Operations, then Communications, then Integrations — four contexts with four separate histories (`src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs`). The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
 
 ## Demo data
 

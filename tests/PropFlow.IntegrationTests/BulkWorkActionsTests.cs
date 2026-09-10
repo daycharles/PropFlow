@@ -188,6 +188,67 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task A_bulk_note_still_honours_the_per_item_version()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, _, _) = await SeedAsync(s);
+
+        var stale = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "late note", items = new[] { Ref(a, 999u) }
+        });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(0, await verify.Timeline.CountAsync(x => x.EventType == "WorkNote"));
+    }
+
+    [Fact]
+    public async Task A_null_item_or_an_undefined_enum_is_a_400()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, _, _) = await SeedAsync(s);
+        var v = await VersionAsync(s, a);
+
+        var withNull = await s.Client.PostAsJsonAsync("/api/work/bulk/priority", new
+        {
+            priority = "High", items = new object?[] { Ref(a, v), null }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, withNull.StatusCode);
+
+        var badStatus = await s.Client.PostAsJsonAsync("/api/work/bulk/status", new
+        {
+            status = 999, items = new[] { Ref(a, v) }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, badStatus.StatusCode);
+    }
+
+    [Fact]
+    public async Task Re_scheduling_to_the_same_window_is_a_no_op()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, _, _) = await SeedAsync(s);
+        // A sub-microsecond tick component: it survives the JSON round-trip but not the Postgres
+        // timestamptz store, so the no-op check must tolerate the difference.
+        var start = new DateTimeOffset(2026, 10, 1, 14, 0, 0, TimeSpan.Zero).AddTicks(3);
+
+        var first = await s.Client.PostAsJsonAsync("/api/work/bulk/schedule",
+            new { scheduledStart = start, items = new[] { Ref(a, await VersionAsync(s, a)) } });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var again = await s.Client.PostAsJsonAsync("/api/work/bulk/schedule",
+            new { scheduledStart = start, items = new[] { Ref(a, await VersionAsync(s, a)) } });
+        var body = await again.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, body.GetProperty("changed").GetInt32());
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(1, await verify.Timeline.CountAsync(x => x.EventType == "Scheduled"));
+    }
+
+    [Fact]
     public async Task Foreign_tenant_work_ids_are_a_not_found_and_change_nothing()
     {
         await using var s = await fixture.CreateScenarioAsync();

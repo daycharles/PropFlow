@@ -65,9 +65,15 @@ public sealed class IntegrationsApiTests(DatabaseFixture fixture)
         Assert.Equal(0, second.GetProperty("added").GetInt32());
         Assert.Equal(0, second.GetProperty("updated").GetInt32());
 
-        var records = await s.Client.GetFromJsonAsync<JsonElement[]>($"/api/integrations/{id}/records");
-        Assert.Equal(seen, records!.Length);
-        Assert.All(records!, r => Assert.Equal("Synced", r.GetProperty("syncState").GetString()));
+        var records = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}/records");
+        var items = records.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(seen, records.GetProperty("totalCount").GetInt32());
+        Assert.Equal(seen, items.Count);
+        Assert.All(items, r => Assert.Equal("Synced", r.GetProperty("syncState").GetString()));
+
+        var firstPage = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}/records?page=1&pageSize=2");
+        Assert.Equal(2, firstPage.GetProperty("items").GetArrayLength());
+        Assert.Equal(seen, firstPage.GetProperty("totalCount").GetInt32());
 
         var health = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}");
         Assert.False(string.IsNullOrEmpty(health.GetProperty("lastSucceededAt").GetString()));
