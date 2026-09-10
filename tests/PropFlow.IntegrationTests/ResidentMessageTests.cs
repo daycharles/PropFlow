@@ -132,6 +132,27 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Bulk_messages_validate_every_recipient_then_queue_the_whole_batch()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var first = await SeedWorkWithResidentAsync(s);
+        var second = await SeedWorkWithResidentAsync(s);
+        var templateId = await SeedSmsTemplateAsync(s);
+
+        var accepted = await s.Client.PostAsJsonAsync("/api/work/bulk/message", new { templateId, workIds = new[] { first, second } });
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        await using (var comms = s.Comms(s.OrganizationA))
+            Assert.Equal(2, await comms.OutboxMessages.CountAsync(x => x.WorkId == first || x.WorkId == second));
+
+        // Mixing an item without a resident into a batch must not enqueue a partial message.
+        var refused = await s.Client.PostAsJsonAsync("/api/work/bulk/message", new { templateId, workIds = new[] { first, s.WorkA } });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        await using var verify = s.Comms(s.OrganizationA);
+        Assert.Equal(2, await verify.OutboxMessages.CountAsync());
+    }
+
+    [Fact]
     public async Task A_control_character_reaching_a_rendered_email_subject_is_a_400()
     {
         await using var s = await fixture.CreateScenarioAsync();

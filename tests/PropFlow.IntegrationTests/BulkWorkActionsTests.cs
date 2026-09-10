@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Domain.Properties;
+using PropFlow.Domain.People;
 using PropFlow.Domain.Work;
 using Xunit;
 
@@ -74,6 +75,31 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
         await using var verify = s.Store(s.OrganizationA);
         Assert.Equal(WorkPriority.Normal, (await verify.WorkItems.SingleAsync(x => x.Id == a)).Priority);
         Assert.Equal(0, await verify.Timeline.CountAsync(x => x.EventType == "PriorityChanged"));
+    }
+
+    [Fact]
+    public async Task Bulk_employee_assignment_is_atomic_and_records_each_changed_item()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, b, _) = await SeedAsync(s);
+        var employee = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Employees.Add(new Employee(s.OrganizationA, employee, "Casey Lee", null, null));
+            await store.SaveChangesAsync();
+        }
+
+        var response = await s.Client.PostAsJsonAsync("/api/work/bulk/employee", new
+        {
+            employeeId = employee,
+            items = new[] { Ref(a, await VersionAsync(s, a)), Ref(b, await VersionAsync(s, b)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.All(await verify.WorkItems.Where(x => x.Id == a || x.Id == b).ToListAsync(), x => Assert.Equal(employee, x.EmployeeId));
+        Assert.Equal(2, await verify.Timeline.CountAsync(x => x.EventType == "EmployeeAssigned"));
     }
 
     [Fact]

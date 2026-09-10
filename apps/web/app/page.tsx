@@ -6,6 +6,8 @@ import {
   api,
   ApiError,
   type Category,
+  type Employee,
+  type MessageTemplate,
   type Session,
   type Vendor,
   type SavedView,
@@ -114,12 +116,17 @@ const defaultQuery: WorkListQuery = { sort: "title", page: 1, pageSize: 100 };
 function WorkList({ session }: { session: Session }) {
   const [work, setWork] = useState<WorkItem[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [query, setQuery] = useState<WorkListQuery>(defaultQuery);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [bulkAction, setBulkAction] = useState<"vendor" | "employee" | "message">("vendor");
   const [flow, setFlow] = useState<"choose" | "confirm" | "success" | null>(null);
   const [result, setResult] = useState<{
     changed: number;
@@ -205,15 +212,21 @@ function WorkList({ session }: { session: Session }) {
   async function loadReference() {
     const ticket = ++referenceRequest.current;
     try {
-      const [vendorList, viewList, categoryList] = await Promise.all([
+      const [vendorList, viewList, categoryList, employeeList, templateList] = await Promise.all([
         api.vendors.list(),
         api.savedViews.list(),
         api.categories.list(),
+        hasCapability(session, "Work.AssignEmployee") ? api.employees.list() : Promise.resolve([]),
+        hasCapability(session, "Communications.SendMessage")
+          ? api.messageTemplates.available()
+          : Promise.resolve([]),
       ]);
       if (ticket !== referenceRequest.current) return;
       setVendors(vendorList.filter((vendor) => vendor.isActive));
       setSavedViews(viewList);
       setCategories(categoryList.filter((category) => !category.isArchived));
+      setEmployees(employeeList.filter((employee) => employee.isActive));
+      setTemplates(templateList);
       if (!defaultViewApplied.current) {
         defaultViewApplied.current = true;
         const preferred = viewList.find((view) => view.isDefault);
@@ -263,8 +276,13 @@ function WorkList({ session }: { session: Session }) {
       descending: current.sort === sort ? !current.descending : false,
     }));
   }
-  async function assign() {
-    if (!vendorId) return;
+  async function runBulkAction() {
+    if (
+      (bulkAction === "vendor" && !vendorId) ||
+      (bulkAction === "employee" && !employeeId) ||
+      (bulkAction === "message" && !templateId)
+    )
+      return;
     setError("");
     try {
       const concurrencyTokens = Object.fromEntries(
@@ -272,11 +290,13 @@ function WorkList({ session }: { session: Session }) {
           .filter((item) => item.rowVersion)
           .map((item) => [item.id, item.rowVersion!]),
       );
-      const response = await api.work.bulkAssignVendor({
-        workIds: visibleSelected.map((item) => item.id),
-        vendorId,
-        concurrencyTokens,
-      });
+      const input = { workIds: visibleSelected.map((item) => item.id), concurrencyTokens };
+      const response =
+        bulkAction === "vendor"
+          ? await api.work.bulkAssignVendor({ ...input, vendorId })
+          : bulkAction === "employee"
+            ? await api.work.bulkAssignEmployee({ ...input, employeeId })
+            : await api.work.bulkSendResidentMessage({ workIds: input.workIds, templateId });
       setResult(response);
       setFlow("success");
       await loadWork();
@@ -286,16 +306,24 @@ function WorkList({ session }: { session: Session }) {
       // it would wipe the message the user needs to read.
       await loadWork();
       setError(
-        cause instanceof ApiError && cause.status === 409
+        bulkAction !== "message" && cause instanceof ApiError && cause.status === 409
           ? "Some selected work changed. The list was refreshed; review it and try again."
           : cause instanceof ApiError
             ? cause.message
-            : "Vendor assignment could not be completed.",
+            : `Bulk ${bulkAction === "message" ? "message" : "assignment"} could not be completed.`,
       );
     }
   }
   const allSelected = work.length > 0 && work.every((item) => selected.has(item.id));
   const chosenVendor = vendors.find((vendor) => vendor.id === vendorId);
+  const chosenEmployee = employees.find((employee) => employee.id === employeeId);
+  const chosenTemplate = templates.find((template) => template.id === templateId);
+  const actionLabel =
+    bulkAction === "vendor"
+      ? "Assign vendor"
+      : bulkAction === "employee"
+        ? "Assign employee"
+        : "Send resident message";
   const defaultView = savedViews.find((view) => view.isDefault);
   const assignedTotal = result?.total ?? visibleSelected.length;
   if (!hasCapability(session, "Work.Read"))
@@ -442,12 +470,33 @@ function WorkList({ session }: { session: Session }) {
           <strong>{selected.size} selected</strong>
           <button
             onClick={() => {
+              setBulkAction("vendor");
               setVendorId("");
               setFlow("choose");
             }}
             disabled={!hasCapability(session, "Work.AssignVendor")}
           >
             Assign vendor
+          </button>
+          <button
+            onClick={() => {
+              setBulkAction("employee");
+              setEmployeeId("");
+              setFlow("choose");
+            }}
+            disabled={!hasCapability(session, "Work.AssignEmployee")}
+          >
+            Assign employee
+          </button>
+          <button
+            onClick={() => {
+              setBulkAction("message");
+              setTemplateId("");
+              setFlow("choose");
+            }}
+            disabled={!hasCapability(session, "Communications.SendMessage")}
+          >
+            Send resident message
           </button>
           <button className="secondary" onClick={() => setSelected(new Set())}>
             Clear selection
@@ -551,27 +600,73 @@ function WorkList({ session }: { session: Session }) {
           >
             {flow === "choose" && (
               <>
-                <h2 id="assignment-title">Assign vendor</h2>
+                <h2 id="assignment-title">{actionLabel}</h2>
                 <p>
-                  Assign a vendor to {visibleSelected.length} selected work{" "}
+                  {bulkAction === "message"
+                    ? "Send a resident message for"
+                    : "Apply this assignment to"}{" "}
+                  {visibleSelected.length} selected work{" "}
                   {visibleSelected.length === 1 ? "item" : "items"}.
                 </p>
-                <label>
-                  Vendor
-                  <select value={vendorId} onChange={(event) => setVendorId(event.target.value)}>
-                    <option value="">Choose a vendor</option>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.id}>
-                        {vendor.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {bulkAction === "vendor" && (
+                  <label>
+                    Vendor
+                    <select value={vendorId} onChange={(event) => setVendorId(event.target.value)}>
+                      <option value="">Choose a vendor</option>
+                      {vendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {bulkAction === "employee" && (
+                  <label>
+                    Employee
+                    <select
+                      value={employeeId}
+                      onChange={(event) => setEmployeeId(event.target.value)}
+                    >
+                      <option value="">Choose an employee</option>
+                      {employees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {bulkAction === "message" && (
+                  <label>
+                    Message template
+                    <select
+                      value={templateId}
+                      onChange={(event) => setTemplateId(event.target.value)}
+                    >
+                      <option value="">Choose a template</option>
+                      {templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name} ({template.channel})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="modal-actions">
                   <button className="secondary" onClick={() => setFlow(null)}>
                     Cancel
                   </button>
-                  <button disabled={!vendorId} onClick={() => setFlow("confirm")}>
+                  <button
+                    disabled={
+                      bulkAction === "vendor"
+                        ? !vendorId
+                        : bulkAction === "employee"
+                          ? !employeeId
+                          : !templateId
+                    }
+                    onClick={() => setFlow("confirm")}
+                  >
                     Continue
                   </button>
                 </div>
@@ -579,28 +674,54 @@ function WorkList({ session }: { session: Session }) {
             )}
             {flow === "confirm" && (
               <>
-                <h2 id="assignment-title">Confirm assignment</h2>
+                <h2 id="assignment-title">Confirm {actionLabel.toLowerCase()}</h2>
                 <p>
-                  <strong>{chosenVendor?.name}</strong> will be assigned to {visibleSelected.length}{" "}
-                  work {visibleSelected.length === 1 ? "item" : "items"}. This updates assignment
-                  history for each item.
+                  <strong>
+                    {bulkAction === "vendor"
+                      ? chosenVendor?.name
+                      : bulkAction === "employee"
+                        ? chosenEmployee?.displayName
+                        : chosenTemplate?.name}
+                  </strong>{" "}
+                  {bulkAction === "message"
+                    ? "will be rendered and queued for"
+                    : "will be applied to"}{" "}
+                  {visibleSelected.length} work {visibleSelected.length === 1 ? "item" : "items"}.
+                  {bulkAction === "message"
+                    ? " Every selected resident must be contactable through the template channel."
+                    : " This updates assignment history for each item."}
                 </p>
                 <div className="modal-actions">
                   <button className="secondary" onClick={() => setFlow("choose")}>
                     Back
                   </button>
-                  <button onClick={() => void assign()}>Confirm assignment</button>
+                  <button
+                    aria-label={bulkAction === "message" ? "Confirm message" : "Confirm assignment"}
+                    onClick={() => void runBulkAction()}
+                  >
+                    Confirm
+                  </button>
                 </div>
               </>
             )}
             {flow === "success" && (
               <>
-                <h2 id="assignment-title">Vendor assigned</h2>
+                <h2 id="assignment-title">
+                  {bulkAction === "message"
+                    ? "Resident message queued"
+                    : `${bulkAction === "vendor" ? "Vendor" : "Employee"} assigned`}
+                </h2>
                 <p>
-                  Assigned {result?.changed ?? assignedTotal} of {assignedTotal}{" "}
-                  {assignedTotal === 1 ? "work item" : "work items"} to {chosenVendor?.name}
+                  {bulkAction === "message" ? "Queued" : "Assigned"}{" "}
+                  {result?.changed ?? assignedTotal} of {assignedTotal}{" "}
+                  {assignedTotal === 1 ? "work item" : "work items"}
+                  {bulkAction === "vendor"
+                    ? ` to ${chosenVendor?.name}`
+                    : bulkAction === "employee"
+                      ? ` to ${chosenEmployee?.displayName}`
+                      : ""}
                   {result && result.unchanged > 0
-                    ? ` (${result.unchanged} already had this vendor)`
+                    ? ` (${result.unchanged} already had this ${bulkAction === "message" ? "message queued" : "assignment"})`
                     : ""}
                   . The list has been refreshed.
                 </p>

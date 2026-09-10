@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PropFlow.Application.Work;
 
 namespace PropFlow.Infrastructure.Identity;
 
@@ -19,4 +20,14 @@ public sealed class MembershipAccess(IdentityStore store)
 
     public Task<Organization?> OrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         store.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
+
+    public async Task<WorkAccessScope> WorkScopeAsync(Guid userId, Guid organizationId, CancellationToken cancellationToken)
+    {
+        var membership = await FindActiveAsync(userId, organizationId, cancellationToken);
+        if (membership is null) return WorkAccessScope.None;
+        var propertyIds = await store.MembershipPropertyBindings.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.UserId == userId)
+            .Select(x => x.PropertyId).ToHashSetAsync(cancellationToken);
+        return new WorkAccessScope(propertyIds, membership.EmployeeId, membership.VendorId);
+    }
 }
