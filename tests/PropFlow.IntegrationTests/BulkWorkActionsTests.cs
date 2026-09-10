@@ -231,7 +231,9 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
         await using var s = await fixture.CreateScenarioAsync();
         await s.LoginAsync();
         var (a, _, _) = await SeedAsync(s);
-        var start = DateTimeOffset.UtcNow.AddDays(3);
+        // A sub-microsecond tick component: it survives the JSON round-trip but not the Postgres
+        // timestamptz store, so the no-op check must tolerate the difference.
+        var start = new DateTimeOffset(2026, 10, 1, 14, 0, 0, TimeSpan.Zero).AddTicks(3);
 
         var first = await s.Client.PostAsJsonAsync("/api/work/bulk/schedule",
             new { scheduledStart = start, items = new[] { Ref(a, await VersionAsync(s, a)) } });

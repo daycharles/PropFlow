@@ -207,7 +207,13 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
                 return true;
             case BulkWorkAction.Schedule:
                 var oldStart = work.ScheduledStart;
-                if (work.Status == WorkStatus.Scheduled && oldStart == c.ScheduledStart!.Value && work.ScheduledEnd == c.ScheduledEnd) return false;
+                // Stored timestamps are microsecond-precision (Postgres timestamptz); the request
+                // value may carry finer ticks. A window that matches to the second is a no-op.
+                static bool SameInstant(DateTimeOffset? a, DateTimeOffset? b) =>
+                    (a is null) == (b is null) && (a is not { } x || b is not { } y || Math.Abs((x - y).TotalSeconds) < 1);
+                if (work.Status == WorkStatus.Scheduled
+                    && SameInstant(oldStart, c.ScheduledStart) && SameInstant(work.ScheduledEnd, c.ScheduledEnd))
+                    return false;
                 work.Schedule(c.ScheduledStart!.Value, c.ScheduledEnd);
                 store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
                 return true;
