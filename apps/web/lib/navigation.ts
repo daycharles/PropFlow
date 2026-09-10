@@ -19,6 +19,11 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   { href: "/", label: "Work", capability: "Work.Read" },
   { href: "/attention", label: "Needs attention", capability: "Work.Read" },
   { href: "/settings/categories", label: "Categories", capability: "Settings.ManageCategories" },
+  {
+    href: "/settings/automation",
+    label: "Automation",
+    capability: "Settings.ManageAutomationRules",
+  },
   { href: "/integrations", label: "Integrations", capability: "Integrations.Manage" },
 ];
 

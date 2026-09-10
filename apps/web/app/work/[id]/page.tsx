@@ -197,8 +197,9 @@ function Detail({ session, id }: { session: Session; id: string }) {
     );
   const scheduleChanged = Boolean(work.scheduledStart);
   const canAssignEmployee = hasCapability(session, "Work.AssignEmployee");
+  const isTechnician = session.role === "Technician";
   return (
-    <section className="detail-workspace">
+    <section className={`detail-workspace${isTechnician ? " technician-workspace" : ""}`}>
       <div className="detail-heading">
         <div>
           <Link href="/">← Work</Link>
@@ -218,6 +219,9 @@ function Detail({ session, id }: { session: Session; id: string }) {
         <p className="success" role="status">
           {notice}
         </p>
+      )}
+      {isTechnician && (
+        <TechnicianQuickActions work={work} saving={saving} onChange={change} onSave={save} />
       )}
       <form className="detail-grid" onSubmit={save}>
         <section className="panel">
@@ -490,6 +494,60 @@ function Detail({ session, id }: { session: Session; id: string }) {
           </section>
         </div>
       )}
+    </section>
+  );
+}
+
+function TechnicianQuickActions({
+  work,
+  saving,
+  onChange,
+  onSave,
+}: {
+  work: WorkDetail;
+  saving: boolean;
+  onChange: <K extends keyof WorkDetail>(key: K, value: WorkDetail[K]) => void;
+  onSave: () => Promise<void>;
+}) {
+  return (
+    <section className="panel technician-quick-actions" aria-label="Technician actions">
+      <h2>Field update</h2>
+      <p className="hint">Update the status or leave a note while you are on site.</p>
+      <label>
+        Status
+        <select
+          value={work.status}
+          disabled={saving}
+          onChange={(event) => onChange("status", event.target.value)}
+        >
+          {statuses
+            .filter((status) => status !== "Draft")
+            .map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+        </select>
+      </label>
+      <label>
+        Work note
+        <textarea
+          value={work.internalNotes ?? ""}
+          disabled={saving}
+          placeholder="Add an internal progress note"
+          onChange={(event) => onChange("internalNotes", event.target.value || null)}
+        />
+      </label>
+      <div className="technician-action-row">
+        <button type="button" disabled={saving} onClick={() => void onSave()}>
+          {saving ? "Saving…" : "Save update"}
+        </button>
+        <label className="photo-action">
+          <span>Add photo</span>
+          <input type="file" accept="image/*" capture="environment" disabled />
+        </label>
+      </div>
+      <p className="hint photo-note">
+        Photo attachments will be available when work-media storage is enabled.
+      </p>
     </section>
   );
 }

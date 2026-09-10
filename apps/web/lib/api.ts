@@ -230,6 +230,16 @@ export type MessageTemplate = {
   isActive: boolean;
 };
 export type Category = { id: string; name: string; isArchived: boolean; sortOrder: number };
+export type AutomationRule = {
+  id: string;
+  name: string;
+  trigger: string;
+  conditions: unknown[];
+  actions: unknown[];
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 export type SavedView = {
   id: string;
   name: string;
@@ -455,6 +465,21 @@ export const api = {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
   },
   categories: { list: () => request<Category[]>("/api/categories/") },
+  automationRules: {
+    list: () => request<AutomationRule[]>("/api/automation/rules/"),
+    create: (input: { name: string; trigger: string; conditions: unknown[]; actions: unknown[] }) =>
+      mutation<AutomationRule>("/api/automation/rules/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    setEnabled: (id: string, enabled: boolean) =>
+      mutation<AutomationRule>(`/api/automation/rules/${id}/enabled`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      }),
+  },
   savedViews: {
     list: () => request<SavedView[]>("/api/saved-views/"),
     create: (input: { name: string; filters: unknown; columns?: unknown; isDefault?: boolean }) =>

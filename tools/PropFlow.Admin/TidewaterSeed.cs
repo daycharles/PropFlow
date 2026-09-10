@@ -286,6 +286,9 @@ internal static class TidewaterSeed
         comms.MessageTemplates.Add(new MessageTemplate(organizationId, Guid.NewGuid(),
             "Work completed (SMS)", MessageChannel.Sms, null,
             "Hi {{ resident.name }}, \"{{ work.title }}\" at {{ property.name }} is now complete ({{ work.status }}). Contact the office with any concerns."));
+        comms.MessageTemplates.Add(new MessageTemplate(organizationId, Guid.NewGuid(),
+            "Technician on the way", MessageChannel.Sms, null,
+            "Hi {{ resident.name }}, your technician is on the way for \"{{ work.title }}\" at {{ property.name }}."));
 
         await comms.SaveChangesAsync();
     }
