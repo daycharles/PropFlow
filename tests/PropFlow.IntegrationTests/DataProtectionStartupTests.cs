@@ -28,6 +28,8 @@ public sealed class DataProtectionStartupTests(DatabaseFixture fixture)
             {
                 builder.UseEnvironment("Production");
                 builder.UseSetting("DataProtection:KeyPath", keyPath);
+                builder.UseSetting("ForwardedHeaders:Enabled", "true");
+                builder.UseSetting("ForwardedHeaders:KnownProxies", "127.0.0.1");
             });
 
             using var client = production.CreateClient(new() { BaseAddress = new Uri("https://localhost") });

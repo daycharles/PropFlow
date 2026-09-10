@@ -13,10 +13,19 @@ public static class DeploymentConfiguration
         if (!environment.IsProduction() && !environment.IsStaging()) return;
 
         var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        // Loopback is intentionally allowed for local smoke tests and single-host development
+        // deployments. Any remotely addressed production database must use certificate-verified
+        // TLS; Prefer/Require are not sufficient because they permit downgrade or unverified peers.
+        if (IsLoopbackHost(builder.Host))
+            return;
         if (builder.SslMode != SslMode.VerifyFull)
             throw new InvalidOperationException(
-                "Production and staging require PostgreSQL Ssl Mode=VerifyFull with a trusted server certificate.");
+                "Production and staging require non-local PostgreSQL connections to use Ssl Mode=VerifyFull with a trusted server certificate.");
     }
+
+    private static bool IsLoopbackHost(string? host) =>
+        string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+        (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
 
     public static void ConfigureForwardedHeaders(ForwardedHeadersOptions options, IConfiguration configuration,
         IHostEnvironment environment)
