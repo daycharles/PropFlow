@@ -66,6 +66,43 @@ public sealed class AssetIntegrationTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task History_returns_the_asset_its_linked_work_and_the_roll_ups()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+
+        // Two work items on AssetA (one costed, one not); one on no asset; one on org B's asset.
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var older = new PropFlow.Domain.Work.WorkItem(s.OrganizationA, Guid.NewGuid(), "Filter swap", s.PropertyA, s.AdminA);
+            older.SetAsset(s.AssetA);
+            older.Publish(DateTimeOffset.UtcNow.AddDays(-40));
+            older.SetCost(120m);
+            var newer = new PropFlow.Domain.Work.WorkItem(s.OrganizationA, Guid.NewGuid(), "Compressor repair", s.PropertyA, s.AdminA);
+            newer.SetAsset(s.AssetA);
+            newer.Publish(DateTimeOffset.UtcNow.AddDays(-5));
+            var unrelated = new PropFlow.Domain.Work.WorkItem(s.OrganizationA, Guid.NewGuid(), "Lobby paint", s.PropertyA, s.AdminA);
+            unrelated.Publish(DateTimeOffset.UtcNow);
+            store.WorkItems.AddRange(older, newer, unrelated);
+            await store.SaveChangesAsync();
+        }
+
+        var history = await s.Client.GetFromJsonAsync<JsonElement>($"/api/assets/{s.AssetA}/history");
+        Assert.Equal("Rooftop HVAC 1", history.GetProperty("asset").GetProperty("name").GetString());
+        Assert.Equal(2, history.GetProperty("workOrderCount").GetInt32());
+        Assert.Equal(120m, history.GetProperty("totalCost").GetDecimal());
+        var items = history.GetProperty("history").EnumerateArray().ToArray();
+        Assert.Equal(2, items.Length);
+        // Newest first.
+        Assert.Equal("Compressor repair", items[0].GetProperty("title").GetString());
+        Assert.Equal("Filter swap", items[1].GetProperty("title").GetString());
+        Assert.Equal(120m, items[1].GetProperty("cost").GetDecimal());
+
+        // Org B's asset is invisible -> 404.
+        Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/assets/{s.AssetB}/history")).StatusCode);
+    }
+
+    [Fact]
     public async Task Create_and_update_an_asset()
     {
         await using var s = await fixture.CreateScenarioAsync();

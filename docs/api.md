@@ -246,6 +246,7 @@ reject control characters (a resident name is a template substitution value).
 | --- | --- | --- |
 | GET | /api/assets | `Work.Read`; up to 500 tenant-scoped assets ordered by name; optional `?propertyId=` filter |
 | GET | /api/assets/{id} | `Work.Read`; one asset, or 404 including foreign-tenant IDs |
+| GET | /api/assets/{id}/history | `Work.Read`; the asset plus every work item linked to it (newest first) and the roll-ups — `{ asset, ageInYears, underWarranty, workOrderCount, totalCost, history: [{ id, title, status, priority, categoryName, vendorName, createdAt, completedAt, cost }] }`; 404 for an unknown or foreign asset |
 | POST | /api/assets | `Assets.Manage` + CSRF; `kind`, `name`, `propertyId`, `spaceId`, and the optional make/model/serial, `installedOn`/`warrantyExpiresOn`/`expectedServiceLifeYears`, `condition`, `replacementCostEstimate`, `notes`; 201, 400 for invalid text / a warranty before installation / a foreign or unknown property or space |
 | PUT | /api/assets/{id} | `Assets.Manage` + CSRF; same body; the property and space are fixed at creation; 200, 400, or 404 |
 

@@ -86,6 +86,34 @@ export type Asset = {
   spaceId?: string | null;
   kind: string;
   name: string;
+  manufacturer?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  installedOn?: string | null;
+  warrantyExpiresOn?: string | null;
+  expectedServiceLifeYears?: number | null;
+  condition: string;
+  replacementCostEstimate?: number | null;
+  notes?: string | null;
+};
+export type AssetHistoryItem = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  categoryName?: string | null;
+  vendorName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  cost?: number | null;
+};
+export type AssetHistory = {
+  asset: Asset;
+  ageInYears?: number | null;
+  underWarranty: boolean;
+  workOrderCount: number;
+  totalCost: number;
+  history: AssetHistoryItem[];
 };
 export type WorkListQuery = {
   search?: string;
@@ -299,6 +327,8 @@ export const api = {
   assets: {
     list: (propertyId?: string) =>
       request<Asset[]>(`/api/assets/${propertyId ? `?propertyId=${propertyId}` : ""}`),
+    get: (id: string) => request<Asset>(`/api/assets/${id}`),
+    history: (id: string) => request<AssetHistory>(`/api/assets/${id}/history`),
   },
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
