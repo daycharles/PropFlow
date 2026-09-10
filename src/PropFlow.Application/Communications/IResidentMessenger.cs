@@ -28,9 +28,12 @@ public sealed record ResidentMessageResult(ResidentMessageOutcome Outcome, strin
 /// <summary>
 /// Renders a message template for a work item's resident and queues it on the outbox — the shared
 /// use case behind the resident-message endpoint and the automation <c>SendResidentMessage</c>
-/// action. The <paramref name="idempotencyKey"/> is the caller's dedupe boundary.
+/// action. The <paramref name="idempotencyKey"/> is the caller's dedupe boundary;
+/// <paramref name="extraValues"/> adds placeholders on top of the standard set (e.g.
+/// <c>note.text</c> for a note-triggered message).
 /// </summary>
 public interface IResidentMessenger
 {
-    Task<ResidentMessageResult> QueueForWorkAsync(Guid workId, Guid templateId, string idempotencyKey, CancellationToken cancellationToken);
+    Task<ResidentMessageResult> QueueForWorkAsync(Guid workId, Guid templateId, string idempotencyKey,
+        IReadOnlyDictionary<string, string>? extraValues = null, CancellationToken cancellationToken = default);
 }

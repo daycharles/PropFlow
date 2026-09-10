@@ -267,14 +267,19 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
             if (ApplyOne(work, command, now)) changed++;
         }
 
-        // Captured before the save (ids are assigned) — the status-change occurrences to hand the
-        // automation evaluator once the batch commits.
-        var statusOccurrences = command.Action == BulkWorkAction.Status
-            ? store.ChangeTracker.Entries<TimelineEntry>()
-                .Where(e => e.State == EntityState.Added && e.Entity.EventType == "StatusChanged" && e.Entity.WorkId is not null)
-                .Select(e => (WorkId: e.Entity.WorkId!.Value, EntryId: e.Entity.Id))
-                .ToList()
-            : [];
+        // Captured before the save (ids are assigned) — the occurrences to hand the automation
+        // evaluator once the batch commits. A note occurrence only counts when it is
+        // resident-visible; an internal note never reaches resident messaging.
+        var (trigger, occurrenceEvent) = command.Action switch
+        {
+            BulkWorkAction.Status => ((AutomationTrigger?)AutomationTrigger.WorkStatusChanged, "StatusChanged"),
+            BulkWorkAction.Note when !command.NoteInternal => (AutomationTrigger.WorkNoteAdded, "WorkNote"),
+            _ => (null, null),
+        };
+        var occurrences = trigger is null ? [] : store.ChangeTracker.Entries<TimelineEntry>()
+            .Where(e => e.State == EntityState.Added && e.Entity.EventType == occurrenceEvent && e.Entity.WorkId is not null)
+            .Select(e => (WorkId: e.Entity.WorkId!.Value, EntryId: e.Entity.Id))
+            .ToList();
 
         try
         {
@@ -287,8 +292,9 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
             return new(AssignmentOutcome.Conflict, 0, 0, total);
         }
 
-        foreach (var (workId, entryId) in statusOccurrences)
-            await RunAutomationAsync(AutomationTrigger.WorkStatusChanged, workId, entryId, ct);
+        if (trigger is { } t)
+            foreach (var (workId, entryId) in occurrences)
+                await RunAutomationAsync(t, workId, entryId, ct);
         return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total);
     }
 

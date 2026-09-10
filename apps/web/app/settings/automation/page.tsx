@@ -72,6 +72,7 @@ function AutomationContent({ session }: { session: Session }) {
             <select value={trigger} onChange={(event) => setTrigger(event.target.value)}>
               <option value="WorkCreated">Work created</option>
               <option value="WorkStatusChanged">Work status changed</option>
+              <option value="WorkNoteAdded">Resident-visible note added</option>
             </select>
           </label>
           <label>
