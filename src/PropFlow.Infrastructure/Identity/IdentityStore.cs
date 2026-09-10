@@ -11,6 +11,7 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
 {
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> Memberships => Set<OrganizationMembership>();
+    public DbSet<MembershipPropertyBinding> MembershipPropertyBindings => Set<MembershipPropertyBinding>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -29,6 +30,12 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
             entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<MembershipPropertyBinding>(entity =>
+        {
+            entity.HasKey(x => new { x.OrganizationId, x.UserId, x.PropertyId });
+            entity.HasOne<OrganizationMembership>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -16,6 +16,16 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     public async Task<WorkListPage> ListAsync(WorkListQuery q, CancellationToken ct)
     {
         var query = store.WorkItems.AsNoTracking().AsQueryable();
+        if (q.AccessScope is { } scope && q.ScopeSubject is { } subject)
+        {
+            query = subject switch
+            {
+                WorkScopeSubject.Regional => query.Where(x => scope.PropertyIds.Contains(x.PropertyId)),
+                WorkScopeSubject.Technician when scope.EmployeeId is { } employee => query.Where(x => x.EmployeeId == employee && (scope.PropertyIds.Count == 0 || scope.PropertyIds.Contains(x.PropertyId))),
+                WorkScopeSubject.Vendor when scope.VendorId is { } vendor => query.Where(x => x.VendorId == vendor && (scope.PropertyIds.Count == 0 || scope.PropertyIds.Contains(x.PropertyId))),
+                _ => query.Where(_ => false)
+            };
+        }
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
             // Escape LIKE metacharacters so a search for "50%" or "a_b" is a literal match, not a
@@ -176,6 +186,20 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         foreach (var work in works) { store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version; var e = work.AssignVendor(vendorId, actorId, clock.GetUtcNow()); if (e is not null) { changed++; store.Timeline.Add(TimelineEntry.From(e)); } }
         try { await store.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total); }
         // All-or-nothing: the transaction rolls back, so nothing was changed and nothing is reported as changed.
+        catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(ct); return new(AssignmentOutcome.Conflict, 0, 0, total); }
+    }
+
+    public async Task<BulkAssignmentSummary> BulkAssignEmployeeAsync(IReadOnlyList<BulkWorkItemRef> items, Guid employeeId, Guid actorId, CancellationToken ct)
+    {
+        var total = items.Count;
+        if (items.Count is 0 or > 100 || items.Select(x => x.WorkId).Distinct().Count() != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        if (!await store.Employees.AnyAsync(x => x.Id == employeeId, ct)) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        await using var transaction = await store.Database.BeginTransactionAsync(ct);
+        var ids = items.Select(x => x.WorkId).ToArray(); var works = await store.WorkItems.Where(x => ids.Contains(x.Id)).ToListAsync(ct); if (works.Count != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        if (works.Any(x => x.IsTerminal)) return new(AssignmentOutcome.NotAssignable, 0, 0, total);
+        var byId = items.ToDictionary(x => x.WorkId); var changed = 0;
+        foreach (var work in works) { store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version; var e = work.AssignEmployee(employeeId, actorId, clock.GetUtcNow()); if (e is not null) { changed++; store.Timeline.Add(TimelineEntry.From(e)); } }
+        try { await store.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total); }
         catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(ct); return new(AssignmentOutcome.Conflict, 0, 0, total); }
     }
 

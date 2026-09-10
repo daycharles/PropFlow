@@ -91,6 +91,12 @@ export type WorkListQuery = {
 };
 export type WorkListResult = { items: WorkItem[]; totalCount: number };
 export type BulkAssignmentResult = { changed: number; unchanged: number; total: number };
+export type MessageTemplate = {
+  id: string;
+  name: string;
+  channel: "Sms" | "Email";
+  subject?: string | null;
+};
 export type Category = { id: string; name: string; isArchived: boolean; sortOrder: number };
 export type SavedView = {
   id: string;
@@ -230,9 +236,33 @@ export const api = {
         body: JSON.stringify({ vendorId: input.vendorId, items }),
       });
     },
+    bulkAssignEmployee: (input: {
+      workIds: string[];
+      employeeId: string;
+      concurrencyTokens?: Record<string, string>;
+    }) => {
+      const items = input.workIds.map((workId) => ({
+        workId,
+        version: Number(input.concurrencyTokens?.[workId] ?? 0),
+      }));
+      return mutation<BulkAssignmentResult>("/api/work/bulk/employee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: input.employeeId, items }),
+      });
+    },
+    bulkSendResidentMessage: (input: { workIds: string[]; templateId: string }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },
+  messageTemplates: {
+    available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
+  },
   categories: { list: () => request<Category[]>("/api/categories/") },
   savedViews: {
     list: () => request<SavedView[]>("/api/saved-views/"),

@@ -52,9 +52,18 @@ public sealed class CapabilitiesTests
     [InlineData("Vendor")]
     [InlineData("")]
     [InlineData("Unrecognized")]
-    public void Field_and_unknown_roles_receive_nothing(string role)
+    public void Field_roles_without_a_binding_and_unknown_roles_receive_nothing(string role)
     {
         Assert.Empty(Capabilities.ForRole(role));
+    }
+
+    [Fact]
+    public void Field_roles_receive_read_only_when_bound_to_their_field_identity()
+    {
+        Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
+        Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
+        Assert.Empty(Capabilities.ForRole("Technician", vendorId: Guid.NewGuid()));
+        Assert.Empty(Capabilities.ForRole("Vendor", employeeId: Guid.NewGuid()));
     }
 
     [Fact]
