@@ -11,31 +11,21 @@ unmerged fork). "unassigned" = no owner yet.
 
 ---
 
-## Blocked (waiting on M3)
+## M4 — what's left
 
-M4 tasks that cannot start until the M3 slice (work API, generalized timeline, bulk actions,
-Next.js work list/detail) lands on `main`.
+M3 is complete (all `#6`–`#31` closed, promoted to `main` in PR #95 / #104). PF-4.01–4.05,
+4.07 are done. What remains in M4:
 
-The M3 API **and** web slice are already on `develop` (work list + `work/[id]` detail,
-categories settings, the `m3-workflow` e2e spec, bulk vendor assignment, saved views). "M3
-complete" now means the `#6`–`#31` issues are closed and `develop` is promoted to `main`. Most
-of the rows below are therefore buildable against `develop` today — verify the M3 dependency is
-actually present, don't wait for the promote.
-
-### Do these once M3 is called complete (2026-09-10)
-
-1. **Promote `develop` → `main`** via PR — it is ~5 commits ahead (audit A-1..A-4, PF-6.10,
-   PF-4.07, tooling, and PR #103 once merged). Nothing on `develop` is flag-gated.
-2. **Close `#6`–`#31`** with PR-linking comments, keeping them assigned to `daycharles` (the M3
-   track marker — see `.claude/rules/workflow.md`).
-3. Re-check each row below: its M3 dependency is likely already on `develop`.
-
-| Item | Source | Owner | Unblocks when |
+| Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
-| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The real remaining blocker.** `TimelineEntry` is still half-generalized on `develop` — `PreviousVendorId`/`VendorId` legacy columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead. Finish PF-3.10 (daycdev tech debt below) first |
+| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | mday440 | **Unblocked.** The PF-3.10 generalization is now finished — one row shape, legacy columns dropped. Next: emit a timeline entry when a communication is queued / sent / delivered / failed, with internal-vs-resident visibility |
 | PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | work events start producing messages; needs the M3 work-use-case layer + idempotent real providers |
-| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Likely buildable now.** PF-4.07 ✓, PF-4.03 ✓, the M3 web work list + bulk-vendor flow are on `develop`. Confirm the web bulk flow (PF-3.20) is complete enough, then start |
-| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — the M3 `apps/web` work list and `work/[id]` detail are on `develop`; this is a responsiveness pass over them |
+| PF-4.03 (#34) — resident message templates | backlog.md M4 | mday440 | Entity + CRUD + `{{ }}` rendering done. Remaining: wire the substitution values from a real work/property/schedule context — comes with PF-4.06 |
+| PF-4.08 (#39) — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | Buildable: PF-4.07 ✓, PF-4.03 ✓, M3 web bulk-vendor flow on `main`. Substantial front-end feature |
+| PF-4.09 (#40) — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | Buildable now — a responsiveness pass over the M3 `apps/web` work list and `work/[id]` detail |
+| PF-4.10 (#41) — full Tidewater demo seed (~3 properties, ~80 spaces, ~70 residents, 6 vendors, ~100 work items, ~60 assets, ≥18 pest-control) | backlog.md M4 | unassigned | All the domain exists (residents/occupancy/assets/hierarchy). Standalone; unblocks PF-4.11. `infra` / the `PropFlow.Admin` seed |
+| PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Needs PF-4.08 + PF-4.10 |
+| PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Core outbox/consent tests exist; finish once PF-4.06 emits real communication events |
 
 ---
 
@@ -81,7 +71,6 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
-| `TimelineEntry` generalization incomplete | code audit 2026-09-09; `src/PropFlow.Domain/Timeline/TimelineEntry.cs` | daycdev | Carries legacy `PreviousVendorId`/`VendorId` alongside `EventType`/`Changes`; `From()` leaves `Changes = "{}"`, `Create()` sets `Changes` + a fresh GUID and skips the typed columns and is never called (dead). Readers get two shapes |
 | Tailwind is a dependency but nothing uses it | code audit 2026-09-09; `apps/web/package.json:24`, `apps/web/app/styles.css:1` | daycdev | PF-3.01 called for Tailwind. `styles.css:1` has `@import "tailwindcss"` but there is no PostCSS config and every rule below it is hand-written CSS. Either wire the build up or drop the dependency and the import |
 | `CreatedAt` is only set in `Publish` | code audit 2026-09-09; `src/PropFlow.Domain/Work/WorkItem.cs` | daycdev | A `Draft` row carries `default(DateTimeOffset)` for `CreatedAt`. (The terminal-state half of this row is **closed** — PF-3.27 guarded the assignment overloads, audit A-1 guarded `Edit`/`Schedule`, PF-4.07 guarded `SetPriority` and added the sanctioned `Reopen`.) |
 | M3 domain types have two public constructors, no private-EF-ctor + factory | code audit 2026-09-09 | daycdev | `WorkItem`, `WorkCategory`, hierarchy types — the C5 fix pattern (private ctor + static `Create`) was not applied |
@@ -137,3 +126,4 @@ Kept so the same gap is not re-filed. Each row names the evidence checked when i
 | Work create/update accept unvalidated `BuildingId`/`SpaceId`/`ResidentId`/`CategoryId` (audit A-5) | 2026-09-10, audit follow-ups | `EfWorkOperations.EnsureChildReferencesAsync` validates all four (tenant-filtered) on create + update; `UpdateAsync` also checks `PropertyId`; test `Creating_or_updating_work_rejects_a_child_reference_outside_the_tenant` |
 | Global search trigram branch is not index-backed (audit A-7) | 2026-09-10, audit follow-ups | `EfGlobalSearch` filters with `q <% col` (`TrigramsAreWordSimilar`) under a `SET LOCAL pg_trgm.word_similarity_threshold = 0.25`; the `<%` operator uses `gin_trgm_ops`. Threshold and recall unchanged |
 | Bulk endpoints: null `items` entry → 500, undefined enum accepted, note skipped concurrency, schedule no-op noise (audit 2nd pass B-1..B-5) | 2026-09-10, PF-4.07 review | `ValidBatch` rejects null/empty-guid entries; `Enum.IsDefined` guards on `bulk/status`, `bulk/priority`, and `POST`/`PUT /api/work`; `BulkApplyAsync` does an explicit up-front `xmin` check for every item; `ApplyOne` skips a true schedule no-op. Tests in `BulkWorkActionsTests` |
+| `TimelineEntry` generalization was incomplete (PF-3.10 tech debt) | 2026-09-10, PF-3.10 finish | `TimelineEntry` now has one shape — `Record` + typed `From(VendorAssigned/EmployeeAssigned/WorkReopened)` factories, all populating `EventType`/`OldValue`/`NewValue`/`Changes`. Dead `Create()` removed; legacy `PreviousVendorId`/`VendorId` columns dropped (`20260910122538_TimelineDropLegacyVendorColumns`). Unblocks PF-4.06 |

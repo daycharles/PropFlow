@@ -110,9 +110,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         if (work.IsTerminal) return AssignmentOutcome.NotAssignable;
         if (version is { } v) store.Entry(work).Property("Version").OriginalValue = v;
         var change = work.AssignEmployee(employeeId, actorId, clock.GetUtcNow()); if (change is null) return AssignmentOutcome.Unchanged;
-        store.Timeline.Add(TimelineEntry.Record(change.OrganizationId, change.ActorId, change.OccurredAt, nameof(EmployeeAssigned), "WorkItem", change.WorkId,
-            change.PreviousEmployeeId?.ToString(), change.EmployeeId.ToString(), change.WorkId,
-            JsonSerializer.Serialize(new { oldValue = change.PreviousEmployeeId, newValue = change.EmployeeId })));
+        store.Timeline.Add(TimelineEntry.From(change));
         try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
     }
 
@@ -222,8 +220,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
                     null, c.Note, work.Id, JsonSerializer.Serialize(new { note = c.Note, visibility = c.NoteInternal ? "internal" : "resident" })));
                 return true;
             case BulkWorkAction.Reopen:
-                var reopened = work.Reopen(c.ActorId, now);
-                store.Timeline.Add(Event(work, c.ActorId, nameof(WorkReopened), reopened.PreviousStatus.ToString(), reopened.NewStatus.ToString(), now));
+                store.Timeline.Add(TimelineEntry.From(work.Reopen(c.ActorId, now)));
                 return true;
             default:
                 throw new ArgumentOutOfRangeException(nameof(c), c.Action, "Unknown bulk action.");

@@ -58,9 +58,10 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         var audit = Assert.Single(await store.Timeline.ToListAsync());
         Assert.Equal(s.AdminA, audit.ActorId);
         Assert.Equal(s.OrganizationA, audit.OrganizationId);
-        Assert.Null(audit.PreviousVendorId);
-        Assert.Equal(s.VendorA, audit.VendorId);
+        Assert.Null(audit.OldValue);
+        Assert.Equal(s.VendorA.ToString(), audit.NewValue);
         Assert.Equal(nameof(VendorAssigned), audit.EventType);
+        Assert.Equal("WorkItem", audit.RelatedObjectType);
     }
 
     [Fact]

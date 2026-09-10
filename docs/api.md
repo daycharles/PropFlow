@@ -110,6 +110,13 @@ or back to `Draft` is rejected with 400, and scheduling without a vendor or empl
 rejected with 400. Title, priority, status and schedule changes each append their own timeline
 entry. A stale `version` returns 409 and requires a reload.
 
+`GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
+`{ eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
+changes }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`, `EmployeeAssigned`,
+`StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`, …); `oldValue` /
+`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
+object with the same pair. There are no event-specific fields.
+
 ### Assignment
 
 Vendor assignment body — `version` is optional on the single-item route and omitting it skips
