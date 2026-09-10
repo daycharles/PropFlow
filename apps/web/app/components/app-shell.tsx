@@ -42,6 +42,14 @@ export function AppShell({
               Categories
             </Link>
           )}
+          {hasCapability(session, "Settings.ManageAutomationRules") && (
+            <Link
+              href="/settings/automation"
+              aria-current={pathname === "/settings/automation" ? "page" : undefined}
+            >
+              Automation
+            </Link>
+          )}
         </nav>
         <span className="role">{session.role}</span>
         <button className="secondary" onClick={() => void logout()}>

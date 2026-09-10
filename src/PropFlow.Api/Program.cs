@@ -168,6 +168,7 @@ app.MapAssetEndpoints();
 app.MapSearchEndpoints();
 app.MapSavedViewEndpoints();
 app.MapIntegrationEndpoints();
+app.MapAutomationEndpoints();
 app.Run();
 
 public partial class Program { }

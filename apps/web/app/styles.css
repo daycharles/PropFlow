@@ -264,6 +264,25 @@ td small {
 .mobile-sort {
   display: none; /* the sortable column headers cover this above 700px */
 }
+.technician-quick-actions {
+  display: none;
+}
+.photo-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-action input {
+  display: none;
+}
+.technician-action-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.photo-note {
+  margin-bottom: 0;
+}
 .bulk-toolbar {
   margin: 14px 0;
   padding: 12px;
@@ -446,6 +465,25 @@ td small {
   gap: 8px;
 }
 @media (max-width: 700px) {
+  .technician-workspace .technician-quick-actions {
+    display: block;
+    order: -1;
+  }
+  .technician-workspace .detail-grid > .panel:first-child,
+  .technician-workspace .detail-grid > .panel:nth-child(2) {
+    display: none;
+  }
+  .technician-workspace .detail-grid {
+    display: block;
+  }
+  .technician-workspace .notes {
+    margin-top: 0.75rem;
+  }
+  .technician-action-row button,
+  .technician-action-row .photo-action {
+    flex: 1 1 10rem;
+    min-height: 3rem;
+  }
   main {
     padding: 18px;
   }

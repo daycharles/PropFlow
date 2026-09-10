@@ -1,8 +1,14 @@
 using System.Security.Claims;
 using PropFlow.Application;
 using PropFlow.Application.Work;
+using PropFlow.Application.Communications;
 using PropFlow.Domain.Work;
+using PropFlow.Domain.Communications;
+using PropFlow.Domain.Timeline;
 using PropFlow.Infrastructure.Identity;
+using PropFlow.Infrastructure.Persistence;
+using PropFlow.Infrastructure.Communications;
+using Microsoft.EntityFrameworkCore;
 
 namespace PropFlow.Api;
 
@@ -33,6 +39,44 @@ public static class WorkEndpoints
             if (item is null || !await AllowsAsync(item, user, memberships, ct)) return Results.NotFound();
             return await work.TimelineAsync(id, residentVisibleOnly, ct) is { } events ? Results.Ok(events) : Results.NotFound();
         });
+        group.MapPost("/{id:guid}/on-the-way", async (Guid id, ClaimsPrincipal user, MembershipAccess memberships,
+            OperationsStore operations, CommunicationsStore comms, IOutbox outbox, ITemplateRenderer renderer,
+            TimeProvider clock, CancellationToken ct) =>
+        {
+            var work = await operations.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (work is null || !await AllowsAsync(work, user, memberships, ct)) return Results.NotFound();
+            if (work.EmployeeId != Actor(user) || work.IsTerminal) return Results.Problem(statusCode: 400, title: "Only the assigned technician can mark work on the way");
+            if (work.Status == WorkStatus.OnTheWay) return Results.Ok(new { changed = false, queued = false });
+            var now = clock.GetUtcNow();
+            var prior = work.Status;
+            try { work.ChangeStatus(WorkStatus.OnTheWay, now); }
+            catch (InvalidOperationException e) { return Results.Problem(statusCode: 400, title: e.Message); }
+            operations.Timeline.Add(TimelineEntry.Record(work.OrganizationId, Actor(user), now, "StatusChanged", "WorkItem", id,
+                prior.ToString(), WorkStatus.OnTheWay.ToString(), id, System.Text.Json.JsonSerializer.Serialize(new { oldValue = prior.ToString(), newValue = "OnTheWay" })));
+            await operations.SaveChangesAsync(ct);
+
+            // The convention-based template keeps the product decision out of this explicit workflow.
+            var template = await comms.MessageTemplates.AsNoTracking().SingleOrDefaultAsync(x => x.IsActive && x.Name == "Technician on the way", ct);
+            var queued = false;
+            if (template is not null && work.ResidentId is { } residentId)
+            {
+                var resident = await operations.Residents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == residentId, ct);
+                var channel = template.Channel;
+                if (resident is not null && resident.AllowsContact(channel))
+                {
+                    var values = new Dictionary<string, string> { ["resident.name"] = resident.FullName, ["work.title"] = work.Title, ["work.status"] = work.Status.ToString() };
+                    try
+                    {
+                        var body = renderer.Render(template.Body, values);
+                        var subject = template.Subject is null ? null : renderer.Render(template.Subject, values);
+                        var recipient = channel == MessageChannel.Sms ? resident.Phone! : resident.Email!;
+                        queued = await outbox.EnqueueAsync(new(channel, recipient, subject, body, $"work-on-the-way:{id:N}:{template.Id:N}", id, true), ct);
+                    }
+                    catch (TemplateRenderException) { }
+                }
+            }
+            return Results.Ok(new { changed = true, queued });
+        }).RequireAuthorization(Capabilities.MarkOnTheWay);
         group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Property ID is required");

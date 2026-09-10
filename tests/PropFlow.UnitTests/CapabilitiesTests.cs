@@ -60,7 +60,7 @@ public sealed class CapabilitiesTests
     [Fact]
     public void Field_roles_receive_read_only_when_bound_to_their_field_identity()
     {
-        Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
+        Assert.Equal([Capabilities.ReadWork, Capabilities.MarkOnTheWay], Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
         Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
         Assert.Empty(Capabilities.ForRole("Technician", vendorId: Guid.NewGuid()));
         Assert.Empty(Capabilities.ForRole("Vendor", employeeId: Guid.NewGuid()));
