@@ -17,7 +17,8 @@ public sealed class OutboxMessage : TenantEntity
     private OutboxMessage(Guid organizationId, Guid id) : base(organizationId, id) { }
 
     public static OutboxMessage Create(Guid organizationId, Guid id, MessageChannel channel, string recipientAddress,
-        string? subject, string body, string idempotencyKey, DateTimeOffset createdAt)
+        string? subject, string body, string idempotencyKey, DateTimeOffset createdAt,
+        Guid? workId = null, bool residentVisible = false)
     {
         var normalizedRecipient = MessageText.RequireSingleLine(recipientAddress, nameof(recipientAddress), 320);
         var normalizedBody = MessageText.RequireBody(body, nameof(body), 2000);
@@ -32,6 +33,8 @@ public sealed class OutboxMessage : TenantEntity
         if (trimmedSubject is not null)
             trimmedSubject = MessageText.RequireSingleLine(trimmedSubject, nameof(subject), 200);
 
+        if (workId == Guid.Empty) throw new ArgumentException("Work id cannot be empty.", nameof(workId));
+
         return new OutboxMessage(organizationId, id)
         {
             Channel = channel,
@@ -40,7 +43,9 @@ public sealed class OutboxMessage : TenantEntity
             Body = normalizedBody,
             IdempotencyKey = idempotencyKey.Trim(),
             Status = OutboxStatus.Pending,
-            CreatedAt = createdAt.ToUniversalTime()
+            CreatedAt = createdAt.ToUniversalTime(),
+            WorkId = workId,
+            ResidentVisible = residentVisible
         };
     }
 
@@ -49,6 +54,10 @@ public sealed class OutboxMessage : TenantEntity
     public string? Subject { get; private set; }
     public string Body { get; private set; } = "";
     public string IdempotencyKey { get; private set; } = "";
+    // The work item this message was sent about, if any, and whether it belongs on the
+    // resident-visible half of that work item's history.
+    public Guid? WorkId { get; private set; }
+    public bool ResidentVisible { get; private set; }
     public OutboxStatus Status { get; private set; }
     public int AttemptCount { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }

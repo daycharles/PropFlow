@@ -43,6 +43,7 @@ export type TimelineEntry = {
   oldValue?: string | null;
   newValue?: string | null;
   relatedObjectType?: string | null;
+  residentVisible?: boolean;
 };
 export type UpdateWorkInput = {
   title: string;

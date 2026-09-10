@@ -1,4 +1,3 @@
-using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 
 namespace PropFlow.Application.Work;
@@ -36,7 +35,7 @@ public interface IWorkOperations
     Task<WorkListPage> ListAsync(WorkListQuery query, CancellationToken cancellationToken);
     Task<WorkItem?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<uint?> VersionAsync(Guid id, CancellationToken cancellationToken);
-    Task<IReadOnlyList<TimelineEntry>?> TimelineAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, CancellationToken cancellationToken);
     Task<WorkItem> CreateAsync(CreateWorkCommand command, CancellationToken cancellationToken);
     Task<WorkWriteOutcome> UpdateAsync(Guid id, UpdateWorkCommand command, CancellationToken cancellationToken);
     Task<AssignmentOutcome> AssignVendorAsync(Guid workId, Guid vendorId, Guid actorId, uint? version, CancellationToken cancellationToken);

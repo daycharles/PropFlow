@@ -7,7 +7,9 @@ public sealed record OutboxSubmission(
     string RecipientAddress,
     string? Subject,
     string Body,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    Guid? WorkId = null,
+    bool ResidentVisible = false);
 
 public interface IOutbox
 {

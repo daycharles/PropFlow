@@ -107,10 +107,10 @@ PF-3.10 generalization above is finished. PF-4.08–PF-4.11 are web/seed/e2e wor
 | --- | --- | --- | --- | --- |
 | PF-4.01 | ✅ `Resident`/`Person` domain + occupancy (unit ↔ resident over time); migrations + RLS | domain | L | PF-3.05 |
 | PF-4.02 | ✅ Contact channels (SMS/email) with per-channel consent state on residents | domain | M | PF-4.01 |
-| PF-4.03 | Resident message templates: entity + CRUD endpoints + variable substitution (work, property, schedule fields) | api | M | PF-4.01 |
+| PF-4.03 | ✅ Resident message templates: entity + CRUD endpoints + variable substitution. `POST /api/work/{id}/message` renders a template against `resident.name`/`work.*`/`property.name`/`schedule.*` and queues it. | api | M | PF-4.01 |
 | PF-4.04 | ✅ Communication provider abstraction with mock SMS + mock email implementations (no real send) | application | M | PF-4.02 |
 | PF-4.05 | ✅ Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
-| PF-4.06 | Communication records + delivery status surfaced as timeline entries with explicit visibility | application | M | PF-4.05, PF-3.10 |
+| PF-4.06 | ✅ Communication records + delivery status surfaced as timeline entries with explicit visibility. Outbox messages carry `WorkId` + `ResidentVisible`; `GET /api/work/{id}/timeline` folds them in as `MessageQueued`/`Sent`/`Failed` (read-side merge, no cross-context write). The C11 "enqueue atomic with the work event" half is still deferred. | application | M | PF-4.05, PF-3.10 |
 | PF-4.07 | ✅ Extend bulk actions — **`add tag` carved out**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
 | PF-4.08 | Bulk "assign & notify" flow in web: vendor + schedule window + resident message + confirm + success summary | web | L | PF-4.07, PF-4.03, PF-3.20 |
 | PF-4.09 | Mobile-responsive Work list and detail; large touch targets for field use | web | M | PF-3.19 |

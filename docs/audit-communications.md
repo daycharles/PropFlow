@@ -97,9 +97,12 @@ later optimization.
 
 ### C11 — Enqueue is not atomic with the triggering Operations change (Accepted)
 
-The outbox is a separate context, so a message is not yet written in the same transaction as
-the work change that produces it. This is wired in PF-4.06 when work events start producing
-messages, together with idempotent real providers.
+The outbox is a separate context, so a message is not written in the same transaction as the
+work change that produces it. PF-4.06 added `POST /api/work/{id}/message` (a deliberate,
+user-triggered send that is atomic within its own call) and folds delivery status into the
+work timeline on read, so there is **no** cross-context write. The remaining gap is a message
+enqueued automatically from a work *status/schedule change* — that needs the M5 event wiring
+(PF-5.03) and idempotent real providers, and is where a shared transaction would matter.
 
 ### C12 — Templates do not flag an unterminated `{{` (Accepted)
 

@@ -151,8 +151,9 @@ public sealed class IsolationTests(DatabaseFixture fixture)
     {
         await using var s = await fixture.CreateScenarioAsync();
         await using (var store = s.Store(s.OrganizationA))
+        await using (var comms = s.Comms(s.OrganizationA))
         {
-            var operations = new EfWorkOperations(store, TimeProvider.System);
+            var operations = new EfWorkOperations(store, comms, TimeProvider.System);
             await Assert.ThrowsAsync<DbUpdateException>(() => operations.AssignVendorAsync(s.WorkA, s.VendorA, s.AdminB, default));
         }
         await using var verify = s.Store(s.OrganizationA);
