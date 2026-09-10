@@ -106,6 +106,17 @@ test("a scheduled window survives a reload and a re-save in local wall-clock tim
           priority: "Normal",
         }),
       })) as { item: { id: string } };
+      // Scheduling is refused outright unless the item already has a vendor or employee
+      // (WorkItem.Schedule, src/PropFlow.Domain/Work/WorkItem.cs:67), so assign one here.
+      // Without this the Confirm click surfaces "Scheduling requires a vendor or employee."
+      // and no schedule is ever stored, so the round trip under test never happens.
+      const vendors = (await json("/api/vendors/")) as { id: string }[];
+      if (vendors.length === 0) throw new Error("the demo organization has no vendor");
+      await json(`/api/work/${created.item.id}/vendor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": token },
+        body: JSON.stringify({ vendorId: vendors[0].id }),
+      });
       return created.item.id;
     },
     { runId },
