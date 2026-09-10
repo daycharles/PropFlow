@@ -301,6 +301,34 @@ serial number and model, employees on email. Every query runs through the tenant
 and row-level security, so results never cross an organization. The result set is capped at
 `limit` hits total across all types.
 
+## Attention queue (milestone 6)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/attention | `Work.Read`; the actionable attention queue for the tenant — `{ items: [...], criticalCount, warningCount, informationalCount }` |
+
+Each item is `{ workId, title, propertyId, propertyName, status, priority, dueDate, reason, severity, detail }`.
+One open work item can produce several items — one per rule it trips. Items are ordered by
+`severity` (Critical → Warning → Informational), then soonest `dueDate`, then work id. The three
+counts are of **distinct work items** at each severity, so a work item flagged both Critical and
+Warning is counted in each.
+
+`reason` is one of:
+
+| reason | severity | when |
+| --- | --- | --- |
+| `UnassignedEmergency` | Critical | `Critical` priority, open, with no vendor and no employee |
+| `SlaBreach` | Critical for `Critical`/`High`, else Warning | still `New` past the first-response budget (Critical 4h, High 24h, Normal 72h, Low 120h from creation) |
+| `Overdue` | Critical when the work is `Critical` priority, else Warning | `dueDate` in the past and not `Completed` |
+| `WaitingOnVendor` | Warning | `OnHold` with a vendor assigned and no activity for 7 days |
+| `WaitingOnResident` | Informational | `OnHold` with a resident (no vendor) and no activity for 7 days |
+| `RepeatRepair` | Warning | open work on an asset over the repeat-repair count in the policy window |
+| `UnitTurnAtRisk` | Critical when already past due, else Warning | a `UnitTurnTask` still `New`/`Assigned` and due within 5 days |
+
+`Completed`, `Cancelled` and `Draft` work never appears. The thresholds are fixed in this
+release (`AttentionThresholds`) — per-organization tuning is a follow-up. Every query runs
+through the tenant query filter and row-level security.
+
 ## Integrations (milestone 6)
 
 Adapters pull records from external property-management systems and PropFlow tracks what each
