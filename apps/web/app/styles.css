@@ -621,6 +621,80 @@ td small {
 .attention-row-meta dd {
   margin: 0;
 }
+.integration-list {
+  display: grid;
+  gap: 14px;
+}
+.integration-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.integration-card-head h2 {
+  margin: 0;
+}
+.badge.status-good {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.badge.status-bad {
+  background: var(--terracotta-tint);
+  color: var(--terracotta);
+}
+.badge.status-muted {
+  background: var(--sand);
+  color: var(--sand-ink);
+}
+.integration-card .key-values {
+  margin-top: 12px;
+}
+.integration-error {
+  margin: 10px 0 0;
+  color: var(--terracotta);
+  font-size: 13px;
+}
+.integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.integration-records {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.integration-record-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.integration-record-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.integration-record-list li.sync-failed .integration-record-state {
+  color: var(--terracotta);
+  font-weight: 700;
+}
+.integration-record-state {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.integration-connect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
 .search-trigger {
   display: inline-flex;
   align-items: center;

@@ -46,6 +46,14 @@ export function AppShell({
               Categories
             </Link>
           )}
+          {hasCapability(session, "Integrations.Manage") && (
+            <Link
+              href="/integrations"
+              aria-current={pathname === "/integrations" ? "page" : undefined}
+            >
+              Integrations
+            </Link>
+          )}
         </nav>
         <button
           className="secondary search-trigger"

@@ -152,6 +152,44 @@ export type AttentionQueue = {
   warningCount: number;
   informationalCount: number;
 };
+export type IntegrationSource = { sourceSystem: string; displayName: string };
+export type IntegrationHealth = {
+  id: string;
+  sourceSystem: string;
+  displayName: string;
+  isEnabled: boolean;
+  lastAttemptedAt?: string | null;
+  lastSucceededAt?: string | null;
+  consecutiveFailures: number;
+  lastError?: string | null;
+  trackedRecords: number;
+  failedRecords: number;
+};
+export type IntegrationSyncState = "Pending" | "Synced" | "Failed";
+export type IntegrationRecord = {
+  id: string;
+  connectionId: string;
+  kind: string;
+  externalId: string;
+  syncState: IntegrationSyncState;
+  lastSeenAt?: string | null;
+  lastError?: string | null;
+  contentHash?: string | null;
+};
+export type IntegrationRecordsPage = {
+  items: IntegrationRecord[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+};
+export type SyncReport = {
+  outcome: string;
+  seen: number;
+  added: number;
+  updated: number;
+  failed: number;
+  error?: string | null;
+};
 export type SearchHitType =
   | "Property"
   | "Building"
@@ -391,6 +429,25 @@ export const api = {
   },
   attention: {
     get: () => request<AttentionQueue>("/api/attention"),
+  },
+  integrations: {
+    sources: () => request<IntegrationSource[]>("/api/integrations/sources"),
+    list: () => request<IntegrationHealth[]>("/api/integrations"),
+    records: (id: string, page = 1, pageSize = 100) =>
+      request<IntegrationRecordsPage>(
+        `/api/integrations/${id}/records?page=${page}&pageSize=${pageSize}`,
+      ),
+    create: (input: { sourceSystem: string; displayName: string }) =>
+      mutation<{ id: string }>("/api/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    sync: (id: string) => mutation<SyncReport>(`/api/integrations/${id}/sync`, { method: "POST" }),
+    setEnabled: (id: string, enabled: boolean) =>
+      mutation<void>(`/api/integrations/${id}/${enabled ? "enable" : "disable"}`, {
+        method: "POST",
+      }),
   },
   search: (term: string, limit = 12) =>
     request<SearchHit[]>(`/api/search?q=${encodeURIComponent(term)}&limit=${limit}`),
