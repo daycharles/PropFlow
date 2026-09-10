@@ -18,7 +18,10 @@ public static class WorkEndpoints
         });
         group.MapGet("/{id:guid}", async (Guid id, IWorkOperations work, CancellationToken ct) =>
             await work.GetAsync(id, ct) is { } item ? Results.Ok(new WorkResponse(item, (await work.VersionAsync(id, ct))!.Value)) : Results.NotFound());
-        group.MapGet("/{id:guid}/timeline", async (Guid id, IWorkOperations work, CancellationToken ct) => await work.TimelineAsync(id, ct) is { } events ? Results.Ok(events) : Results.NotFound());
+        // The staff timeline includes internal activity. `residentVisibleOnly` is deliberately an
+        // opt-in projection for a future resident-scoped caller; it never promotes an internal
+        // record to resident-visible.
+        group.MapGet("/{id:guid}/timeline", async (Guid id, IWorkOperations work, CancellationToken ct, bool residentVisibleOnly = false) => await work.TimelineAsync(id, residentVisibleOnly, ct) is { } events ? Results.Ok(events) : Results.NotFound());
         group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Property ID is required");

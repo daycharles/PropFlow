@@ -68,21 +68,24 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
 
     public Task<WorkItem?> GetAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
     public Task<uint?> VersionAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().Where(x => x.Id == id).Select(x => (uint?)EF.Property<uint>(x, "Version")).SingleOrDefaultAsync(ct);
-    public async Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, CancellationToken ct)
+    public async Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, bool residentVisibleOnly, CancellationToken ct)
     {
         if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null;
 
         // An entry may hang off a work item either directly (WorkId) or only by related-object
         // reference. The OR keeps both reachable without duplicating the rows that set both.
-        var events = await store.Timeline.AsNoTracking()
+        var eventQuery = store.Timeline.AsNoTracking()
             .Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id))
+            .Where(x => !residentVisibleOnly || x.ResidentVisible);
+        var events = await eventQuery
             .Select(x => new TimelineItem(x.Id, x.EventType, x.OccurredAt, x.ActorId,
-                x.OldValue, x.NewValue, x.RelatedObjectType, x.RelatedObjectId, x.Changes, false))
+                x.OldValue, x.NewValue, x.RelatedObjectType, x.RelatedObjectId, x.Changes, x.ResidentVisible))
             .ToListAsync(ct);
 
         // Communications live in their own context; a work item's messages are folded into its
         // history on read, so there is no cross-context write.
         var messages = await comms.OutboxMessages.AsNoTracking().Where(x => x.WorkId == id)
+            .Where(x => !residentVisibleOnly || x.ResidentVisible)
             .Select(x => new { x.Id, x.Channel, x.RecipientAddress, x.Subject, x.Status, x.CreatedAt, x.LastAttemptAt, x.ProviderReference, x.FailureReason, x.ResidentVisible })
             .ToListAsync(ct);
 
@@ -99,7 +102,15 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
             m.Channel.ToString(), $"{m.Channel} to {m.RecipientAddress}",
             "OutboxMessage", m.Id,
             JsonSerializer.Serialize(new { channel = m.Channel.ToString(), recipient = m.RecipientAddress, subject = m.Subject, status = m.Status.ToString(), providerReference = m.ProviderReference, failureReason = m.FailureReason }),
-            m.ResidentVisible)));
+            m.ResidentVisible,
+            m.Status switch
+            {
+                OutboxStatus.Pending => "Queued",
+                OutboxStatus.Sending => "Sending",
+                OutboxStatus.Sent => "Sent",
+                OutboxStatus.Failed => "Failed",
+                _ => null
+            })));
 
         return events.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToList();
     }
@@ -253,7 +264,7 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
                 return true;
             case BulkWorkAction.Note:
                 store.Timeline.Add(TimelineEntry.Record(work.OrganizationId, c.ActorId, now, "WorkNote", "WorkItem", work.Id,
-                    null, c.Note, work.Id, JsonSerializer.Serialize(new { note = c.Note, visibility = c.NoteInternal ? "internal" : "resident" })));
+                    null, c.Note, work.Id, JsonSerializer.Serialize(new { note = c.Note, visibility = c.NoteInternal ? "internal" : "resident" }), residentVisible: !c.NoteInternal));
                 return true;
             case BulkWorkAction.Reopen:
                 store.Timeline.Add(TimelineEntry.From(work.Reopen(c.ActorId, now)));

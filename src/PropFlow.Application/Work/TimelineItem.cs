@@ -16,4 +16,5 @@ public sealed record TimelineItem(
     string? RelatedObjectType,
     Guid? RelatedObjectId,
     string Changes,
-    bool ResidentVisible);
+    bool ResidentVisible,
+    string? CommunicationStatus = null);

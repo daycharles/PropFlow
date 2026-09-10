@@ -136,6 +136,33 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Timeline_resident_projection_returns_only_notes_marked_resident_visible()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, _, _) = await SeedAsync(s);
+
+        var visible = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "The repair is scheduled for tomorrow", @internal = false,
+            items = new[] { Ref(a, await VersionAsync(s, a)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+
+        var internalNote = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "Vendor gate code is stored in the dispatch system", @internal = true,
+            items = new[] { Ref(a, await VersionAsync(s, a)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, internalNote.StatusCode);
+
+        var residentTimeline = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{a}/timeline?residentVisibleOnly=true");
+        var entry = Assert.Single(residentTimeline.EnumerateArray());
+        Assert.Equal("The repair is scheduled for tomorrow", entry.GetProperty("newValue").GetString());
+        Assert.True(entry.GetProperty("residentVisible").GetBoolean());
+    }
+
+    [Fact]
     public async Task Bulk_reopen_restores_terminal_work_and_refuses_a_live_item_in_the_batch()
     {
         await using var s = await fixture.CreateScenarioAsync();

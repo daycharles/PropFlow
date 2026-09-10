@@ -44,6 +44,7 @@ export type TimelineEntry = {
   newValue?: string | null;
   relatedObjectType?: string | null;
   residentVisible?: boolean;
+  communicationStatus?: "Queued" | "Sending" | "Sent" | "Failed" | null;
 };
 export type UpdateWorkInput = {
   title: string;
@@ -189,7 +190,10 @@ export const api = {
     async get(id: string) {
       return normalizeWork(await request<WorkResponse>(`/api/work/${id}`));
     },
-    timeline: (id: string) => request<TimelineEntry[]>(`/api/work/${id}/timeline`),
+    timeline: (id: string, residentVisibleOnly = false) =>
+      request<TimelineEntry[]>(
+        `/api/work/${id}/timeline${residentVisibleOnly ? "?residentVisibleOnly=true" : ""}`,
+      ),
     async update(id: string, input: UpdateWorkInput) {
       return normalizeWork(
         await mutation<WorkResponse>(`/api/work/${id}`, {
