@@ -92,6 +92,12 @@ project id `PVT_kwHOA6-kA84Bi9VY`. All ids below were read with `gh project fiel
   board's built-in workflows (*item added → Backlog*, *item closed → Done*) then move the card,
   and a `project`-scoped session reconciles anything the workflows miss. Fixing this properly =
   add Projects access to the fine-grained PAT (see `docs/followups.md`).
+- **Decision (2026-09-10):** on the macOS box we accept this rather than block on the token.
+  To keep the columns square without board access, **every `#agent-updates` task post carries a
+  board-status line** — the issue number, the column it should now be in (In progress / Done),
+  and any card that needs a manual nudge — so a human or a `project`-scoped session can
+  reconcile from Slack. A closed issue with a merged PR = Done; an assigned open issue with a
+  branch = In progress.
 
 ```bash
 # Read the board. --limit defaults to 30 and truncates silently — always pass it.
