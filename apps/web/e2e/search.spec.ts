@@ -42,8 +42,19 @@ test("the command palette opens on a shortcut and navigates to a work order", as
     { title },
   );
 
-  // Open with the keyboard shortcut, from no particular focus.
-  await page.locator("body").click();
+  // Open with the keyboard shortcut, from no particular focus: after the sign-in button
+  // unmounts, focus falls back to the body, and Ctrl+K is handled on `window` regardless
+  // (command-search.tsx:70).
+  //
+  // Park the pointer in the top-left corner first, and leave it there for the rest of the test.
+  // The palette is centred and starts 12vh down (styles.css:731-742), so the default 1280x720
+  // viewport centre — where `body.click()` used to leave the cursor — sits inside the results
+  // list. Each result highlights itself on mouseenter (command-search.tsx:208), so a
+  // pointer-boundary event fired when the list renders under a stationary cursor moves `active`
+  // off the first row and the `data-active` assertion below sees "false". That is the second
+  // failure this spec produced under parallel load, and it is a different cause from the
+  // navigation race handled further down.
+  await page.mouse.move(8, 8);
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Search PropFlow" });
   await expect(palette).toBeVisible();
@@ -61,8 +72,16 @@ test("the command palette opens on a shortcut and navigates to a work order", as
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/work/${workId}$`));
 
-  // Reopen and check Escape closes it.
-  await page.locator("body").click();
+  // Reopen and check Escape closes it — but only once the work page is actually interactive.
+  // The shortcut listener is attached in a `useEffect` (command-search.tsx:68-81) on the
+  // `AppShell` each route mounts, so between leaving the work list and the work detail page
+  // rendering there is a window with no listener at all: a `keyboard.press` that lands in it is
+  // swallowed, and Playwright then retries the *locator*, never the keypress, turning one lost
+  // key into a 10s timeout. Waiting for content the remounted page renders — its own <h1>, and
+  // the search trigger that `AppShell` renders beside `CommandSearch` (app-shell.tsx:51-66) —
+  // closes that window without re-pressing anything.
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Search/ })).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(palette).toBeVisible();
   await page.keyboard.press("Escape");
