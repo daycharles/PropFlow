@@ -56,7 +56,7 @@ Privileged operations are verbs on `tools/PropFlow.Admin` (`migrate`, `configure
 ## The merge gate
 
 **Never merge to `develop` or `main` until it is tested.** CI job `verify`
-(`.github/workflows/ci.yml:6-23`) is the protected check on `main` and runs 1–4:
+(`.github/workflows/ci.yml:6-23`) is the gate on `main` and runs 1–4:
 
 1. `dotnet build PropFlow.slnx -c Release` is clean (warnings are errors).
 2. `dotnet run --project tests/PropFlow.FoundationChecks -c Release` passes.
@@ -74,13 +74,20 @@ Two more CI jobs gate a PR and are easy to forget locally:
 The evidence each step must produce is in `.claude/rules/verification.md`. Open PRs as **draft**
 until CI passes, then mark ready.
 
+**None of those six is a *required* check.** `main` has no branch protection and no ruleset
+(verified 2026-09-10: `gh api repos/daycharles/PropFlow/branches/main/protection` → 404,
+`gh api repos/daycharles/PropFlow/rulesets` → empty), so a direct push lands and `gh pr merge`
+merges red without complaint. Read `gh pr checks <n>` yourself before merging — the gate above
+is convention, and the un-configured protection is an open item in `docs/followups.md`.
+
 **Add tests with the code, not after.** New domain/application logic gets xUnit tests in
 `tests/PropFlow.UnitTests`; database, RLS and HTTP behavior gets tests in
 `tests/PropFlow.IntegrationTests`.
 
 ## Branching and flow
 
-- **`main`** — stable and releasable, protected by `verify`. Never commit or push directly.
+- **`main`** — stable and releasable, gated by `verify` **by convention, not by GitHub**. Never
+  commit or push directly; a direct push will succeed, which is exactly why the rule matters.
 - **`develop`** — the single integration line. Feature work merges here first.
 - **Feature branches** — `feat/*`, `fix/*`, `chore/*`, `docs/*`, branched from `develop`, one
   backlog task (or a small related group) per branch, `PF-x.yy` in the branch name, in every
