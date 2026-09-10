@@ -49,12 +49,14 @@ public static class WorkEndpoints
             {
                 AssignmentOutcome.NotFound => Results.NotFound(),
                 AssignmentOutcome.Conflict => Results.Problem(statusCode: 409, title: "One or more work items changed by another user"),
+                AssignmentOutcome.NotAssignable => Results.Problem(statusCode: 400, title: TerminalTitle),
                 _ => Results.Ok(new { summary.Changed, summary.Unchanged, summary.Total })
             };
         }).RequireAuthorization(Capabilities.AssignVendor);
     }
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private static IResult AssignmentResult(AssignmentOutcome outcome) => outcome switch { AssignmentOutcome.NotFound => Results.NotFound(), AssignmentOutcome.Conflict => Results.Problem(statusCode: 409, title: "One or more work items changed by another user"), _ => Results.Ok(new { changed = outcome == AssignmentOutcome.Updated }) };
+    private const string TerminalTitle = "Completed and cancelled work cannot be assigned";
+    private static IResult AssignmentResult(AssignmentOutcome outcome) => outcome switch { AssignmentOutcome.NotFound => Results.NotFound(), AssignmentOutcome.Conflict => Results.Problem(statusCode: 409, title: "One or more work items changed by another user"), AssignmentOutcome.NotAssignable => Results.Problem(statusCode: 400, title: TerminalTitle), _ => Results.Ok(new { changed = outcome == AssignmentOutcome.Updated }) };
 }
 
 public sealed record WorkListRequest(string? Search, Guid? CategoryId, WorkStatus? Status, WorkPriority? Priority, Guid? PropertyId, Guid? SpaceId, string? Sort, bool Descending = false, int Page = 1, int PageSize = 25);

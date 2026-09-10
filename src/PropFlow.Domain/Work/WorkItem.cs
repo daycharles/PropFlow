@@ -49,14 +49,19 @@ public sealed class WorkItem : TenantEntity
         InternalNotes = Optional(internalNotes, 4000);
         ResidentVisibleNotes = Optional(residentVisibleNotes, 4000);
     }
-    public void AssignVendor(Guid vendorId) { VendorId = RequiredId(vendorId, nameof(vendorId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
+    // Completed and cancelled work takes no new assignment. The guard lives on the mutating
+    // overloads so neither the event-raising overloads nor a future caller can route around it,
+    // and it says the same thing ChangeStatus does about the same two statuses.
+    public bool IsTerminal => Status is WorkStatus.Completed or WorkStatus.Cancelled;
+    public void AssignVendor(Guid vendorId) { RefuseWhenTerminal(); VendorId = RequiredId(vendorId, nameof(vendorId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public VendorAssigned? AssignVendor(Guid vendorId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (VendorId == vendorId) return null; var prior = VendorId; AssignVendor(vendorId); return new VendorAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, vendorId); }
-    public void AssignEmployee(Guid employeeId) { EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
+    public void AssignEmployee(Guid employeeId) { RefuseWhenTerminal(); EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public EmployeeAssigned? AssignEmployee(Guid employeeId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (EmployeeId == employeeId) return null; var prior = EmployeeId; AssignEmployee(employeeId); return new EmployeeAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, employeeId); }
     public void Publish(DateTimeOffset at) { if (Status != WorkStatus.Draft) throw new InvalidOperationException("Only drafts may be published."); Status = WorkStatus.New; CreatedAt = at.ToUniversalTime(); }
     public void Schedule(DateTimeOffset start, DateTimeOffset? end) { if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
     public void ChangeStatus(WorkStatus status, DateTimeOffset at) { if (Status is WorkStatus.Completed or WorkStatus.Cancelled) throw new InvalidOperationException("Completed and cancelled work is terminal."); if (status == WorkStatus.Draft || status == Status) throw new InvalidOperationException("Invalid status transition."); Status = status; if (status == WorkStatus.Completed) CompletedAt = at.ToUniversalTime(); }
     public bool CanDelete(Guid actorId) => Status == WorkStatus.Draft && CreatorId == actorId;
+    private void RefuseWhenTerminal() { if (IsTerminal) throw new InvalidOperationException("Completed and cancelled work is terminal."); }
     private static Guid RequiredId(Guid id, string name) => id == Guid.Empty ? throw new ArgumentException("ID is required.", name) : id;
     private static string Required(string value, int max) => !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max ? value.Trim() : throw new ArgumentException($"Value must contain 1 to {max} characters.");
     private static string? Optional(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length <= max ? value.Trim() : throw new ArgumentException("Value is too long.");

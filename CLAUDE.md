@@ -123,6 +123,7 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/api.md` | The HTTP contract for M3 endpoints |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
+| `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
 
 Known stale, verified 2026-09-09 — fix them if your change touches them:
 

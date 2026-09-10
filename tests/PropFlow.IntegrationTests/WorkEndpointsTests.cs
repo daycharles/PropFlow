@@ -218,6 +218,71 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkB}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Bulk_assignment_refuses_the_whole_batch_when_any_item_is_terminal()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var cancelled = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, cancelled, "Duplicate report", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.ChangeStatus(WorkStatus.Cancelled, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        var response = await s.Client.PostAsJsonAsync("/api/work/bulk/vendor", new
+        {
+            vendorId = s.VendorA,
+            items = new[]
+            {
+                new { workId = s.WorkA, version = await VersionAsync(s, s.WorkA) },
+                new { workId = cancelled, version = await VersionAsync(s, cancelled) }
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Completed and cancelled work cannot be assigned", problem.GetProperty("title").GetString());
+
+        // All-or-nothing: the live item in the same batch must be untouched, not partially applied.
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Null((await verify.WorkItems.SingleAsync(x => x.Id == s.WorkA)).VendorId);
+        Assert.Null((await verify.WorkItems.SingleAsync(x => x.Id == cancelled)).VendorId);
+        Assert.Empty(await verify.Timeline.Where(x => x.WorkId == cancelled).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Assigning_a_vendor_or_employee_to_terminal_work_returns_400()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var completed = Guid.NewGuid(); var employee = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, completed, "Finished repair", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.ChangeStatus(WorkStatus.Completed, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            store.Employees.Add(new Employee(s.OrganizationA, employee, "Jordan Lee", "jordan@example.test", null));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+        var version = await VersionAsync(s, completed);
+
+        var vendor = await s.Client.PostAsJsonAsync($"/api/work/{completed}/vendor", new { vendorId = s.VendorA, version });
+        Assert.Equal(HttpStatusCode.BadRequest, vendor.StatusCode);
+        var employeeResponse = await s.Client.PostAsJsonAsync($"/api/work/{completed}/employee", new { employeeId = employee, version });
+        Assert.Equal(HttpStatusCode.BadRequest, employeeResponse.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        var stored = await verify.WorkItems.SingleAsync(x => x.Id == completed);
+        Assert.Null(stored.VendorId);
+        Assert.Null(stored.EmployeeId);
+        Assert.Equal(WorkStatus.Completed, stored.Status);
+    }
+
     private static async Task<uint> VersionAsync(Scenario s, Guid workId)
     {
         var json = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{workId}");
