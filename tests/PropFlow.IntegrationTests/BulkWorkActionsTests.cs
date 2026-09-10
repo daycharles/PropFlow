@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Domain.Properties;
+using PropFlow.Domain.People;
 using PropFlow.Domain.Work;
 using Xunit;
 
@@ -77,6 +78,31 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Bulk_employee_assignment_is_atomic_and_records_each_changed_item()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, b, _) = await SeedAsync(s);
+        var employee = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Employees.Add(new Employee(s.OrganizationA, employee, "Casey Lee", null, null));
+            await store.SaveChangesAsync();
+        }
+
+        var response = await s.Client.PostAsJsonAsync("/api/work/bulk/employee", new
+        {
+            employeeId = employee,
+            items = new[] { Ref(a, await VersionAsync(s, a)), Ref(b, await VersionAsync(s, b)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.All(await verify.WorkItems.Where(x => x.Id == a || x.Id == b).ToListAsync(), x => Assert.Equal(employee, x.EmployeeId));
+        Assert.Equal(2, await verify.Timeline.CountAsync(x => x.EventType == "EmployeeAssigned"));
+    }
+
+    [Fact]
     public async Task Bulk_schedule_requires_every_item_open_and_assigned()
     {
         await using var s = await fixture.CreateScenarioAsync();
@@ -133,6 +159,33 @@ public sealed class BulkWorkActionsTests(DatabaseFixture fixture)
         var entry = Assert.Single(await verify.Timeline.Where(x => x.EventType == "WorkNote").ToListAsync());
         Assert.Equal("Vendor confirmed follow-up visit", entry.NewValue);
         Assert.Contains("internal", entry.Changes);
+    }
+
+    [Fact]
+    public async Task Timeline_resident_projection_returns_only_notes_marked_resident_visible()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var (a, _, _) = await SeedAsync(s);
+
+        var visible = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "The repair is scheduled for tomorrow", @internal = false,
+            items = new[] { Ref(a, await VersionAsync(s, a)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+
+        var internalNote = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "Vendor gate code is stored in the dispatch system", @internal = true,
+            items = new[] { Ref(a, await VersionAsync(s, a)) }
+        });
+        Assert.Equal(HttpStatusCode.OK, internalNote.StatusCode);
+
+        var residentTimeline = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{a}/timeline?residentVisibleOnly=true");
+        var entry = Assert.Single(residentTimeline.EnumerateArray());
+        Assert.Equal("The repair is scheduled for tomorrow", entry.GetProperty("newValue").GetString());
+        Assert.True(entry.GetProperty("residentVisible").GetBoolean());
     }
 
     [Fact]

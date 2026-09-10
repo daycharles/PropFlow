@@ -29,7 +29,7 @@ function CategoriesContent({ session }: { session: Session }) {
             {error}
           </p>
         ) : (
-          <ul>
+          <ul className="category-list">
             {categories.map((category) => (
               <li key={category.id}>
                 {category.name}

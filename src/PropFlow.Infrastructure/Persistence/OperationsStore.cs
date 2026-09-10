@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
 using PropFlow.Domain.Assets;
+using PropFlow.Domain.Automation;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Timeline;
@@ -25,6 +26,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
+    public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
@@ -111,6 +113,15 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.UserId, x.Name }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.UserId, x.IsDefault });
         });
+        model.Entity<AutomationRule>(entity =>
+        {
+            entity.ToTable("AutomationRules");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Conditions).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.Actions).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.IsEnabled, x.Trigger });
+        });
         model.Entity<TimelineEntry>(entity =>
         {
             entity.ToTable("Timeline");
@@ -119,6 +130,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.RelatedObjectType).HasMaxLength(100);
             entity.Property(x => x.OldValue).HasMaxLength(4000);
             entity.Property(x => x.NewValue).HasMaxLength(4000);
+            entity.Property(x => x.ResidentVisible).HasDefaultValue(false);
             entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.OccurredAt });

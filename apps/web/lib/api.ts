@@ -44,6 +44,7 @@ export type TimelineEntry = {
   newValue?: string | null;
   relatedObjectType?: string | null;
   residentVisible?: boolean;
+  communicationStatus?: "Queued" | "Sending" | "Sent" | "Failed" | null;
 };
 export type UpdateWorkInput = {
   title: string;
@@ -206,7 +207,10 @@ export const api = {
     async get(id: string) {
       return normalizeWork(await request<WorkResponse>(`/api/work/${id}`));
     },
-    timeline: (id: string) => request<TimelineEntry[]>(`/api/work/${id}/timeline`),
+    timeline: (id: string, residentVisibleOnly = false) =>
+      request<TimelineEntry[]>(
+        `/api/work/${id}/timeline${residentVisibleOnly ? "?residentVisibleOnly=true" : ""}`,
+      ),
     async update(id: string, input: UpdateWorkInput) {
       return normalizeWork(
         await mutation<WorkResponse>(`/api/work/${id}`, {
@@ -238,6 +242,22 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vendorId: input.vendorId, items: bulkItems(input) }),
       }),
+    bulkAssignEmployee: (input: {
+      workIds: string[];
+      employeeId: string;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/employee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: input.employeeId, items: bulkItems(input) }),
+      }),
+    bulkSendResidentMessage: (input: { workIds: string[]; templateId: string }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
     bulkSchedule: (input: {
       workIds: string[];
       scheduledStart: string;
@@ -267,6 +287,9 @@ export const api = {
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },
+  messageTemplates: {
+    available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
+  },
   categories: { list: () => request<Category[]>("/api/categories/") },
   savedViews: {
     list: () => request<SavedView[]>("/api/saved-views/"),

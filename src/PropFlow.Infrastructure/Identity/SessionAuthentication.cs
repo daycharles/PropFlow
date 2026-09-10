@@ -71,7 +71,7 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
     {
         yield return new Claim(TenantAccess.OrganizationClaim, membership.OrganizationId.ToString());
         yield return new Claim("organization_role", membership.Role);
-        foreach (var capability in Capabilities.ForRole(membership.Role))
+        foreach (var capability in Capabilities.ForRole(membership.Role, membership.EmployeeId, membership.VendorId))
             yield return new Claim(TenantAccess.CapabilityClaim, capability);
     }
 }

@@ -18,13 +18,16 @@ public static class Capabilities
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets];
 
-    public static IReadOnlyList<string> ForRole(string role) => role switch
+    public static IReadOnlyList<string> ForRole(string role, Guid? employeeId = null, Guid? vendorId = null) => role switch
     {
         "Organization Admin" or "Property Manager" => All,
         "Regional Manager" => CategoryManagement,
         "Maintenance Supervisor" => WorkManagement,
         "Read Only" => [ReadWork],
-        // Field/vendor access needs assignment-level scoping in milestone 3. Deny until implemented.
+        // A field role is not usable until the control-plane membership names the employee/vendor
+        // it represents. Endpoint scope checks then narrow this capability to assigned work.
+        "Technician" when employeeId is not null => [ReadWork],
+        "Vendor" when vendorId is not null => [ReadWork],
         "Technician" or "Vendor" => [],
         _ => []
     };

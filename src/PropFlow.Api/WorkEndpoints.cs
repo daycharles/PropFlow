@@ -2,6 +2,7 @@ using System.Security.Claims;
 using PropFlow.Application;
 using PropFlow.Application.Work;
 using PropFlow.Domain.Work;
+using PropFlow.Infrastructure.Identity;
 
 namespace PropFlow.Api;
 
@@ -10,15 +11,28 @@ public static class WorkEndpoints
     public static void MapWorkEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/work").RequireAuthorization(Capabilities.ReadWork);
-        group.MapGet("/", async ([AsParameters] WorkListRequest request, IWorkOperations work, CancellationToken ct) =>
+        group.MapGet("/", async ([AsParameters] WorkListRequest request, ClaimsPrincipal user, MembershipAccess memberships, IWorkOperations work, CancellationToken ct) =>
         {
             var page = Math.Max(1, request.Page); var size = Math.Clamp(request.PageSize, 1, 100);
-            var results = await work.ListAsync(new(request.Search, request.CategoryId, request.Status, request.Priority, request.PropertyId, request.SpaceId, request.Sort, request.Descending, page, size), ct);
+            var (scope, subject) = await ScopeAsync(user, memberships, ct);
+            var results = await work.ListAsync(new(request.Search, request.CategoryId, request.Status, request.Priority, request.PropertyId, request.SpaceId, request.Sort, request.Descending, page, size, scope, subject), ct);
             return Results.Ok(new { results.Items, results.TotalCount, results.Page, results.PageSize });
         });
-        group.MapGet("/{id:guid}", async (Guid id, IWorkOperations work, CancellationToken ct) =>
-            await work.GetAsync(id, ct) is { } item ? Results.Ok(new WorkResponse(item, (await work.VersionAsync(id, ct))!.Value)) : Results.NotFound());
-        group.MapGet("/{id:guid}/timeline", async (Guid id, IWorkOperations work, CancellationToken ct) => await work.TimelineAsync(id, ct) is { } events ? Results.Ok(events) : Results.NotFound());
+        group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, MembershipAccess memberships, IWorkOperations work, CancellationToken ct) =>
+        {
+            var item = await work.GetAsync(id, ct);
+            return item is not null && await AllowsAsync(item, user, memberships, ct)
+                ? Results.Ok(new WorkResponse(item, (await work.VersionAsync(id, ct))!.Value)) : Results.NotFound();
+        });
+        // The staff timeline includes internal activity. `residentVisibleOnly` is deliberately an
+        // opt-in projection for a future resident-scoped caller; it never promotes an internal
+        // record to resident-visible.
+        group.MapGet("/{id:guid}/timeline", async (Guid id, ClaimsPrincipal user, MembershipAccess memberships, IWorkOperations work, CancellationToken ct, bool residentVisibleOnly = false) =>
+        {
+            var item = await work.GetAsync(id, ct);
+            if (item is null || !await AllowsAsync(item, user, memberships, ct)) return Results.NotFound();
+            return await work.TimelineAsync(id, residentVisibleOnly, ct) is { } events ? Results.Ok(events) : Results.NotFound();
+        });
         group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
         {
             if (request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Property ID is required");
@@ -51,6 +65,12 @@ public static class WorkEndpoints
             var summary = await work.BulkAssignVendorAsync(Refs(request.Items!), request.VendorId, Actor(user), ct);
             return BulkResult(summary, TerminalTitle);
         }).RequireAuthorization(Capabilities.AssignVendor);
+        group.MapPost("/bulk/employee", async (BulkAssignEmployeeRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
+        {
+            if (request.EmployeeId == Guid.Empty || !ValidBatch(request.Items)) return Results.Problem(statusCode: 400, title: "Employee and 1 to 100 work items are required");
+            var summary = await work.BulkAssignEmployeeAsync(Refs(request.Items!), request.EmployeeId, Actor(user), ct);
+            return BulkResult(summary, TerminalTitle);
+        }).RequireAuthorization(Capabilities.AssignEmployee);
 
         // PF-4.07 — the rest of the bulk toolbar. Each is bounded (1–100), all-or-nothing, and
         // checks every item's client version; one timeline entry per item that actually changes.
@@ -97,6 +117,23 @@ public static class WorkEndpoints
         }).RequireAuthorization(Capabilities.UpdateWork);
     }
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private static async Task<(WorkAccessScope? Scope, WorkScopeSubject? Subject)> ScopeAsync(ClaimsPrincipal user, MembershipAccess memberships, CancellationToken ct)
+    {
+        var role = user.FindFirstValue("organization_role");
+        var subject = role switch
+        {
+            "Technician" => WorkScopeSubject.Technician,
+            "Vendor" => WorkScopeSubject.Vendor,
+            _ => (WorkScopeSubject?)null
+        };
+        if (subject is null) return (null, null);
+        return (await memberships.WorkScopeAsync(Actor(user), TenantAccess.Resolve(user), ct), subject);
+    }
+    private static async Task<bool> AllowsAsync(WorkItem item, ClaimsPrincipal user, MembershipAccess memberships, CancellationToken ct)
+    {
+        var (scope, subject) = await ScopeAsync(user, memberships, ct);
+        return subject is null || scope!.Allows(item.PropertyId, item.EmployeeId, item.VendorId, subject.Value);
+    }
     private const string TerminalTitle = "Completed and cancelled work cannot be assigned";
     private static bool ValidBatch(List<BulkWorkVersion>? items) =>
         items is { Count: > 0 and <= 100 } && items.All(i => i is not null && i.WorkId != Guid.Empty);
@@ -117,6 +154,7 @@ public sealed record AssignVendorRequest(Guid VendorId, uint? Version = null);
 public sealed record AssignEmployeeRequest(Guid EmployeeId, uint? Version = null);
 public sealed record BulkWorkVersion(Guid WorkId, uint Version);
 public sealed record BulkAssignVendorRequest(Guid VendorId, List<BulkWorkVersion>? Items);
+public sealed record BulkAssignEmployeeRequest(Guid EmployeeId, List<BulkWorkVersion>? Items);
 public sealed record BulkStatusRequest(WorkStatus Status, List<BulkWorkVersion>? Items);
 public sealed record BulkPriorityRequest(WorkPriority Priority, List<BulkWorkVersion>? Items);
 public sealed record BulkScheduleRequest(DateTimeOffset ScheduledStart, DateTimeOffset? ScheduledEnd, List<BulkWorkVersion>? Items);

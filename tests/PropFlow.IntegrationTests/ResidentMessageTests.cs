@@ -58,6 +58,7 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
         var queued = Assert.Single(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageQueued");
         Assert.True(queued.GetProperty("residentVisible").GetBoolean());
         Assert.Contains("Sms", queued.GetProperty("newValue").GetString());
+        Assert.Equal("Queued", queued.GetProperty("communicationStatus").GetString());
 
         // the enqueued body was rendered against the work + resident
         await using (var comms = s.Comms(s.OrganizationA))
@@ -74,7 +75,8 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
             Assert.Equal(1, await new OutboxProcessor(comms, senders, TimeProvider.System, new() { RetryDelay = TimeSpan.Zero })
                 .ProcessPendingAsync(default));
 
-        Assert.Contains(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageSent");
+        var sent = Assert.Single(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageSent");
+        Assert.Equal("Sent", sent.GetProperty("communicationStatus").GetString());
         Assert.DoesNotContain(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageQueued");
     }
 
@@ -127,6 +129,27 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
 
         await using var comms = s.Comms(s.OrganizationA);
         Assert.Equal(1, await comms.OutboxMessages.CountAsync(x => x.WorkId == workId));
+    }
+
+    [Fact]
+    public async Task Bulk_messages_validate_every_recipient_then_queue_the_whole_batch()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var first = await SeedWorkWithResidentAsync(s);
+        var second = await SeedWorkWithResidentAsync(s);
+        var templateId = await SeedSmsTemplateAsync(s);
+
+        var accepted = await s.Client.PostAsJsonAsync("/api/work/bulk/message", new { templateId, workIds = new[] { first, second } });
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        await using (var comms = s.Comms(s.OrganizationA))
+            Assert.Equal(2, await comms.OutboxMessages.CountAsync(x => x.WorkId == first || x.WorkId == second));
+
+        // Mixing an item without a resident into a batch must not enqueue a partial message.
+        var refused = await s.Client.PostAsJsonAsync("/api/work/bulk/message", new { templateId, workIds = new[] { first, s.WorkA } });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        await using var verify = s.Comms(s.OrganizationA);
+        Assert.Equal(2, await verify.OutboxMessages.CountAsync());
     }
 
     [Fact]
