@@ -5,10 +5,12 @@ const organizationSlug = "tidewater-demo";
 const email = "demo-admin@tidewater.example.test";
 
 // PF-6.09: keyboard-first global search. Ctrl/Cmd+K opens the palette anywhere; typing queries
-// /api/search; Enter opens the highlighted result.
+// /api/search; Enter opens the highlighted result, Escape closes.
 test("the command palette opens on a shortcut and navigates to a work order", async ({ page }) => {
-  const runId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-  const title = `E2E search ${runId} rooftop unit`;
+  // A distinctive token nothing else in the demo data (or a sibling spec's run) contains, so the
+  // work order is the only hit and is unambiguously first.
+  const token = `zzqx${Math.random().toString(36).slice(2, 12)}`;
+  const title = `${token} palette target`;
 
   await page.goto("/");
   await page.getByLabel("Organization slug").fill(organizationSlug);
@@ -46,15 +48,20 @@ test("the command palette opens on a shortcut and navigates to a work order", as
   const palette = page.getByRole("dialog", { name: "Search PropFlow" });
   await expect(palette).toBeVisible();
 
-  await page.getByPlaceholder("Search work, assets, people, places…").fill(runId);
+  await page.getByPlaceholder("Search work, assets, people, places…").fill(token);
 
-  const result = palette.getByRole("option", { name: new RegExp(`Work.*${runId}`) });
-  await expect(result).toBeVisible();
+  // The first option is highlighted by default (the keyboard story), and the exact-substring
+  // match on the title makes it our work order.
+  const first = palette.getByRole("option").first();
+  await expect(first).toHaveAttribute("data-active", "true");
+  await expect(first).toContainText(token);
+  await expect(first).toContainText("Work");
 
+  // Enter opens the highlighted result.
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/work/${workId}$`));
 
-  // Escape closes it again.
+  // Reopen and check Escape closes it.
   await page.locator("body").click();
   await page.keyboard.press("Control+k");
   await expect(palette).toBeVisible();
