@@ -33,6 +33,9 @@ public sealed record SyncReport(
 
 public sealed record CreateConnectionCommand(string SourceSystem, string DisplayName);
 
+// One page of a connection's tracked external records, newest sighting first.
+public sealed record RecordsPage(IReadOnlyList<ExternalRecordLink> Items, int TotalCount, int Page, int PageSize);
+
 public interface IIntegrationOperations
 {
     Task<IReadOnlyList<IntegrationConnectionHealth>> ListAsync(CancellationToken cancellationToken);
@@ -41,7 +44,8 @@ public interface IIntegrationOperations
     Task<IntegrationWriteOutcome> SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken);
     Task<SyncReport> SyncAsync(Guid id, CancellationToken cancellationToken);
 
-    // The external records a connection is tracking, newest sighting first — feeds the
-    // per-connection detail view and lets tests assert what a pull recorded.
-    Task<IReadOnlyList<ExternalRecordLink>?> RecordsAsync(Guid id, CancellationToken cancellationToken);
+    // A page of the external records a connection is tracking, newest sighting first — feeds the
+    // per-connection detail view and lets tests assert what a pull recorded. Null when the
+    // connection does not exist.
+    Task<RecordsPage?> RecordsAsync(Guid id, int page, int pageSize, CancellationToken cancellationToken);
 }

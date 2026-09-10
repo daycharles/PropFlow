@@ -29,6 +29,7 @@ public static class WorkEndpoints
         {
             if (id == Guid.Empty || request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Work and property IDs are required");
             try { var outcome = await work.UpdateAsync(id, request.ToCommand(Actor(user)), ct); return outcome switch { WorkWriteOutcome.NotFound => Results.NotFound(), WorkWriteOutcome.Conflict => Results.Problem(statusCode: 409, title: "Work item was changed by another user"), _ => Results.Ok(new WorkResponse((await work.GetAsync(id, ct))!, (await work.VersionAsync(id, ct))!.Value)) }; }
+            catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } catch (InvalidOperationException e) { return Results.Problem(statusCode: 400, title: e.Message); }
         }).RequireAuthorization(Capabilities.UpdateWork);
         group.MapPost("/{id:guid}/vendor", async (Guid id, AssignVendorRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
