@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using PropFlow.Application.Communications;
+using PropFlow.Domain.Communications;
 using PropFlow.Infrastructure.Persistence;
 
 namespace PropFlow.Infrastructure.Communications;
@@ -32,6 +33,11 @@ public sealed class OutboxRelay(IConfiguration configuration, IEnumerable<IMessa
         foreach (var organization in organizations)
         {
             await using var store = DatabaseProvisioner.CreateCommunicationsStore(connection, organization);
+            var retentionCutoff = clock.GetUtcNow() - options.RetentionPeriod;
+            await store.OutboxMessages
+                .Where(x => x.CreatedAt < retentionCutoff &&
+                    (x.Status == OutboxStatus.Sent || x.Status == OutboxStatus.Failed))
+                .ExecuteDeleteAsync(cancellationToken);
             var count = await new OutboxProcessor(store, senders, clock, options).ProcessPendingAsync(cancellationToken);
             if (count > 0)
                 logger.LogInformation("Delivered {Count} outbox message(s) for organization {Organization}.", count, organization);

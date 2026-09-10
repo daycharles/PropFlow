@@ -17,4 +17,7 @@ public sealed class CommunicationsOptions
 
     // How long a claimed (Sending) message may sit before another dispatcher reclaims it.
     public TimeSpan StaleClaimTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    // Terminal message payloads are retained for audit/replay visibility, then removed.
+    public TimeSpan RetentionPeriod { get; set; } = TimeSpan.FromDays(30);
 }
