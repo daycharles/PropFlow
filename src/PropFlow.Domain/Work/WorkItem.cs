@@ -30,7 +30,7 @@ public sealed class WorkItem : TenantEntity
     public decimal? Cost { get; private set; }
     public string? InternalNotes { get; private set; }
     public string? ResidentVisibleNotes { get; private set; }
-    public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
+    public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { RefuseWhenTerminal(); Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
     public void SetLocation(Guid propertyId, Guid? buildingId, Guid? spaceId, Guid? residentId)
     {
         PropertyId = RequiredId(propertyId, nameof(propertyId));
@@ -49,14 +49,31 @@ public sealed class WorkItem : TenantEntity
         InternalNotes = Optional(internalNotes, 4000);
         ResidentVisibleNotes = Optional(residentVisibleNotes, 4000);
     }
-    public void AssignVendor(Guid vendorId) { VendorId = RequiredId(vendorId, nameof(vendorId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
+    // Completed and cancelled work takes no new assignment. The guard lives on the mutating
+    // overloads so neither the event-raising overloads nor a future caller can route around it,
+    // and it says the same thing ChangeStatus does about the same two statuses.
+    public bool IsTerminal => Status is WorkStatus.Completed or WorkStatus.Cancelled;
+    public void AssignVendor(Guid vendorId) { RefuseWhenTerminal(); VendorId = RequiredId(vendorId, nameof(vendorId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public VendorAssigned? AssignVendor(Guid vendorId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (VendorId == vendorId) return null; var prior = VendorId; AssignVendor(vendorId); return new VendorAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, vendorId); }
-    public void AssignEmployee(Guid employeeId) { EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
+    public void AssignEmployee(Guid employeeId) { RefuseWhenTerminal(); EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public EmployeeAssigned? AssignEmployee(Guid employeeId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (EmployeeId == employeeId) return null; var prior = EmployeeId; AssignEmployee(employeeId); return new EmployeeAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, employeeId); }
     public void Publish(DateTimeOffset at) { if (Status != WorkStatus.Draft) throw new InvalidOperationException("Only drafts may be published."); Status = WorkStatus.New; CreatedAt = at.ToUniversalTime(); }
-    public void Schedule(DateTimeOffset start, DateTimeOffset? end) { if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
+    public void Schedule(DateTimeOffset start, DateTimeOffset? end) { RefuseWhenTerminal(); if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
     public void ChangeStatus(WorkStatus status, DateTimeOffset at) { if (Status is WorkStatus.Completed or WorkStatus.Cancelled) throw new InvalidOperationException("Completed and cancelled work is terminal."); if (status == WorkStatus.Draft || status == Status) throw new InvalidOperationException("Invalid status transition."); Status = status; if (status == WorkStatus.Completed) CompletedAt = at.ToUniversalTime(); }
+    public void SetPriority(WorkPriority priority) { RefuseWhenTerminal(); Priority = priority; }
+    // The one sanctioned way out of a terminal state: an explicit, audited reopen. Everything
+    // else (Edit, Schedule, ChangeStatus, the assignment overloads) still refuses terminal work.
+    public WorkReopened Reopen(Guid actorId, DateTimeOffset at)
+    {
+        if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId));
+        if (!IsTerminal) throw new InvalidOperationException("Only completed or cancelled work can be reopened.");
+        var from = Status;
+        Status = VendorId is not null || EmployeeId is not null ? WorkStatus.Assigned : WorkStatus.New;
+        CompletedAt = null;
+        return new WorkReopened(Guid.NewGuid(), OrganizationId, actorId, at.ToUniversalTime(), Id, from, Status);
+    }
     public bool CanDelete(Guid actorId) => Status == WorkStatus.Draft && CreatorId == actorId;
+    private void RefuseWhenTerminal() { if (IsTerminal) throw new InvalidOperationException("Completed and cancelled work is terminal."); }
     private static Guid RequiredId(Guid id, string name) => id == Guid.Empty ? throw new ArgumentException("ID is required.", name) : id;
     private static string Required(string value, int max) => !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max ? value.Trim() : throw new ArgumentException($"Value must contain 1 to {max} characters.");
     private static string? Optional(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length <= max ? value.Trim() : throw new ArgumentException("Value is too long.");
@@ -64,3 +81,4 @@ public sealed class WorkItem : TenantEntity
 
 public sealed record VendorAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousVendorId, Guid VendorId) : IDomainEvent;
 public sealed record EmployeeAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousEmployeeId, Guid EmployeeId) : IDomainEvent;
+public sealed record WorkReopened(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, WorkStatus PreviousStatus, WorkStatus NewStatus) : IDomainEvent;

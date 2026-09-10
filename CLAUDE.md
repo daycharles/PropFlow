@@ -123,6 +123,7 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/api.md` | The HTTP contract for M3 endpoints |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
+| `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
 
 Known stale, verified 2026-09-09 — fix them if your change touches them:
 
@@ -132,10 +133,9 @@ Known stale, verified 2026-09-09 — fix them if your change touches them:
 - `docs/architecture.md:5,10` still describe the frontend as "planned for milestone 3".
 - `docs/architecture.md:29` under-states the role→capability map; `Capabilities.cs:17-26` is the
   authority.
-- `tools/PropFlow.Admin/Program.cs:21` prints "Identity and operations migrations applied" while
-  `DatabaseProvisioner.MigrateAsync` migrates **three** contexts (`DatabaseProvisioner.cs:14-19`).
-- `docs/local-development.md:42` says migration order is "Identity, then Operations" — it is
-  Identity, Operations, Communications.
+- `DatabaseProvisioner.MigrateAsync` migrates **four** contexts (identity, operations,
+  communications, integrations) — keep the `PropFlow.Admin` migrate message and any prose count
+  in step when a fifth is added.
 
 Counts in prose rot. Re-measure them; do not propagate them.
 `docs/backlog.md` is the task source. GitHub milestones `M3`–`M7`, epic issues `#1`–`#5`,

@@ -75,6 +75,7 @@ populated milestone-2 database.
 | PF-3.24 | e2e (Playwright): the full vertical-slice workflow against seeded data, in CI | tests | M | PF-3.20, PF-3.22 |
 | PF-3.25 | CI: add web install/lint/build/unit steps and the Playwright job to `.github/workflows/ci.yml` | ci | S | PF-3.01 |
 | PF-3.26 | Update `docs/api.md` and `docs/local-development.md` for the new endpoints and the web dev server | chore | S | PF-3.13 |
+| PF-3.27 | Refuse vendor/employee assignment on `Completed` and `Cancelled` work, and write the demo script | fix | S | PF-3.16, PF-3.20 |
 
 ---
 
@@ -102,7 +103,7 @@ wiring. PF-4.06–4.11 remain (they need more of milestone 3).
 | PF-4.04 | Communication provider abstraction with mock SMS + mock email implementations (no real send) | application | M | PF-4.02 |
 | PF-4.05 | Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
 | PF-4.06 | Communication records + delivery status surfaced as timeline entries with explicit visibility | application | M | PF-4.05, PF-3.10 |
-| PF-4.07 | Extend bulk actions: schedule, change status, change priority, add note, add tag, close, reopen — bounded + all-or-nothing | api | L | PF-3.16 |
+| PF-4.07 | ⚠️ Extend bulk actions — **done bar `add tag`**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
 | PF-4.08 | Bulk "assign & notify" flow in web: vendor + schedule window + resident message + confirm + success summary | web | L | PF-4.07, PF-4.03, PF-3.20 |
 | PF-4.09 | Mobile-responsive Work list and detail; large touch targets for field use | web | M | PF-3.19 |
 | PF-4.10 | Seed: Tidewater Residential Management — 3 properties, ~10 buildings, ~80 spaces, ~70 residents, 6 vendors, 5 employees, ~100 work items, ~60 assets, ≥18 pest-control requests, mix of emergency/overdue/completed | infra | M | PF-4.01, PF-3.22 |
@@ -152,7 +153,7 @@ entities, and the integration abstraction exists (mocked).
 | PF-6.07 | "Needs Your Attention" home screen: Critical / Warning / Informational cards, each click-through to a filtered work view | web | L | PF-6.06 |
 | PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
 | PF-6.09 | Global search UI (keyboard-first) in web | web | M | PF-6.08 |
-| PF-6.10 | Integration adapter abstraction: canonical Property/Space/Person-Occupancy/Work/Asset objects, external ID + source system + last sync + sync status tracking; one mock adapter | application | L | PF-6.01 |
+| PF-6.10 | ✅ Integration adapter abstraction: `IIntegrationAdapter` + canonical Property/Space/Occupancy/WorkOrder/Asset records, `MockIntegrationAdapter`, `integrations` schema (Connections + RecordLinks) with forced RLS, external-id / source-system / last-sync / per-record sync-state tracking, `/api/integrations` (behind `Integrations.Manage`). Reconciling external records into the domain tables is deferred — see `docs/followups.md`. | application | L | PF-6.01 |
 | PF-6.11 | Integration Health screen foundation: connected system, status, last successful sync, failure count, unresolved conflicts | web | M | PF-6.10 |
 | PF-6.12 | Keep unusable reports/integrations out of main navigation until functional | web | S | PF-6.11 |
 | PF-6.13 | e2e: repeat HVAC repair demo workflow in CI | tests | M | PF-6.05 |

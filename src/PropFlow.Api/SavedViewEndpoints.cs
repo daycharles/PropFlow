@@ -22,6 +22,8 @@ public static class SavedViewEndpoints
             try
             {
                 var actor = Actor(user);
+                if (await store.SavedViews.CountAsync(x => x.UserId == actor, ct) >= MaxPerUser)
+                    return Results.Problem(statusCode: 409, title: $"A user may keep at most {MaxPerUser} saved views");
                 if (request.IsDefault) await ClearDefaultAsync(store, actor, null, ct);
                 var view = new SavedView(store.OrganizationId, Guid.NewGuid(), actor, request.Name, request.Filters.GetRawText(), request.Columns.GetRawText(), request.IsDefault);
                 store.SavedViews.Add(view); await store.SaveChangesAsync(ct);
@@ -47,6 +49,7 @@ public static class SavedViewEndpoints
         });
     }
 
+    private const int MaxPerUser = 100;
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static Task<SavedView?> Owned(OperationsStore store, Guid id, Guid actor, CancellationToken ct) =>
         store.SavedViews.SingleOrDefaultAsync(x => x.Id == id && x.UserId == actor, ct);

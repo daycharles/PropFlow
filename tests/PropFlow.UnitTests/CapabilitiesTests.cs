@@ -32,6 +32,16 @@ public sealed class CapabilitiesTests
     }
 
     [Fact]
+    public void Only_admin_and_property_manager_manage_integrations()
+    {
+        Assert.Contains(Capabilities.ManageIntegrations, Capabilities.ForRole("Organization Admin"));
+        Assert.Contains(Capabilities.ManageIntegrations, Capabilities.ForRole("Property Manager"));
+        Assert.DoesNotContain(Capabilities.ManageIntegrations, Capabilities.ForRole("Regional Manager"));
+        Assert.DoesNotContain(Capabilities.ManageIntegrations, Capabilities.ForRole("Maintenance Supervisor"));
+        Assert.DoesNotContain(Capabilities.ManageIntegrations, Capabilities.ForRole("Read Only"));
+    }
+
+    [Fact]
     public void Read_only_role_can_only_read_work()
     {
         Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Read Only"));

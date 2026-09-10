@@ -21,9 +21,15 @@ public sealed class SavedView(Guid organizationId, Guid id, Guid userId, string 
     private static string NormalizeName(string name) => !string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 100
         ? name.Trim() : throw new ArgumentException("View name must contain 1 to 100 characters.", nameof(name));
 
+    // A filter or column set is a handful of fields. Cap it so a saved view cannot be used to
+    // stash an arbitrary blob (it is stored and returned on every list call).
+    public const int MaxDefinitionLength = 8 * 1024;
+
     private static string RequireJson(string value, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("View definition is required.", parameterName);
+        if (value.Length > MaxDefinitionLength)
+            throw new ArgumentException($"View definition must be at most {MaxDefinitionLength} characters.", parameterName);
         try { System.Text.Json.JsonDocument.Parse(value); return value; }
         catch (System.Text.Json.JsonException) { throw new ArgumentException("View definition must be valid JSON.", parameterName); }
     }

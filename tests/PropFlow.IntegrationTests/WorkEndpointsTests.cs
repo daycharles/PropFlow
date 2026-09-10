@@ -218,6 +218,158 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkB}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Bulk_assignment_refuses_the_whole_batch_when_any_item_is_terminal()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var cancelled = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, cancelled, "Duplicate report", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.ChangeStatus(WorkStatus.Cancelled, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        var response = await s.Client.PostAsJsonAsync("/api/work/bulk/vendor", new
+        {
+            vendorId = s.VendorA,
+            items = new[]
+            {
+                new { workId = s.WorkA, version = await VersionAsync(s, s.WorkA) },
+                new { workId = cancelled, version = await VersionAsync(s, cancelled) }
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Completed and cancelled work cannot be assigned", problem.GetProperty("title").GetString());
+
+        // All-or-nothing: the live item in the same batch must be untouched, not partially applied.
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Null((await verify.WorkItems.SingleAsync(x => x.Id == s.WorkA)).VendorId);
+        Assert.Null((await verify.WorkItems.SingleAsync(x => x.Id == cancelled)).VendorId);
+        Assert.Empty(await verify.Timeline.Where(x => x.WorkId == cancelled).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Assigning_a_vendor_or_employee_to_terminal_work_returns_400()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var completed = Guid.NewGuid(); var employee = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, completed, "Finished repair", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.ChangeStatus(WorkStatus.Completed, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            store.Employees.Add(new Employee(s.OrganizationA, employee, "Jordan Lee", "jordan@example.test", null));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+        var version = await VersionAsync(s, completed);
+
+        var vendor = await s.Client.PostAsJsonAsync($"/api/work/{completed}/vendor", new { vendorId = s.VendorA, version });
+        Assert.Equal(HttpStatusCode.BadRequest, vendor.StatusCode);
+        var employeeResponse = await s.Client.PostAsJsonAsync($"/api/work/{completed}/employee", new { employeeId = employee, version });
+        Assert.Equal(HttpStatusCode.BadRequest, employeeResponse.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        var stored = await verify.WorkItems.SingleAsync(x => x.Id == completed);
+        Assert.Null(stored.VendorId);
+        Assert.Null(stored.EmployeeId);
+        Assert.Equal(WorkStatus.Completed, stored.Status);
+    }
+
+    [Fact]
+    public async Task Creating_or_updating_work_rejects_a_child_reference_outside_the_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        Guid categoryId = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Categories.Add(new WorkCategory(s.OrganizationA, categoryId, "Pests", 1));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        // A category id that belongs to no one -> 400, nothing created.
+        var bad = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, categoryId = Guid.NewGuid()
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        // Org B's space id -> also 400 (tenant filter makes it read as unknown).
+        var foreign = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, spaceId = s.SpaceB
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
+
+        // A real category from this tenant -> created.
+        var ok = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, categoryId
+        });
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(1, await verify.WorkItems.CountAsync(x => x.Title == "Roach treatment"));
+    }
+
+    [Fact]
+    public async Task Updating_terminal_work_returns_400_and_cannot_reopen_it()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var completed = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, completed, "Finished repair", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.AssignVendor(s.VendorA);
+            work.ChangeStatus(WorkStatus.Completed, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+        var version = await VersionAsync(s, completed);
+
+        var response = await s.Client.PutAsJsonAsync($"/api/work/{completed}", new
+        {
+            title = "Finished repair", description = (string?)null, categoryId = (Guid?)null,
+            priority = "Normal", propertyId = s.PropertyA, buildingId = (Guid?)null, spaceId = (Guid?)null,
+            residentId = (Guid?)null, dueDate = (string?)null, cost = (decimal?)null,
+            internalNotes = (string?)null, residentVisibleNotes = (string?)null, status = (string?)null,
+            scheduledStart = DateTimeOffset.UtcNow.AddDays(1), scheduledEnd = (DateTimeOffset?)null, version
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(WorkStatus.Completed, (await verify.WorkItems.SingleAsync(x => x.Id == completed)).Status);
+    }
+
+    [Fact]
+    public async Task Work_list_search_treats_like_metacharacters_literally()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var propertyId = AddProperty(store, s.OrganizationA);
+            store.WorkItems.Add(new WorkItem(s.OrganizationA, Guid.NewGuid(), "Unit a_b inspection", propertyId, s.AdminA));
+            store.WorkItems.Add(new WorkItem(s.OrganizationA, Guid.NewGuid(), "Unit axb inspection", propertyId, s.AdminA));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        var result = await s.Client.GetFromJsonAsync<JsonElement>("/api/work/?search=a_b");
+        var titles = result.GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("title").GetString()).ToList();
+        Assert.Equal(["Unit a_b inspection"], titles);
+    }
+
     private static async Task<uint> VersionAsync(Scenario s, Guid workId)
     {
         var json = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{workId}");

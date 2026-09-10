@@ -18,15 +18,20 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/work/{id}/vendor | Work.AssignVendor + Work.Read + CSRF; accepts vendorId and optional version; atomically saves assignment and audit |
 | POST | /api/work/{id}/employee | Work.AssignEmployee + Work.Read + CSRF; accepts employeeId and version; atomically saves assignment and audit |
 | POST | /api/work/bulk/vendor | Work.AssignVendor + Work.Read + CSRF; one vendor across 1–100 work items, all-or-nothing |
+| POST | /api/work/bulk/status | Work.Update + Work.Read + CSRF; one target status across 1–100 items, all-or-nothing |
+| POST | /api/work/bulk/priority | Work.Update + Work.Read + CSRF; one priority across 1–100 items |
+| POST | /api/work/bulk/schedule | Work.Update + Work.Read + CSRF; one schedule window across 1–100 items (each must be open and assigned) |
+| POST | /api/work/bulk/note | Work.Update + Work.Read + CSRF; append one timeline note to 1–100 items |
+| POST | /api/work/bulk/reopen | Work.Update + Work.Read + CSRF; reopen 1–100 completed/cancelled items |
 | GET | /api/saved-views/ | Work.Read; the caller's own saved views, default first then by name |
 | GET | /api/saved-views/{id} | Work.Read; one of the caller's saved views, or 404 |
 | POST | /api/saved-views/ | Work.Read + CSRF; creates a saved view for the caller; 201, or 400 on invalid name/JSON |
 | PUT | /api/saved-views/{id} | Work.Read + CSRF; replaces name/filters/columns/default; 200, 400, or 404 |
 | DELETE | /api/saved-views/{id} | Work.Read + CSRF; 204 or 404 |
-| GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup |
+| GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup; optional `?q=` name filter; flat array capped at 500 |
 | GET | /api/vendors/{id} | Work.Read; vendor lookup, or 404 |
-| GET | /api/employees/ | Work.Read; tenant-scoped employee lookup |
-| GET | /api/properties/ | Work.Read; tenant-scoped property lookup |
+| GET | /api/employees/ | Work.Read; tenant-scoped employee lookup; optional `?q=` name filter; capped at 500 |
+| GET | /api/properties/ | Work.Read; tenant-scoped property lookup; optional `?q=` name filter; capped at 500 |
 | GET | /api/properties/{id} | Work.Read; property with its buildings and spaces, or 404 |
 | GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name |
 | POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category |
@@ -119,6 +124,12 @@ and requires the `Work.AssignEmployee` capability.
 
 Success is `{ "changed": true }`; repeating the same assignment returns `{ "changed": false }` and creates no duplicate timeline entry. Unknown work/vendor/employee IDs, including other organizations' IDs, return 404. Invalid IDs return 400. A database concurrency conflict returns 409 and requires a reload. Assigning a vendor or employee to work in `New` moves it to `Assigned`; any other status is left alone. Tenant, actor and permissions come only from the session; extra JSON fields, query strings and tenant headers cannot override them.
 
+**Terminal work takes no assignment, edit, status change or schedule.** Work in `Completed` or
+`Cancelled` returns 400, and nothing is written, for the vendor route, the employee route, the
+`PUT`, and every bulk route. The **only** way out of a terminal state is `POST
+/api/work/bulk/reopen` (see below). Repeating an assignment that a work item already carries is
+still `{ "changed": false }` rather than a 400, so replaying a completed action is not an error.
+
 `POST /api/work/bulk/vendor` applies one vendor to a bounded batch:
 
 ```json
@@ -131,6 +142,27 @@ item returns 409 and writes nothing at all, and an unknown work item or vendor r
 writes nothing. On success the response is a summary — `{ "changed": <int>, "unchanged": <int>,
 "total": <int> }` — where `unchanged` counts items that already held that vendor. One timeline
 entry is appended per item that actually changed.
+
+### Other bulk work actions (PF-4.07)
+
+`POST /api/work/bulk/{status|priority|schedule|note|reopen}` follow the same envelope and rules
+as `bulk/vendor` — `items` is 1–100 entries with distinct `workId`s, one transaction, a stale
+`version` on any item is a 409 that writes nothing, and the response is the same
+`{ changed, unchanged, total }` summary. All five need `Work.Update`.
+
+| Route | Body (besides `items`) | Item must be | Notes |
+| --- | --- | --- | --- |
+| `bulk/status` | `"status": "<WorkStatus>"` | not terminal | `Draft` target is 400; an item already in that status counts as `unchanged` |
+| `bulk/priority` | `"priority": "<WorkPriority>"` | not terminal | a same-priority item counts as `unchanged` |
+| `bulk/schedule` | `"scheduledStart"`, optional `"scheduledEnd"` | not terminal **and** have a vendor or employee | `end` before `start` is 400; moves each item to `Scheduled` |
+| `bulk/note` | `"note"` (1–2000 chars), optional `"internal": true` | any (including terminal) | appends a `WorkNote` timeline entry carrying the text and `internal`/`resident` visibility |
+| `bulk/reopen` | — | **all** completed or cancelled | moves each back to `Assigned` (if it has an assignee) or `New`, clears `completedAt`, writes a `WorkReopened` entry — the only sanctioned exit from a terminal state |
+
+A batch that mixes assignable and non-assignable items is refused whole with a 400 whose title
+names the requirement; nothing is written.
+
+`add tag` from the original PF-4.07 list is not shipped — the tag model / vocabulary is still an
+open product question (`docs/backlog.md`).
 
 ### Saved views
 
@@ -217,9 +249,41 @@ Each hit is `{ "type", "id", "label", "sublabel", "score" }`. `type` is one of `
 is a secondary identifier where one exists (a resident's email or phone, an asset's serial
 number, an employee's email) and is otherwise `null`.
 
-Matching is case-insensitive. A substring match (backed by `pg_trgm` GIN indexes) always
-outranks a trigram-similarity-only match, so a query that is a typo of a name still finds it
-but ranks below any literal substring hit. Residents also match on email and phone, assets on
+Matching is case-insensitive and index-backed: both the substring match and the
+word-similarity (typo) match ride the `gin_trgm_ops` indexes — the similarity floor is 0.25,
+applied per search via a transaction-local `pg_trgm.word_similarity_threshold`. A substring
+match always outranks a similarity-only match, so a query that is a typo of a name still finds
+it but ranks below any literal substring hit. Residents also match on email and phone, assets on
 serial number and model, employees on email. Every query runs through the tenant query filter
 and row-level security, so results never cross an organization. The result set is capped at
 `limit` hits total across all types.
+
+## Integrations (milestone 6)
+
+Adapters pull records from external property-management systems and PropFlow tracks what each
+one has seen. Milestone 6 ships the abstraction and one mock adapter; it records the external
+side only — reconciling those records into Properties / Spaces / Work / Assets is a later task.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/integrations/sources | `Integrations.Manage`; the adapters this deployment knows (`{ sourceSystem, displayName }`) |
+| GET | /api/integrations | `Integrations.Manage`; every connection with its health snapshot |
+| GET | /api/integrations/{id} | `Integrations.Manage`; one connection's health, or 404 |
+| GET | /api/integrations/{id}/records | `Integrations.Manage`; a page of the external records the connection tracks, newest sighting first; `?page=` / `?pageSize=` (1–200, default 50); `{ items, totalCount, page, pageSize }`, or 404 |
+| POST | /api/integrations | `Integrations.Manage` + CSRF; `{ sourceSystem, displayName }`; 201, 400 for an unknown source system or invalid text, 409 if a connection to that source already exists |
+| POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
+| POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |
+| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull; 200 with a sync report, 404, or 409 if the connection is disabled |
+
+A health snapshot is `{ id, sourceSystem, displayName, isEnabled, lastAttemptedAt,
+lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords }`. A sync report
+is `{ outcome, seen, added, updated, failed, error }` where `outcome` is `Completed` / `Failed`
+/ `NotFound` / `Disabled`. `added` + `updated` are relative to what the connection had already
+seen, keyed by a content hash, so re-syncing an unchanged source reports zeros. `failed` is
+always 0 until reconciliation lands. A tracked record is `{ kind, externalId, contentHash,
+syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy` / `WorkOrder`
+/ `Asset` and `syncState` is `Pending` / `Synced` / `Failed`.
+
+`Integrations.Manage` is granted to Organization Admin and Property Manager only. The
+Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
+its records never cross an organization.
