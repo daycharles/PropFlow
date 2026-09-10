@@ -6,36 +6,27 @@ close an item here when the change that resolves it merges. The authorities rema
 [`docs/backlog.md`](backlog.md), and [`docs/milestones.md`](milestones.md); this file only
 aggregates their open threads plus the tooling/process gaps.
 
-Owner `daycdev` = the M3 vertical-slice work (currently pushed directly to `main`, on an
-unmerged fork). "unassigned" = no owner yet.
+Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 
 ---
 
-## Blocked (waiting on M3)
+## M4 work unblocked by M3
 
-M4 tasks that cannot start until the M3 slice (work API, generalized timeline, bulk actions,
-Next.js work list/detail) lands on `main`.
+**M3 is complete.** All 26 task issues (`#6`–`#31`) are closed and the slice was promoted to `main`
+in `b31b864`; PF-3.27 (`baf4498`, PR #98) shipped after the issues were cut. Nothing below is
+waiting on the milestone any more — the rows that remain are held up by a specific dependency, not
+by M3 as a whole.
 
-The M3 API **and** web slice are already on `develop` (work list + `work/[id]` detail,
-categories settings, the `m3-workflow` e2e spec, bulk vendor assignment, saved views). "M3
-complete" now means the `#6`–`#31` issues are closed and `develop` is promoted to `main`. Most
-of the rows below are therefore buildable against `develop` today — verify the M3 dependency is
-actually present, don't wait for the promote.
+`develop` and `main` are level at `aeee32d` — PR #104 promoted PF-6.10, PF-3.27, PF-4.07 and the
+2026-09-10 audit follow-ups (A-1..A-7). Nothing is flag-gated and nothing is held back on a feature
+branch, so `main` is the whole truth as of this writing.
 
-### Do these once M3 is called complete (2026-09-10)
-
-1. **Promote `develop` → `main`** via PR — it is ~5 commits ahead (audit A-1..A-4, PF-6.10,
-   PF-4.07, tooling, and PR #103 once merged). Nothing on `develop` is flag-gated.
-2. **Close `#6`–`#31`** with PR-linking comments, keeping them assigned to `daycharles` (the M3
-   track marker — see `.claude/rules/workflow.md`).
-3. Re-check each row below: its M3 dependency is likely already on `develop`.
-
-| Item | Source | Owner | Unblocks when |
+| Item | Source | Owner | Blocked on |
 | --- | --- | --- | --- |
-| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The real remaining blocker.** `TimelineEntry` is still half-generalized on `develop` — `PreviousVendorId`/`VendorId` legacy columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead. Finish PF-3.10 (daycdev tech debt below) first |
-| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | work events start producing messages; needs the M3 work-use-case layer + idempotent real providers |
-| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Likely buildable now.** PF-4.07 ✓, PF-4.03 ✓, the M3 web work list + bulk-vendor flow are on `develop`. Confirm the web bulk flow (PF-3.20) is complete enough, then start |
-| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — the M3 `apps/web` work list and `work/[id]` detail are on `develop`; this is a responsiveness pass over them |
+| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The one real blocker in M4.** `TimelineEntry` is still half-generalized — legacy `PreviousVendorId`/`VendorId` columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead (`src/PropFlow.Domain/Timeline/TimelineEntry.cs:44`). Finish PF-3.10 (daycdev tech debt below) first |
+| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | Nothing structural. `IOutbox.EnqueueAsync` exists but has no production caller — only tests. Needs work events to start producing messages, plus idempotent real providers |
+| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Buildable now.** PF-4.07 is closed, the M3 web work list and bulk-vendor flow are on `main`. Only the resident-message half needs PF-4.03's template-to-resident wiring |
+| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — nothing blocks it. A responsiveness pass over the three existing `apps/web` routes |
 
 ---
 
