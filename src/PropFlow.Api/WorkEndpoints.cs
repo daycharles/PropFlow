@@ -45,7 +45,9 @@ public static class WorkEndpoints
         {
             var work = await operations.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (work is null || !await AllowsAsync(work, user, memberships, ct)) return Results.NotFound();
-            if (work.EmployeeId != Actor(user) || work.IsTerminal) return Results.Problem(statusCode: 400, title: "Only the assigned technician can mark work on the way");
+            var membership = await memberships.FindActiveAsync(Actor(user), TenantAccess.Resolve(user), ct);
+            if (membership?.EmployeeId != work.EmployeeId || work.IsTerminal)
+                return Results.Problem(statusCode: 400, title: "Only the assigned technician can mark work on the way");
             if (work.Status == WorkStatus.OnTheWay) return Results.Ok(new { changed = false, queued = false });
             var now = clock.GetUtcNow();
             var prior = work.Status;
