@@ -30,7 +30,7 @@ public sealed class WorkItem : TenantEntity
     public decimal? Cost { get; private set; }
     public string? InternalNotes { get; private set; }
     public string? ResidentVisibleNotes { get; private set; }
-    public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
+    public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { RefuseWhenTerminal(); Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
     public void SetLocation(Guid propertyId, Guid? buildingId, Guid? spaceId, Guid? residentId)
     {
         PropertyId = RequiredId(propertyId, nameof(propertyId));
@@ -58,7 +58,7 @@ public sealed class WorkItem : TenantEntity
     public void AssignEmployee(Guid employeeId) { RefuseWhenTerminal(); EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public EmployeeAssigned? AssignEmployee(Guid employeeId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (EmployeeId == employeeId) return null; var prior = EmployeeId; AssignEmployee(employeeId); return new EmployeeAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, employeeId); }
     public void Publish(DateTimeOffset at) { if (Status != WorkStatus.Draft) throw new InvalidOperationException("Only drafts may be published."); Status = WorkStatus.New; CreatedAt = at.ToUniversalTime(); }
-    public void Schedule(DateTimeOffset start, DateTimeOffset? end) { if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
+    public void Schedule(DateTimeOffset start, DateTimeOffset? end) { RefuseWhenTerminal(); if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
     public void ChangeStatus(WorkStatus status, DateTimeOffset at) { if (Status is WorkStatus.Completed or WorkStatus.Cancelled) throw new InvalidOperationException("Completed and cancelled work is terminal."); if (status == WorkStatus.Draft || status == Status) throw new InvalidOperationException("Invalid status transition."); Status = status; if (status == WorkStatus.Completed) CompletedAt = at.ToUniversalTime(); }
     public bool CanDelete(Guid actorId) => Status == WorkStatus.Draft && CreatorId == actorId;
     private void RefuseWhenTerminal() { if (IsTerminal) throw new InvalidOperationException("Completed and cancelled work is terminal."); }

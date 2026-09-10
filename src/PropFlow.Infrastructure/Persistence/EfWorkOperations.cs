@@ -14,7 +14,14 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     public async Task<WorkListPage> ListAsync(WorkListQuery q, CancellationToken ct)
     {
         var query = store.WorkItems.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(q.Search)) { var term = q.Search.Trim(); query = query.Where(x => EF.Functions.ILike(x.Title, $"%{term}%") || (x.Description != null && EF.Functions.ILike(x.Description, $"%{term}%"))); }
+        if (!string.IsNullOrWhiteSpace(q.Search))
+        {
+            // Escape LIKE metacharacters so a search for "50%" or "a_b" is a literal match, not a
+            // wildcard (and not a forced full scan). EF still parameterizes the value.
+            var pattern = "%" + q.Search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            query = query.Where(x => EF.Functions.ILike(x.Title, pattern, "\\")
+                || (x.Description != null && EF.Functions.ILike(x.Description, pattern, "\\")));
+        }
         if (q.CategoryId is { } category) query = query.Where(x => x.CategoryId == category);
         if (q.Status is { } status) query = query.Where(x => x.Status == status);
         if (q.Priority is { } priority) query = query.Where(x => x.Priority == priority);
