@@ -75,11 +75,19 @@ builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
+builder.Services.AddHttpClient();
+var communicationsOptions = builder.Configuration.GetSection(CommunicationsOptions.SectionName).Get<CommunicationsOptions>() ?? new CommunicationsOptions();
+communicationsOptions.Validate(builder.Environment.IsProduction() || builder.Environment.IsStaging());
+builder.Services.AddSingleton(communicationsOptions);
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
-builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
-builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
-builder.Services.AddSingleton(builder.Configuration.GetSection(CommunicationsOptions.SectionName)
-    .Get<CommunicationsOptions>() ?? new CommunicationsOptions());
+if (communicationsOptions.SmsProvider.Equals("Twilio", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddSingleton<IMessageSender, TwilioMessageSender>();
+else
+    builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
+if (communicationsOptions.EmailProvider.Equals("SendGrid", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddSingleton<IMessageSender, SendGridMessageSender>();
+else
+    builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
 builder.Services.AddSingleton<OutboxRelay>();
 // The background poller is off under integration tests, which drive OutboxRelay directly.
 if (!builder.Environment.IsEnvironment("Testing"))
