@@ -152,12 +152,30 @@ export type AttentionQueue = {
   warningCount: number;
   informationalCount: number;
 };
+export type SearchHitType =
+  | "Property"
+  | "Building"
+  | "Space"
+  | "Resident"
+  | "Vendor"
+  | "Employee"
+  | "Category"
+  | "Asset"
+  | "Work";
+export type SearchHit = {
+  type: SearchHitType;
+  id: string;
+  label: string;
+  sublabel?: string | null;
+  score: number;
+};
 export type WorkListQuery = {
   search?: string;
   status?: string;
   priority?: string;
   categoryId?: string;
   propertyId?: string;
+  spaceId?: string;
   sort?: string;
   descending?: boolean;
   page?: number;
@@ -374,6 +392,8 @@ export const api = {
   attention: {
     get: () => request<AttentionQueue>("/api/attention"),
   },
+  search: (term: string, limit = 12) =>
+    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(term)}&limit=${limit}`),
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
   },
