@@ -1,12 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application.Work;
+using PropFlow.Domain.Communications;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
+using PropFlow.Infrastructure.Communications;
 
 namespace PropFlow.Infrastructure.Persistence;
 
-public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) : IWorkOperations
+public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore comms, TimeProvider clock) : IWorkOperations
 {
     // Kept for existing internal callers; API callers supply the client concurrency version.
     public Task<AssignmentOutcome> AssignVendorAsync(Guid id, Guid vendorId, Guid actorId, CancellationToken ct) =>

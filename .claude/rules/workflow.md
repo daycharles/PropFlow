@@ -80,28 +80,20 @@ The tracker is GitHub Projects **project 2**, owner `daycharles` — *@daycharle
 project id `PVT_kwHOA6-kA84Bi9VY`. All ids below were read with `gh project field-list` on
 2026-09-09; re-read them if the board is reconfigured.
 
-**Two environments, two capability levels:**
+**Auth (as of 2026-09-10):** the macOS box's `gh` (in `~/.local/bin`) uses a keyring-stored
+`mday440` OAuth token with scopes `gist, project, read:org, repo, workflow`. **Do not set
+`GH_TOKEN`** — that would fall back to the fine-grained PAT, which lacks `project` and
+`workflow`. So an agent session here **can move Projects-v2 cards and push
+`.github/workflows/**` directly**. Move a card as its task changes state; a `#agent-updates`
+board-status line is still good practice but no longer the only channel.
 
-- A session whose `gh`/token carries the **`project`** scope (or a fine-grained PAT with the
-  **Projects: write** permission) can move cards directly with `gh project item-edit` — use the
-  ids below.
-- The macOS box currently has **`gh` 2.63.2 in `~/.local/bin`** authed by a fine-grained PAT
-  (`GH_TOKEN`, read from the gitignored token file) that has **Issues: write but no Projects
-  permission**. `gh project …` returns `Resource not accessible by personal access token`
-  there. That session still does the assignee + close + comment above via `gh issue …`; the
-  board's built-in workflows (*item added → Backlog*, *item closed → Done*) then move the card,
-  and a `project`-scoped session reconciles anything the workflows miss. Fixing this properly =
-  add Projects access to the fine-grained PAT (see `docs/followups.md`).
-- **Decision (2026-09-10):** on the macOS box we accept this rather than block on the token.
-  To keep the columns square without board access, **every `#agent-updates` task post carries a
-  board-status line** — the issue number, the column it should now be in (In progress / Done),
-  and any card that needs a manual nudge — so a human or a `project`-scoped session can
-  reconcile from Slack. A closed issue with a merged PR = Done; an assigned open issue with a
-  branch = In progress.
+Reading the board with `--format json` and piping through anything but `gh --jq` is fragile —
+an item title can carry a control character that breaks a naive JSON parser. Use `gh project
+item-list … --jq '.items[]|select(.content.number==N)|.id'`.
 
 ```bash
 # Read the board. --limit defaults to 30 and truncates silently — always pass it.
-gh project item-list 2 --owner daycharles --limit 200 --format json
+gh project item-list 2 --owner daycharles --limit 300 --format json
 
 # Status field id: PVTSSF_lAHOA6-kA84Bi9VYzhhzecU
 #   Backlog      f75ad846

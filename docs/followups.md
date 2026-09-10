@@ -12,39 +12,17 @@ Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 
 ## M4 — what's left
 
-M3 is complete (all `#6`–`#31` closed, promoted to `main` in PR #95 / #104). PF-4.01–4.05,
-4.07 are done. What remains in M4:
+M3 is complete (all `#6`–`#31` closed, promoted to `main`). **PF-4.01–4.07 are done** (PF-4.03
++ PF-4.06 landed in PR #108). What remains in M4:
 
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
-| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | mday440 | **Unblocked.** The PF-3.10 generalization is now finished — one row shape, legacy columns dropped. Next: emit a timeline entry when a communication is queued / sent / delivered / failed, with internal-vs-resident visibility |
-| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | work events start producing messages; needs the M3 work-use-case layer + idempotent real providers |
-| PF-4.03 (#34) — resident message templates | backlog.md M4 | mday440 | Entity + CRUD + `{{ }}` rendering done. Remaining: wire the substitution values from a real work/property/schedule context — comes with PF-4.06 |
+| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | `POST /api/work/{id}/message` enqueues atomically *within that call*, but there is still no path that enqueues from a **work status/schedule change**. That (and idempotent real providers) is where C11 bites — needs the M5 event wiring (PF-5.03) |
 | PF-4.08 (#39) — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | Buildable: PF-4.07 ✓, PF-4.03 ✓, M3 web bulk-vendor flow on `main`. Substantial front-end feature |
 | PF-4.09 (#40) — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | Buildable now — a responsiveness pass over the M3 `apps/web` work list and `work/[id]` detail |
 | PF-4.10 (#41) — full Tidewater demo seed (~3 properties, ~80 spaces, ~70 residents, 6 vendors, ~100 work items, ~60 assets, ≥18 pest-control) | backlog.md M4 | unassigned | All the domain exists (residents/occupancy/assets/hierarchy). Standalone; unblocks PF-4.11. `infra` / the `PropFlow.Admin` seed |
 | PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Needs PF-4.08 + PF-4.10 |
-| PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Core outbox/consent tests exist; finish once PF-4.06 emits real communication events |
-## M4 work unblocked by M3
-
-**M3 is complete.** All 26 task issues (`#6`–`#31`) are closed and the slice was promoted to `main`
-in `b31b864`; PF-3.27 (`baf4498`, PR #98) shipped after the issues were cut. Nothing below is
-waiting on the milestone any more — the rows that remain are held up by a specific dependency, not
-by M3 as a whole.
-
-`develop` and `main` are level: PR #104 promoted PF-6.10, PF-3.27, PF-4.07 and the 2026-09-10 audit
-follow-ups (A-1..A-7), and PR #105 the milestone-doc reconcile. Nothing is flag-gated and nothing is
-held back on a feature branch, so `main` is the whole truth. Re-check with
-`git rev-list --left-right --count origin/main...origin/develop` rather than trusting this line.
-
-| Item | Source | Owner | Blocked on |
-| --- | --- | --- | --- |
-| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The one real blocker in M4.** `TimelineEntry` is still half-generalized — legacy `PreviousVendorId`/`VendorId` columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead (`src/PropFlow.Domain/Timeline/TimelineEntry.cs:44`). Finish PF-3.10 (daycdev tech debt below) first |
-| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | Nothing structural. `IOutbox.EnqueueAsync` exists but has no production caller — only tests. Needs work events to start producing messages, plus idempotent real providers |
-| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Buildable now.** PF-4.07 is closed, the M3 web work list and bulk-vendor flow are on `main`. Only the resident-message half needs PF-4.03's template-to-resident wiring |
-| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — nothing blocks it. A responsiveness pass over the three existing `apps/web` routes |
-
----
+| PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Outbox idempotency + rendering + consent are covered (`CommunicationsTests`, `ResidentMessageTests`, `TemplateRendererTests`). Left: an explicit "no duplicate send on retry after a transient failure" scenario end-to-end |
 
 ## Needs a decision
 
@@ -70,7 +48,7 @@ Recorded and accepted; revisit during the M7 hardening track or when a feature f
 | Message consent + provider callback + retry/retention controls for real communication providers | backlog.md PF-7.05; audit-security L-3 residue | unassigned | Context-aware template encoding + a recipient/egress policy for the real provider adapter |
 | Templates do not flag an unterminated `{{` (`"arriving at {{time"` renders literally) | audit-communications C12 (accepted) | unassigned | Low impact for authored templates; revisit if templates become user-generated at scale |
 | `M3Operations` migration is not safe against a populated milestone-2 database | milestones.md M3 migration note; audit-communications C-audit M6 | daycdev | Adds NOT NULL `PropertyId`/`CreatorId` + FK in one step with a `Guid.Empty` default and backfills `Vendors.IsActive = false`. Applies cleanly only to a DB with no pre-M3 `WorkItems`/`Vendors` rows. Squash/rewrite (nullable → backfill → NOT NULL → FK) before first real deployment |
-| Response DTOs for the non-work read endpoints | backlog.md PF-3.15 | unassigned | Work responses now carry an explicit `version`, and the list returns a flat DTO. `/api/residents`, `/api/assets` and `/api/saved-views` still return domain entities straight out |
+| Response DTOs for the non-work read endpoints | backlog.md PF-3.15 | unassigned | Work responses carry an explicit `version`; the list and now the timeline (`TimelineItem`) return flat DTOs. `/api/residents`, `/api/assets`, `/api/saved-views` and `/api/communication/templates` still return domain entities straight out |
 | Global search (`EfGlobalSearch`) issues 9 sequential round-trips (one per entity type) and ranks in memory | PF-6.08; `src/PropFlow.Infrastructure/Persistence/EfGlobalSearch.cs` | unassigned | Fine at seed-data scale. Revisit with a single `UNION ALL` query (or a materialized search view) if p95 latency or DB load warrants. Also: `limit` is applied per type then again globally, so a type can crowd out others up to `limit`; a per-type floor may be wanted once the PF-6.09 UI groups results |
 | Integration adapter — external records are tracked but not reconciled | PF-6.10; `src/PropFlow.Infrastructure/Integrations/EfIntegrationOperations.cs` | unassigned | A sync upserts one `ExternalRecordLink` per external record (id + content hash + sync state) but does not create/update the corresponding `Property` / `Space` / `Occupancy` / `WorkItem` / `Asset`. That mapping (and its conflict handling — the "unresolved conflicts" count PF-6.11 wants) is the next task. `SyncReport.failed` and per-record `Failed` state exist for it but stay 0 until then |
 | Integration sync is manual-trigger only, and stale external records are never retired | PF-6.10 | unassigned | `POST /api/integrations/{id}/sync` is the only way to run a pull — no scheduler / background worker. A link whose external record disappears from a later snapshot keeps its last state forever (no "deleted upstream" marker) |
@@ -103,10 +81,8 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 
 | Item | Source | Owner | Unblocks when |
 | --- | --- | --- | --- |
-| `main` branch protection not configured | Slack #agent-updates 2026-09-09; CLAUDE.md ("Protected: `verify` must be green") | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI. This already broke `main` once (commit `8c88b20`, recovered by PR #79). Blocked because the PAT lacks the Administration scope |
-| CI has no `npm audit` step for `apps/web` | audit-2026-09-10 A-4 residue; audit-security M-3 | unassigned | The line `npm audit --omit=dev --audit-level=high` (after `npm ci` in the `web` job) was written but the fine-grained PAT cannot push `.github/workflows/**` without the `workflow` scope. Apply with a scoped token or by hand |
-| PAT scope gaps | Slack #agent-updates 2026-09-09 | unassigned | Fine-grained PAT lacks `workflow` (blocks the CI fix above), Administration (blocks branch protection), and **Projects** (an agent session on the macOS box can assign/close issues but cannot move Projects-v2 cards — `gh project …` → `Resource not accessible by personal access token`). Board relies on built-in *item closed → Done* / auto-add workflows in the meantime. Needs a re-scoped token |
-| `gh` (2.63.2) and Node (`~/.local/node`, v22.14) on the macOS box are hand-installed, not on `PATH` by default | 2026-09-09 / 2026-09-10 agent sessions | unassigned | Neither is from a package manager or in the documented toolchain. Node was added to run `apps/web` + Playwright locally (for the functional test / demo video). Pin them or fold into `docs/local-development.md` |
+| `main` branch protection not configured | Slack #agent-updates 2026-09-09; CLAUDE.md ("Protected: `verify` must be green") | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI (broke `main` once, commit `8c88b20`, recovered by PR #79). The keyring `gh` token has `repo` but not Administration, so an agent still can't set it — a human does it in repo Settings → Branches |
+| `gh` (2.63.2) and Node (`~/.local/node`, v22.14) on the macOS box are hand-installed, not on `PATH` by default | 2026-09-09 / 2026-09-10 agent sessions | unassigned | Neither is from a package manager or in the documented toolchain. `gh` auth: keyring `mday440` token (`project`/`workflow`/`repo`) — do not set `GH_TOKEN`. Pin the tools or fold into `docs/local-development.md` |
 | `daycdev` pushes M3 directly to `main` rather than via PR into `develop` | CLAUDE.md branching rules; git log (`8c88b20` direct) | daycdev | Process drift; ties into branch protection above |
 
 ---

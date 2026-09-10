@@ -127,6 +127,23 @@ assignment reports the vendor through `newValue` and `changes` like every other 
 `actorId` is null for a system-generated entry, and `workId` is null for one that references the
 work item only through `relatedObjectType: "WorkItem"` + `relatedObjectId`. The route returns
 both kinds: an entry matches on `workId` **or** on that related-object reference.
+`{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
+changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`,
+`EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`,
+and the communication events `MessageQueued` / `MessageSent` / `MessageFailed`); `oldValue` /
+`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
+object with the details. `residentVisible` is `false` for work-history events and `true` for a
+resident communication. Communication entries are folded in from the outbox on read — there is
+no separate write — so a `MessageQueued` entry becomes `MessageSent` in place once the
+dispatcher delivers it.
+
+`POST /api/work/{id}/message` (`Communications.SendMessage` + CSRF) queues a resident message
+about the work item: body `{ "templateId": "<guid>" }`. It resolves the work item's resident,
+checks per-channel consent, renders the template's subject/body against
+`resident.name` / `work.title` / `work.status` / `property.name` / `schedule.start` /
+`schedule.end`, and enqueues on the template's channel. 202 on success; 404 for an unknown work
+item or template; 409 when the work item has no resident, the template is inactive, or the
+resident has not consented to that channel; 400 for a template placeholder with no value.
 
 ### Assignment
 

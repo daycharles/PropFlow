@@ -13,7 +13,8 @@ public sealed class EfOutbox(CommunicationsStore store, TimeProvider clock) : IO
             return false;
 
         store.OutboxMessages.Add(OutboxMessage.Create(store.OrganizationId, Guid.NewGuid(), submission.Channel,
-            submission.RecipientAddress, submission.Subject, submission.Body, submission.IdempotencyKey, clock.GetUtcNow()));
+            submission.RecipientAddress, submission.Subject, submission.Body, submission.IdempotencyKey, clock.GetUtcNow(),
+            submission.WorkId, submission.ResidentVisible));
 
         try
         {
