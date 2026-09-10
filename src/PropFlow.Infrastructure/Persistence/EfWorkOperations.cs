@@ -128,9 +128,9 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     public async Task<WorkItem> CreateAsync(CreateWorkCommand c, CancellationToken ct)
     {
         if (!await store.Properties.AnyAsync(x => x.Id == c.PropertyId, ct)) throw new KeyNotFoundException("Property not found.");
-        await EnsureChildReferencesAsync(c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, ct);
+        await EnsureChildReferencesAsync(c.PropertyId, c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, c.AssetId, ct);
         var work = new WorkItem(store.OrganizationId, Guid.NewGuid(), c.Title, c.PropertyId, c.ActorId, c.WorkType);
-        work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes); work.Publish(clock.GetUtcNow());
+        work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetAsset(c.AssetId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes); work.Publish(clock.GetUtcNow());
         store.WorkItems.Add(work); store.Timeline.Add(Event(work, c.ActorId, "WorkCreated", null, work.Title)); await store.SaveChangesAsync(ct); return work;
     }
 
@@ -138,13 +138,14 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     {
         var work = await store.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (work is null) return WorkWriteOutcome.NotFound;
         if (!await store.Properties.AnyAsync(x => x.Id == c.PropertyId, ct)) throw new KeyNotFoundException("Property not found.");
-        await EnsureChildReferencesAsync(c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, ct);
+        await EnsureChildReferencesAsync(c.PropertyId, c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, c.AssetId, ct);
         store.Entry(work).Property("Version").OriginalValue = c.Version;
-        var now = clock.GetUtcNow(); var oldTitle = work.Title; var oldPriority = work.Priority; var oldStatus = work.Status; var oldStart = work.ScheduledStart;
-        work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes);
+        var now = clock.GetUtcNow(); var oldTitle = work.Title; var oldPriority = work.Priority; var oldStatus = work.Status; var oldStart = work.ScheduledStart; var oldAsset = work.AssetId;
+        work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetAsset(c.AssetId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes);
         if (c.Status is { } status && status != work.Status) work.ChangeStatus(status, now);
         if (c.ScheduledStart is { } start && (start != oldStart || c.ScheduledEnd != work.ScheduledEnd)) work.Schedule(start, c.ScheduledEnd);
         if (oldTitle != work.Title) store.Timeline.Add(Event(work, c.ActorId, "WorkUpdated", oldTitle, work.Title));
+        if (oldAsset != work.AssetId) store.Timeline.Add(Event(work, c.ActorId, "AssetLinked", oldAsset?.ToString(), work.AssetId?.ToString()));
         if (oldPriority != work.Priority) store.Timeline.Add(Event(work, c.ActorId, "PriorityChanged", oldPriority.ToString(), work.Priority.ToString()));
         if (oldStatus != work.Status) store.Timeline.Add(Event(work, c.ActorId, "StatusChanged", oldStatus.ToString(), work.Status.ToString()));
         if (oldStart != work.ScheduledStart) store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
@@ -300,14 +301,21 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
 
     private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue, DateTimeOffset? at = null) => TimelineEntry.Record(work.OrganizationId, actor, at ?? clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));
 
-    // The optional location/category refs on a work item carry no FK (they are nullable and
-    // cross several tables), so a create/update could otherwise stash a dangling or foreign id.
-    // Each lookup runs through the tenant query filter, so a foreign id reads as "not found".
-    private async Task EnsureChildReferencesAsync(Guid? buildingId, Guid? spaceId, Guid? categoryId, Guid? residentId, CancellationToken ct)
+    // The optional location/category/asset refs on a work item carry no FK check the domain can
+    // do (they are nullable and cross several tables), so a create/update could otherwise stash a
+    // dangling or foreign id. Each lookup runs through the tenant query filter, so a foreign id
+    // reads as "not found".
+    private async Task EnsureChildReferencesAsync(Guid propertyId, Guid? buildingId, Guid? spaceId, Guid? categoryId, Guid? residentId, Guid? assetId, CancellationToken ct)
     {
         if (buildingId is { } b && !await store.Buildings.AnyAsync(x => x.Id == b, ct)) throw new ArgumentException("Unknown building.", nameof(buildingId));
         if (spaceId is { } s && !await store.Spaces.AnyAsync(x => x.Id == s, ct)) throw new ArgumentException("Unknown space.", nameof(spaceId));
         if (categoryId is { } cat && !await store.Categories.AnyAsync(x => x.Id == cat, ct)) throw new ArgumentException("Unknown category.", nameof(categoryId));
         if (residentId is { } r && !await store.Residents.AnyAsync(x => x.Id == r, ct)) throw new ArgumentException("Unknown resident.", nameof(residentId));
+        if (assetId is { } a)
+        {
+            var assetProperty = await store.Assets.Where(x => x.Id == a).Select(x => (Guid?)x.PropertyId).SingleOrDefaultAsync(ct);
+            if (assetProperty is null) throw new ArgumentException("Unknown asset.", nameof(assetId));
+            if (assetProperty != propertyId) throw new ArgumentException("The asset belongs to a different property.", nameof(assetId));
+        }
     }
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using PropFlow.Domain.Assets;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Timeline;
@@ -319,6 +320,55 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
 
         await using var verify = s.Store(s.OrganizationA);
         Assert.Equal(1, await verify.WorkItems.CountAsync(x => x.Title == "Roach treatment"));
+    }
+
+    [Fact]
+    public async Task Work_links_to_an_asset_at_its_own_property_and_rejects_others()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+
+        // A second property in org A with its own asset, to prove the property-match check.
+        var otherProperty = Guid.NewGuid();
+        var otherAsset = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Properties.Add(new Property(s.OrganizationA, otherProperty, s.PortfolioA, "West Building", "America/New_York"));
+            store.Assets.Add(new Asset(s.OrganizationA, otherAsset, otherProperty, null, AssetKind.WaterHeater, "West water heater"));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        // Org B's asset -> 400 (tenant filter makes it unknown).
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await s.Client.PostAsJsonAsync("/api/work/", new { title = "AC not cooling", propertyId = s.PropertyA, assetId = s.AssetB })).StatusCode);
+        // A real asset from this tenant, but at a different property -> 400.
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await s.Client.PostAsJsonAsync("/api/work/", new { title = "AC not cooling", propertyId = s.PropertyA, assetId = otherAsset })).StatusCode);
+
+        // The asset at this work's own property -> created and linked.
+        var created = await s.Client.PostAsJsonAsync("/api/work/", new { title = "AC not cooling", propertyId = s.PropertyA, assetId = s.AssetA });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var workId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("item").GetProperty("id").GetGuid();
+
+        await using (var verify = s.Store(s.OrganizationA))
+            Assert.Equal(s.AssetA, (await verify.WorkItems.SingleAsync(x => x.Id == workId)).AssetId);
+
+        // Clearing the link on update writes an AssetLinked timeline entry and nulls the column.
+        var version = await VersionAsync(s, workId);
+        var cleared = await s.Client.PutAsJsonAsync($"/api/work/{workId}", new
+        {
+            title = "AC not cooling", description = (string?)null, categoryId = (Guid?)null, priority = "Normal",
+            propertyId = s.PropertyA, buildingId = (Guid?)null, spaceId = (Guid?)null, residentId = (Guid?)null,
+            assetId = (Guid?)null, dueDate = (string?)null, cost = (decimal?)null, internalNotes = (string?)null,
+            residentVisibleNotes = (string?)null, status = (string?)null,
+            scheduledStart = (DateTimeOffset?)null, scheduledEnd = (DateTimeOffset?)null, version
+        });
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+
+        await using var final = s.Store(s.OrganizationA);
+        Assert.Null((await final.WorkItems.SingleAsync(x => x.Id == workId)).AssetId);
+        Assert.Contains(await final.Timeline.Where(x => x.RelatedObjectId == workId).ToListAsync(),
+            e => e.EventType == "AssetLinked" && e.OldValue == s.AssetA.ToString() && e.NewValue == null);
     }
 
     [Fact]
