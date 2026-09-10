@@ -18,6 +18,11 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/work/{id}/vendor | Work.AssignVendor + Work.Read + CSRF; accepts vendorId and optional version; atomically saves assignment and audit |
 | POST | /api/work/{id}/employee | Work.AssignEmployee + Work.Read + CSRF; accepts employeeId and version; atomically saves assignment and audit |
 | POST | /api/work/bulk/vendor | Work.AssignVendor + Work.Read + CSRF; one vendor across 1–100 work items, all-or-nothing |
+| POST | /api/work/bulk/status | Work.Update + Work.Read + CSRF; one target status across 1–100 items, all-or-nothing |
+| POST | /api/work/bulk/priority | Work.Update + Work.Read + CSRF; one priority across 1–100 items |
+| POST | /api/work/bulk/schedule | Work.Update + Work.Read + CSRF; one schedule window across 1–100 items (each must be open and assigned) |
+| POST | /api/work/bulk/note | Work.Update + Work.Read + CSRF; append one timeline note to 1–100 items |
+| POST | /api/work/bulk/reopen | Work.Update + Work.Read + CSRF; reopen 1–100 completed/cancelled items |
 | GET | /api/saved-views/ | Work.Read; the caller's own saved views, default first then by name |
 | GET | /api/saved-views/{id} | Work.Read; one of the caller's saved views, or 404 |
 | POST | /api/saved-views/ | Work.Read + CSRF; creates a saved view for the caller; 201, or 400 on invalid name/JSON |
@@ -119,12 +124,11 @@ and requires the `Work.AssignEmployee` capability.
 
 Success is `{ "changed": true }`; repeating the same assignment returns `{ "changed": false }` and creates no duplicate timeline entry. Unknown work/vendor/employee IDs, including other organizations' IDs, return 404. Invalid IDs return 400. A database concurrency conflict returns 409 and requires a reload. Assigning a vendor or employee to work in `New` moves it to `Assigned`; any other status is left alone. Tenant, actor and permissions come only from the session; extra JSON fields, query strings and tenant headers cannot override them.
 
-**Terminal work takes no assignment.** Work in `Completed` or `Cancelled` returns
-400 `Completed and cancelled work cannot be assigned`, for the vendor route, the employee route
-and the bulk route alike, and nothing is written. This is the same rule `ChangeStatus` applies
-when refusing to move out of those two statuses (`src/PropFlow.Domain/Work/WorkItem.cs`). Repeating
-an assignment that a work item already carries is still `{ "changed": false }` rather than a 400,
-so replaying a completed action is not an error.
+**Terminal work takes no assignment, edit, status change or schedule.** Work in `Completed` or
+`Cancelled` returns 400, and nothing is written, for the vendor route, the employee route, the
+`PUT`, and every bulk route. The **only** way out of a terminal state is `POST
+/api/work/bulk/reopen` (see below). Repeating an assignment that a work item already carries is
+still `{ "changed": false }` rather than a 400, so replaying a completed action is not an error.
 
 `POST /api/work/bulk/vendor` applies one vendor to a bounded batch:
 
@@ -138,6 +142,27 @@ item returns 409 and writes nothing at all, and an unknown work item or vendor r
 writes nothing. On success the response is a summary — `{ "changed": <int>, "unchanged": <int>,
 "total": <int> }` — where `unchanged` counts items that already held that vendor. One timeline
 entry is appended per item that actually changed.
+
+### Other bulk work actions (PF-4.07)
+
+`POST /api/work/bulk/{status|priority|schedule|note|reopen}` follow the same envelope and rules
+as `bulk/vendor` — `items` is 1–100 entries with distinct `workId`s, one transaction, a stale
+`version` on any item is a 409 that writes nothing, and the response is the same
+`{ changed, unchanged, total }` summary. All five need `Work.Update`.
+
+| Route | Body (besides `items`) | Item must be | Notes |
+| --- | --- | --- | --- |
+| `bulk/status` | `"status": "<WorkStatus>"` | not terminal | `Draft` target is 400; an item already in that status counts as `unchanged` |
+| `bulk/priority` | `"priority": "<WorkPriority>"` | not terminal | a same-priority item counts as `unchanged` |
+| `bulk/schedule` | `"scheduledStart"`, optional `"scheduledEnd"` | not terminal **and** have a vendor or employee | `end` before `start` is 400; moves each item to `Scheduled` |
+| `bulk/note` | `"note"` (1–2000 chars), optional `"internal": true` | any (including terminal) | appends a `WorkNote` timeline entry carrying the text and `internal`/`resident` visibility |
+| `bulk/reopen` | — | **all** completed or cancelled | moves each back to `Assigned` (if it has an assignee) or `New`, clears `completedAt`, writes a `WorkReopened` entry — the only sanctioned exit from a terminal state |
+
+A batch that mixes assignable and non-assignable items is refused whole with a 400 whose title
+names the requirement; nothing is written.
+
+`add tag` from the original PF-4.07 list is not shipped — the tag model / vocabulary is still an
+open product question (`docs/backlog.md`).
 
 ### Saved views
 

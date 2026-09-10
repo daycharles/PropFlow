@@ -56,4 +56,53 @@ public sealed class WorkItemTerminalStateTests
         Assert.Equal("Fix the kitchen sink", work.Title);
         Assert.Equal(WorkStatus.Scheduled, work.Status);
     }
+
+    [Fact]
+    public void Reopen_is_the_one_door_out_of_a_terminal_state()
+    {
+        var actor = Guid.NewGuid();
+        var completed = Completed();
+
+        var reopened = completed.Reopen(actor, Now.AddDays(2));
+
+        Assert.Equal(WorkStatus.Assigned, completed.Status); // it had a vendor
+        Assert.Null(completed.CompletedAt);
+        Assert.Equal(WorkStatus.Completed, reopened.PreviousStatus);
+        Assert.Equal(WorkStatus.Assigned, reopened.NewStatus);
+        // and now it is editable again
+        completed.Edit("Reopened: fix sink properly", null, null, WorkPriority.High);
+        Assert.Equal("Reopened: fix sink properly", completed.Title);
+    }
+
+    [Fact]
+    public void Reopening_unassigned_cancelled_work_goes_back_to_New()
+    {
+        var work = new WorkItem(Org, Guid.NewGuid(), "Fix sink", Guid.NewGuid(), Guid.NewGuid());
+        work.Publish(Now);
+        work.ChangeStatus(WorkStatus.Cancelled, Now);
+
+        work.Reopen(Guid.NewGuid(), Now);
+
+        Assert.Equal(WorkStatus.New, work.Status);
+    }
+
+    [Fact]
+    public void Reopen_rejects_non_terminal_work_and_an_empty_actor()
+    {
+        var open = new WorkItem(Org, Guid.NewGuid(), "Fix sink", Guid.NewGuid(), Guid.NewGuid());
+        open.Publish(Now);
+        Assert.Throws<InvalidOperationException>(() => open.Reopen(Guid.NewGuid(), Now));
+        Assert.Throws<ArgumentException>(() => Completed().Reopen(Guid.Empty, Now));
+    }
+
+    [Fact]
+    public void SetPriority_changes_priority_but_not_on_terminal_work()
+    {
+        var open = new WorkItem(Org, Guid.NewGuid(), "Fix sink", Guid.NewGuid(), Guid.NewGuid());
+        open.Publish(Now);
+        open.SetPriority(WorkPriority.Critical);
+        Assert.Equal(WorkPriority.Critical, open.Priority);
+
+        Assert.Throws<InvalidOperationException>(() => Completed().SetPriority(WorkPriority.Low));
+    }
 }

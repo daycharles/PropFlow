@@ -87,7 +87,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         if (oldTitle != work.Title) store.Timeline.Add(Event(work, c.ActorId, "WorkUpdated", oldTitle, work.Title));
         if (oldPriority != work.Priority) store.Timeline.Add(Event(work, c.ActorId, "PriorityChanged", oldPriority.ToString(), work.Priority.ToString()));
         if (oldStatus != work.Status) store.Timeline.Add(Event(work, c.ActorId, "StatusChanged", oldStatus.ToString(), work.Status.ToString()));
-        if (oldStart != work.ScheduledStart) store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O")));
+        if (oldStart != work.ScheduledStart) store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
         try { await store.SaveChangesAsync(ct); return WorkWriteOutcome.Updated; } catch (DbUpdateConcurrencyException) { return WorkWriteOutcome.Conflict; }
     }
 
@@ -113,7 +113,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
     }
 
-    public async Task<BulkAssignmentSummary> BulkAssignVendorAsync(IReadOnlyList<BulkVendorAssignment> items, Guid vendorId, Guid actorId, CancellationToken ct)
+    public async Task<BulkAssignmentSummary> BulkAssignVendorAsync(IReadOnlyList<BulkWorkItemRef> items, Guid vendorId, Guid actorId, CancellationToken ct)
     {
         var total = items.Count;
         if (items.Count is 0 or > 100 || items.Select(x => x.WorkId).Distinct().Count() != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
@@ -131,5 +131,85 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(ct); return new(AssignmentOutcome.Conflict, 0, 0, total); }
     }
 
-    private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue) => TimelineEntry.Record(work.OrganizationId, actor, clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));
+    public async Task<BulkAssignmentSummary> BulkApplyAsync(BulkWorkCommand command, CancellationToken ct)
+    {
+        var items = command.Items;
+        var total = items.Count;
+        if (total is 0 or > 100 || items.Select(x => x.WorkId).Distinct().Count() != total)
+            return new(AssignmentOutcome.NotFound, 0, 0, total);
+
+        await using var transaction = await store.Database.BeginTransactionAsync(ct);
+        var ids = items.Select(x => x.WorkId).ToArray();
+        var works = await store.WorkItems.Where(x => ids.Contains(x.Id)).ToListAsync(ct);
+        if (works.Count != total) return new(AssignmentOutcome.NotFound, 0, 0, total);
+
+        // Assignability is part of all-or-nothing: one item that cannot take the action refuses
+        // the whole batch before anything is mutated.
+        var needsOpen = command.Action is BulkWorkAction.Status or BulkWorkAction.Priority or BulkWorkAction.Schedule;
+        if (needsOpen && works.Any(x => x.IsTerminal)) return new(AssignmentOutcome.NotAssignable, 0, 0, total);
+        if (command.Action is BulkWorkAction.Reopen && works.Any(x => !x.IsTerminal)) return new(AssignmentOutcome.NotAssignable, 0, 0, total);
+        if (command.Action is BulkWorkAction.Schedule && works.Any(x => x.VendorId is null && x.EmployeeId is null))
+            return new(AssignmentOutcome.NotAssignable, 0, 0, total);
+
+        var byId = items.ToDictionary(x => x.WorkId);
+        var now = clock.GetUtcNow();
+        var changed = 0;
+        foreach (var work in works)
+        {
+            store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version;
+            if (ApplyOne(work, command, now)) changed++;
+        }
+
+        try
+        {
+            await store.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(ct);
+            return new(AssignmentOutcome.Conflict, 0, 0, total);
+        }
+    }
+
+    // Applies one already-vetted action to one work item and records its timeline entry.
+    // Returns whether the item actually changed (a no-op status/priority is "unchanged").
+    private bool ApplyOne(WorkItem work, BulkWorkCommand c, DateTimeOffset now)
+    {
+        switch (c.Action)
+        {
+            case BulkWorkAction.Status:
+                var target = c.Status!.Value;
+                if (work.Status == target) return false;
+                var fromStatus = work.Status;
+                work.ChangeStatus(target, now);
+                store.Timeline.Add(Event(work, c.ActorId, "StatusChanged", fromStatus.ToString(), work.Status.ToString(), now));
+                return true;
+            case BulkWorkAction.Priority:
+                var priority = c.Priority!.Value;
+                if (work.Priority == priority) return false;
+                var fromPriority = work.Priority;
+                work.SetPriority(priority);
+                store.Timeline.Add(Event(work, c.ActorId, "PriorityChanged", fromPriority.ToString(), work.Priority.ToString(), now));
+                return true;
+            case BulkWorkAction.Schedule:
+                var oldStart = work.ScheduledStart;
+                work.Schedule(c.ScheduledStart!.Value, c.ScheduledEnd);
+                store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
+                return true;
+            case BulkWorkAction.Note:
+                store.Timeline.Add(TimelineEntry.Record(work.OrganizationId, c.ActorId, now, "WorkNote", "WorkItem", work.Id,
+                    null, c.Note, work.Id, JsonSerializer.Serialize(new { note = c.Note, visibility = c.NoteInternal ? "internal" : "resident" })));
+                return true;
+            case BulkWorkAction.Reopen:
+                var reopened = work.Reopen(c.ActorId, now);
+                store.Timeline.Add(Event(work, c.ActorId, nameof(WorkReopened), reopened.PreviousStatus.ToString(), reopened.NewStatus.ToString(), now));
+                return true;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(c), c.Action, "Unknown bulk action.");
+        }
+    }
+
+    private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue, DateTimeOffset? at = null) => TimelineEntry.Record(work.OrganizationId, actor, at ?? clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));
 }
