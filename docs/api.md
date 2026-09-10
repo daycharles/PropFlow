@@ -126,6 +126,13 @@ resident communication. Communication entries are folded in from the outbox on r
 no separate write — so a `MessageQueued` entry becomes `MessageSent` in place once the
 dispatcher delivers it.
 
+There are no event-specific fields — in particular no `vendorId` / `previousVendorId`; a vendor
+assignment reports the vendor through `newValue` and `changes` like every other event. `actorId`
+is null for a system-generated entry. A stored entry is included whether it carries the work
+item in its own `WorkId` **or** references it through `relatedObjectType: "WorkItem"` +
+`relatedObjectId`, so an entry with no `WorkId` of its own still appears on the work item's
+timeline.
+
 `POST /api/work/{id}/message` (`Communications.SendMessage` + CSRF) queues a resident message
 about the work item: body `{ "templateId": "<guid>" }`. It resolves the work item's resident,
 checks per-channel consent, renders the template's subject/body against

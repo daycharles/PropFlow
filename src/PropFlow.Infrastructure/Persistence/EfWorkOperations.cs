@@ -72,7 +72,10 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     {
         if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null;
 
-        var events = await store.Timeline.AsNoTracking().Where(x => x.WorkId == id)
+        // An entry may hang off a work item either directly (WorkId) or only by related-object
+        // reference. The OR keeps both reachable without duplicating the rows that set both.
+        var events = await store.Timeline.AsNoTracking()
+            .Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id))
             .Select(x => new TimelineItem(x.Id, x.EventType, x.OccurredAt, x.ActorId,
                 x.OldValue, x.NewValue, x.RelatedObjectType, x.RelatedObjectId, x.Changes, false))
             .ToListAsync(ct);
