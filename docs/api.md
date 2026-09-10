@@ -103,24 +103,28 @@ objects — not the entity graph — each carrying its own concurrency token:
 
 `POST /api/work/` takes `title` and `propertyId` (both required) plus the optional
 `description`, `workType`, `categoryId`, `priority`, `buildingId`, `spaceId`, `residentId`,
-`dueDate`, `cost`, `internalNotes` and `residentVisibleNotes`. The item is created and published
-in one step, so it comes back in `New` status with a `createdAt`, and a `WorkCreated` timeline
-entry is written in the same transaction. An empty or unknown/foreign `propertyId` returns 400
-and 404 respectively; a domain-invariant violation (title length, negative cost) returns 400.
+`assetId`, `dueDate`, `cost`, `internalNotes` and `residentVisibleNotes`. The item is created
+and published in one step, so it comes back in `New` status with a `createdAt`, and a
+`WorkCreated` timeline entry is written in the same transaction. An empty or unknown/foreign
+`propertyId` returns 400 and 404 respectively; a domain-invariant violation (title length,
+negative cost) returns 400. An unknown/foreign `buildingId` / `spaceId` / `categoryId` /
+`residentId` / `assetId` returns 400, as does an `assetId` for an asset at a different property.
 
-`PUT /api/work/{id}` replaces the editable fields and requires the `version` read from a
-previous response. It also accepts an optional `status` and `scheduledStart`/`scheduledEnd`;
-a status change goes through the domain state machine, so moving out of `Completed`/`Cancelled`
-or back to `Draft` is rejected with 400, and scheduling without a vendor or employee is
-rejected with 400. Title, priority, status and schedule changes each append their own timeline
-entry. A stale `version` returns 409 and requires a reload.
+`PUT /api/work/{id}` replaces the editable fields (including `assetId` — `null` clears the link)
+and requires the `version` read from a previous response. It also accepts an optional `status`
+and `scheduledStart`/`scheduledEnd`; a status change goes through the domain state machine, so
+moving out of `Completed`/`Cancelled` or back to `Draft` is rejected with 400, and scheduling
+without a vendor or employee is rejected with 400. Title, priority, status, schedule and asset
+changes each append their own timeline entry (`WorkUpdated`, `PriorityChanged`, `StatusChanged`,
+`Scheduled`, `AssetLinked`). A stale `version` returns 409 and requires a reload.
 
 `GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
 `{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
-changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`,
-`EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`,
-and the communication events `MessageQueued` / `MessageSent` / `MessageFailed`); `oldValue` /
-`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
+changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `WorkUpdated`,
+`VendorAssigned`, `EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`,
+`AssetLinked`, `WorkNote`, `WorkReopened`, and the communication events `MessageQueued` /
+`MessageSent` / `MessageFailed`); `oldValue` / `newValue` are the human-readable before/after
+(a name, a status, an id); `changes` is a JSON
 object with the details. `residentVisible` is `false` for work-history events and `true` for a
 resident communication. Communication entries are folded in from the outbox on read — there is
 no separate write — so a `MessageQueued` entry becomes `MessageSent` in place once the

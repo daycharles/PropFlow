@@ -17,6 +17,7 @@ export type WorkItem = {
   propertyName?: string | null;
   buildingId?: string | null;
   spaceId?: string | null;
+  assetId?: string | null;
   vendorId?: string | null;
   vendorName?: string | null;
   employeeId?: string | null;
@@ -55,6 +56,7 @@ export type UpdateWorkInput = {
   buildingId?: string | null;
   spaceId?: string | null;
   residentId?: string | null;
+  assetId?: string | null;
   dueDate?: string | null;
   cost?: number | null;
   internalNotes?: string | null;
@@ -77,6 +79,13 @@ export type Employee = {
   email?: string | null;
   phone?: string | null;
   isActive: boolean;
+};
+export type Asset = {
+  id: string;
+  propertyId: string;
+  spaceId?: string | null;
+  kind: string;
+  name: string;
 };
 export type WorkListQuery = {
   search?: string;
@@ -287,6 +296,10 @@ export const api = {
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },
+  assets: {
+    list: (propertyId?: string) =>
+      request<Asset[]>(`/api/assets/${propertyId ? `?propertyId=${propertyId}` : ""}`),
+  },
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
   },

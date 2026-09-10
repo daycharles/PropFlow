@@ -30,15 +30,20 @@ public sealed class M3DomainTests
         var work = new WorkItem(Organization, Guid.NewGuid(), "Repair", Guid.NewGuid(), Guid.NewGuid());
         var due = DateTimeOffset.Parse("2026-09-12T09:00:00-04:00");
 
+        var asset = Guid.NewGuid();
         work.SetLocation(work.PropertyId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        work.SetAsset(asset);
         work.SetDueDate(due);
         work.SetCost(123.45m);
         work.SetNotes("  technician note  ", "  Resident update  ");
 
         Assert.Equal(due, work.DueDate);
+        Assert.Equal(asset, work.AssetId);
         Assert.Equal(123.45m, work.Cost);
         Assert.Equal("technician note", work.InternalNotes);
         Assert.Equal("Resident update", work.ResidentVisibleNotes);
+        work.SetAsset(null);
+        Assert.Null(work.AssetId);
         Assert.Throws<ArgumentOutOfRangeException>(() => work.SetCost(-1));
     }
 
