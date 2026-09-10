@@ -48,18 +48,22 @@ A merged branch left standing is the reason the next session cannot tell what is
 - code shipping in a build while its issue says in-progress is not allowed. Either the work is
   flag-off and the issue says so, or the status moves.
 
-### Assign the issue to the session's account — every time
+### Assign the issue to the human whose agent it is — every time
 
 The board and the issue list are how a human tells **whose agent did what**. An unassigned
 closed issue loses that. So, as the first step of picking up a task and before opening the PR:
 
 ```bash
-gh issue edit <n> --add-assignee @me      # @me = the account gh is authed as for this session
+gh issue edit <n> --add-assignee mday440   # the human, NOT necessarily the token account
 ```
 
-- Assign to the account **this session authenticates as** (the human whose machine/agent it is),
-  not to whoever the issue was filed under. `daycharles`'s sessions assign `daycharles`;
-  `daycdev`'s sessions assign `daycdev`.
+- Assign to the **human who owns the session**, which is not always the account `gh` is authed
+  as. The macOS box's fine-grained PAT authenticates as `daycharles` (the repo owner), but the
+  person running it is **Michael Day → `mday440`** — assign `mday440`, not `@me`. `daycdev`'s
+  sessions assign `daycdev`.
+- Only repo **collaborators** are assignable (`gh api repos/daycharles/PropFlow/assignees`).
+  Today that is `daycharles` and `mday440`. `michaelday` is a real account but not a
+  collaborator, so it cannot be assigned until it is invited.
 - On merge, close the issue from the PR or by hand with a comment that names the PR and says an
   agent session did it:
   ```bash
