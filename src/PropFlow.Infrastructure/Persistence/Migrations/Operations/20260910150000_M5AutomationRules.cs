@@ -1,10 +1,14 @@
 using System;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations;
 
+[DbContext(typeof(OperationsStore))]
+[Migration("20260910150000_M5AutomationRules")]
 public sealed class M5AutomationRules : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
