@@ -2,11 +2,11 @@
 
 Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md](milestones.md)).
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
-implemented. **Milestone 3 is complete** — all 26 task issues closed and promoted to `main` in
-`b31b864` — see the M3 **Progress** note for what was carried forward rather than closed.
-**Milestone 4 is all but complete** — 11 of 12 tasks closed; only PF-4.06's atomicity half is
-carried forward (it waits on the M5 event wiring). **Milestones 5 and 6 are in flight in
-parallel.** This document is the source for GitHub milestones and issues.
+implemented. **Milestones 3, 4, 5 and 6 are complete and on `main`** — every task issue
+`#6`–`#67` is closed (PF-4.06's atomicity half is carried forward as a follow-up, not an open
+issue). Milestone 6 was built in parallel with milestone 5, so milestone number is not
+milestone order. **Milestone 7 (deployment and platform hardening) is the remaining track.**
+This document is the source for GitHub milestones and issues.
 
 Counts here drift; re-measure with `gh issue list --state all` rather than propagating them.
 
@@ -90,20 +90,19 @@ generalization, was closed by PF-3.10 in `c362bfd` (PR #107).
 assign a vendor, schedule a window, notify residents, confirm — completes as one fast operation
 with a success summary, durable communication dispatch, and a full seeded demo dataset.
 
-**Progress:** 7 of 12 tasks closed — PF-4.01, PF-4.02, PF-4.03, PF-4.04, PF-4.05, PF-4.06 and
-PF-4.07 (issues `#32`–`#38`). That is the resident/occupancy domain with per-channel consent, the
-`communications`-schema context with mock SMS/email senders, the transactional outbox and its
-at-most-once dispatcher, resident message templates rendered and queued through
-`POST /api/work/{id}/message`, communication records folded into the work timeline, and the
-extended bulk work actions. See [milestones.md](milestones.md) for what each one delivered.
+**Progress:** all 12 task issues (`#32`–`#43`) are closed and on `main`. That is the
+resident/occupancy domain with per-channel consent, the `communications`-schema context with mock
+SMS/email senders, the transactional outbox and its at-most-once dispatcher, resident message
+templates rendered and queued through `POST /api/work/{id}/message` and folded into the work
+timeline, the extended bulk work actions, the web assign &amp; notify flow, the mobile pass, the
+Tidewater demo seed, and the demo e2e + outbox/rendering/consent tests. See
+[milestones.md](milestones.md) for what each one delivered.
 
 Carry-forward and caveats the ✅ column cannot express: `add tag` is carved out of PF-4.07 pending
 the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half only — outbox rows
 carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
 audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
-triggers it) is still deferred to the M5 event wiring. PF-4.10 landed the Tidewater demo seed and
-PF-4.08 the web assign &amp; notify flow, PF-4.09 the mobile pass, PF-4.11 the demo e2e and PF-4.12
-the outbox/rendering/consent tests. Every M4 task is done bar PF-4.06's atomicity half.
+triggers it) is tracked in [followups.md](followups.md).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
@@ -131,17 +130,17 @@ workflows.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-5.01 | Property- and assignment-level authorization scope model (regional / technician / vendor); define before field access ships | application | L | PF-3.04 |
-| PF-5.02 | Grant `Technician` and `Vendor` capabilities scoped to assigned work / assigned property | application | M | PF-5.01 |
-| PF-5.03 | Technician "On The Way" status workflow: status transition, timeline event, triggers resident communication | application | M | PF-4.06, PF-5.02 |
-| PF-5.04 | Automation rules engine: persisted WHEN/IF/THEN rules over domain events, a predefined action set, evaluation on dispatch | application | XL (split) | PF-4.06 |
-| PF-5.05 | Automation rules admin UI (list, create, enable/disable) — predefined triggers/conditions/actions only | web | L | PF-5.04 |
-| PF-5.06 | Notes with explicit visibility (internal vs resident-visible) across API and web, consistently enforced | api | M | PF-3.19 |
-| PF-5.07 | Communication status (queued / sent / delivered / failed) shown inline in the work timeline | web | S | PF-4.06 |
-| PF-5.08 | Remaining authorized bulk actions from the handoff (send resident message, assign employee) wired to the bulk toolbar | api | M | PF-4.07 |
-| PF-5.09 | Technician mobile view: my assigned work, status changes, add note/photo | web | L | PF-5.02, PF-4.09 |
-| PF-5.10 | e2e: technician On The Way demo workflow in CI | tests | M | PF-5.03, PF-5.09 |
-| PF-5.11 | Tests: scope model denies cross-property/cross-assignment access for technician + vendor | tests | M | PF-5.01 |
+| PF-5.01 | ✅ Property- and assignment-level authorization scope model (regional / technician / vendor); define before field access ships | application | L | PF-3.04 |
+| PF-5.02 | ✅ Grant `Technician` and `Vendor` capabilities scoped to assigned work / assigned property | application | M | PF-5.01 |
+| PF-5.03 | ✅ Technician "On The Way" status workflow: status transition, timeline event, triggers resident communication | application | M | PF-4.06, PF-5.02 |
+| PF-5.04 | ✅ Automation rules engine: persisted WHEN/IF/THEN rules over domain events, a predefined action set, evaluation on dispatch | application | XL (split) | PF-4.06 |
+| PF-5.05 | ✅ Automation rules admin UI (list, create, enable/disable) — predefined triggers/conditions/actions only | web | L | PF-5.04 |
+| PF-5.06 | ✅ Notes with explicit visibility (internal vs resident-visible) across API and web, consistently enforced | api | M | PF-3.19 |
+| PF-5.07 | ✅ Communication status (queued / sent / delivered / failed) shown inline in the work timeline | web | S | PF-4.06 |
+| PF-5.08 | ✅ Remaining authorized bulk actions from the handoff (send resident message, assign employee) wired to the bulk toolbar | api | M | PF-4.07 |
+| PF-5.09 | ✅ Technician mobile view: my assigned work, status changes, add note/photo | web | L | PF-5.02, PF-4.09 |
+| PF-5.10 | ✅ e2e: technician On The Way demo workflow in CI | tests | M | PF-5.03, PF-5.09 |
+| PF-5.11 | ✅ Tests: scope model denies cross-property/cross-assignment access for technician + vendor | tests | M | PF-5.01 |
 
 ---
 
