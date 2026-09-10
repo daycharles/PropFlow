@@ -20,8 +20,21 @@ async function signIn(page: Page, email: string, password: string) {
   await expect(page.getByRole("heading", { name: "Work" })).toBeVisible();
 }
 
-async function signOut(page: Page) {
-  await page.getByRole("button", { name: "Sign out" }).click();
+/**
+ * Drop this context's session WITHOUT calling the app's Sign out button.
+ *
+ * `POST /api/auth/logout` rotates the user's Identity security stamp to revoke every session for
+ * that account (SessionAuthentication.LogoutAsync, src/PropFlow.Infrastructure/Identity/SessionAuthentication.cs:62-68),
+ * and ValidateCookieAsync rejects any cookie whose stamp no longer matches (`:49`). Every spec in
+ * this suite signs in as the same `demo-admin` account, so signing out here revoked the sessions
+ * of whichever admin specs happened to be mid-flight and they failed with "Your session has
+ * ended." Clearing the cookie jar abandons this session locally and leaves the shared account's
+ * other sessions alone. The product behaviour is correct and deliberate; only the test needed to
+ * stop relying on it.
+ */
+async function dropSession(page: Page) {
+  await page.context().clearCookies();
+  await page.goto("/");
   await expect(page.getByLabel("Organization slug")).toBeVisible();
 }
 
@@ -134,7 +147,7 @@ test("technician marks assigned work on the way and sees the resident update in 
 
   await signIn(page, adminEmail, adminPassword);
   const work = await provisionAssignedWork(page, title);
-  await signOut(page);
+  await dropSession(page);
 
   await signIn(page, technicianEmail, technicianPassword);
 
