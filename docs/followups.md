@@ -13,9 +13,9 @@ Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 ## M4 — what's left
 
 M3 is complete (all `#6`–`#31` closed, promoted to `main`); PF-3.27 shipped after the issues
-were cut and so has none. **PF-4.01–4.08 and PF-4.10 are done** (PF-4.03 + PF-4.06 landed in
-PR #108; PF-4.10 — the deterministic `TidewaterSeed` — in PR #114; PF-4.08 — the web assign &
-notify flow — in PR #120).
+were cut and so has none. **PF-4.01–4.10 are done except PF-4.06's atomicity half** (PF-4.03 +
+PF-4.06 landed in PR #108; PF-4.10 in PR #114; PF-4.08 in PR #120; PF-4.09 in PR #122). Only
+PF-4.11 and PF-4.12 remain.
 
 `develop` and `main` are level, nothing is flag-gated and nothing is held back on a feature branch,
 so `main` is the whole truth. Re-check with
@@ -26,7 +26,6 @@ What remains in M4:
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
 | PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | `POST /api/work/{id}/message` enqueues atomically *within that call*, but there is still no path that enqueues from a **work status/schedule change**. That (and idempotent real providers) is where C11 bites — needs the M5 event wiring (PF-5.03) |
-| PF-4.09 (#40) — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | Buildable now — a responsiveness pass over the M3 `apps/web` work list and `work/[id]` detail |
 | PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Now unblocked (PF-4.08 + PF-4.10 done). `assign-notify.spec.ts` already covers the flow against `localhost`; PF-4.11 is the CI-wired demo-script walkthrough |
 | PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Outbox idempotency + rendering + consent are covered (`CommunicationsTests`, `ResidentMessageTests`, `TemplateRendererTests`). Left: an explicit "no duplicate send on retry after a transient failure" scenario end-to-end |
 
@@ -79,7 +78,7 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
-| Tailwind is a dependency but nothing uses it | code audit 2026-09-09; `apps/web/package.json:24`, `apps/web/app/styles.css:1` | daycdev | PF-3.01 called for Tailwind. `styles.css:1` has `@import "tailwindcss"` but there is no PostCSS config and every rule below it is hand-written CSS. Either wire the build up or drop the dependency and the import |
+| Tailwind is a dependency but nothing uses it | code audit 2026-09-09; `apps/web/package.json:24`, `apps/web/app/styles.css:1` | daycdev | PF-3.01 called for Tailwind. `styles.css:1` has `@import "tailwindcss"` but there is no PostCSS config and every rule below it is hand-written CSS. Either wire the build up or drop the dependency and the import. **Note (PF-4.09):** the inert `@import` means there was no `box-sizing` reset either — that is now added explicitly at the top of `styles.css`. Dropping the dead dependency is still open. |
 | `CreatedAt` is only set in `Publish` | code audit 2026-09-09; `src/PropFlow.Domain/Work/WorkItem.cs` | daycdev | A `Draft` row carries `default(DateTimeOffset)` for `CreatedAt`. (The terminal-state half of this row is **closed** — PF-3.27 guarded the assignment overloads, audit A-1 guarded `Edit`/`Schedule`, PF-4.07 guarded `SetPriority` and added the sanctioned `Reopen`.) |
 | M3 domain types have two public constructors, no private-EF-ctor + factory | code audit 2026-09-09 | daycdev | `WorkItem`, `WorkCategory`, hierarchy types — the C5 fix pattern (private ctor + static `Create`) was not applied |
 | `Vendors.IsActive` backfilled `false`, `Employees.IsActive` added with no default | code audit 2026-09-09; `M3Operations.cs` | daycdev | Domain default is `true`; pre-M3 vendors silently deactivated; inconsistent between the two tables |
@@ -139,3 +138,4 @@ Kept so the same gap is not re-filed. Each row names the evidence checked when i
 | No web UI for the assign + schedule + notify workflow (PF-4.08) | 2026-09-10, PF-4.08 | `apps/web/app/components/assign-notify.tsx` — `AssignNotifyFlow`: vendor (required) + optional visit window + optional resident message, choose → confirm → apply as `bulk/vendor` → `bulk/schedule` (fresh versions re-read) → per-item `POST /api/work/{id}/message`, with a per-step outcome summary. Gated by capability (schedule needs `Work.Update`, notify needs `Communications.SendMessage`). Seed adds 3 templates. e2e `assign-notify.spec.ts`; the old vendor-only path stays as "Assign vendor only" |
 | Resident-message schedule times rendered in UTC, not the property's zone (audit 5th pass E-1) | 2026-09-10, PF-4.08 audit | `CommunicationEndpoints` now converts `work.ScheduledStart`/`End` to `property.TimeZoneId` (IANA, `TimeZoneInfo.FindSystemTimeZoneById`) before `ToString("f")`; unresolvable id / no property falls back to the stored offset. `A_scheduled_visit_renders_in_the_property_time_zone` (`ResidentMessageTests`). PF-4.08 (schedule + notify in one flow) is what made it reachable |
 | Assign & notify: notify ran after a failed schedule step, and an empty selection was an unexplained dead modal (audit 5th pass E-2/E-3) | 2026-09-10, PF-4.08 audit | `AssignNotifyFlow` skips notify when a window was set but scheduling 409'd (summary says so, `NotifyOutcome.blocked`); a filtered-out selection now shows "None of the selected work is in the current list…" |
+| Work list and detail were desktop-only (PF-4.09) | 2026-09-10, PF-4.09 | `box-sizing: border-box` reset + `html { overflow-x: hidden }` + one `@media (max-width: 700px)` block in `app/styles.css`: the Work `<table>` collapses to labelled cards (`thead` hidden, `td[data-label]::before`), a `.mobile-sort` `<select>` replaces column-header sorting, the bulk toolbar / saved-views / detail heading stack, and interactive controls are `min-height: 44px`. `e2e/mobile.spec.ts` asserts no horizontal overflow and 44px targets at 375px |

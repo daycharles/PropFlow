@@ -377,6 +377,26 @@ function WorkList({ session }: { session: Session }) {
             ))}
           </select>
         </label>
+        <label className="mobile-sort">
+          Sort by
+          <select
+            aria-label="Sort by"
+            value={`${query.sort ?? "title"}:${query.descending ? "desc" : "asc"}`}
+            onChange={(event) => {
+              const [sort, direction] = event.target.value.split(":");
+              defaultViewApplied.current = true;
+              setQuery((current) => ({ ...current, sort, descending: direction === "desc" }));
+            }}
+          >
+            <option value="title:asc">Title (A–Z)</option>
+            <option value="title:desc">Title (Z–A)</option>
+            <option value="status:asc">Status</option>
+            <option value="priority:desc">Priority (high first)</option>
+            <option value="priority:asc">Priority (low first)</option>
+            <option value="dueDate:asc">Due date (soonest)</option>
+            <option value="dueDate:desc">Due date (latest)</option>
+          </select>
+        </label>
         <button className="secondary filter-clear" onClick={clearFilters}>
           Clear filters
         </button>
@@ -520,7 +540,7 @@ function WorkList({ session }: { session: Session }) {
             ) : (
               work.map((item) => (
                 <tr key={item.id}>
-                  <td>
+                  <td className="select-cell">
                     <input
                       aria-label={`Select ${item.title}`}
                       type="checkbox"
@@ -528,22 +548,22 @@ function WorkList({ session }: { session: Session }) {
                       onChange={() => toggle(item.id)}
                     />
                   </td>
-                  <td>
+                  <td className="title-cell">
                     <Link href={`/work/${item.id}`}>
                       <strong>{item.title}</strong>
                     </Link>
                     {item.propertyName && <small>{item.propertyName}</small>}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <span className="badge">{item.status}</span>
                   </td>
-                  <td>
+                  <td data-label="Priority">
                     <span className={`priority priority-${item.priority.toLowerCase()}`}>
                       {item.priority}
                     </span>
                   </td>
-                  <td>{item.vendorName ?? "Unassigned"}</td>
-                  <td>{formatDate(item.dueDate)}</td>
+                  <td data-label="Vendor">{item.vendorName ?? "Unassigned"}</td>
+                  <td data-label="Due">{formatDate(item.dueDate)}</td>
                 </tr>
               ))
             )}

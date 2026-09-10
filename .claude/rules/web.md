@@ -52,6 +52,18 @@ only sees it when the request looks same-origin.
 rewrite carry it. Mutations need the `X-CSRF-TOKEN` header from `GET /api/auth/csrf`, re-fetched
 after login (`docs/local-development.md:56-63`).
 
+## Responsive layout (PF-4.09)
+
+Plain CSS in `app/styles.css`, no Tailwind engine (the `@import "tailwindcss"` is inert — no
+PostCSS config), so there is an explicit `box-sizing: border-box` reset at the top and one
+breakpoint, `@media (max-width: 700px)`. On a phone the Work list `<table>` becomes a stack of
+cards: `thead` is hidden and each `<td>` shows its own label via `td[data-label]::before`, so
+the `<td>`s in `page.tsx` carry `data-label` / `.title-cell` / `.select-cell`. Column-header
+sorting is replaced by the `.mobile-sort` `<select>` (hidden on wider screens; it has an
+explicit `aria-label="Sort by"` so `getByLabel("Status")` in the specs doesn't match its
+option text). Interactive controls are `min-height: 44px`. `e2e/mobile.spec.ts` locks the
+no-horizontal-overflow + touch-target guarantees at 375px.
+
 ## AGENTS.md
 
 `apps/web/CLAUDE.md` is a single `@AGENTS.md` include, chaining to the generated

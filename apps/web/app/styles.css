@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 :root {
   font-family: Arial, sans-serif;
   color: #172033;
@@ -7,6 +12,9 @@
 }
 body {
   margin: 0;
+}
+html {
+  overflow-x: hidden; /* nothing should scroll the page sideways on a phone */
 }
 main {
   padding: 28px;
@@ -57,6 +65,13 @@ button {
   border: 1px solid #c5cedb;
   border-radius: 6px;
   font: inherit;
+  min-height: 44px; /* comfortable touch target for field use */
+}
+input[type="checkbox"] {
+  min-height: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: #155eef;
 }
 textarea {
   min-height: 92px;
@@ -137,6 +152,9 @@ td small {
 .filter-clear {
   white-space: nowrap;
 }
+.mobile-sort {
+  display: none; /* the sortable column headers cover this on wider screens */
+}
 .bulk-toolbar {
   padding: 12px;
   margin: 14px 0;
@@ -151,16 +169,18 @@ td small {
   flex-wrap: wrap;
   margin: 0 0 16px;
 }
-.saved-views input {
+.saved-views input:not([type="checkbox"]) {
   width: 150px;
 }
 .inline-check {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
-.inline-check input {
-  width: auto;
+.inline-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
   padding: 0;
 }
 .saved-views-note {
@@ -265,6 +285,8 @@ td small {
 }
 .modal {
   width: min(480px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
   padding: 24px;
   border-radius: 10px;
   background: white;
@@ -296,17 +318,24 @@ td small {
 }
 @media (max-width: 700px) {
   main {
-    padding: 18px;
+    padding: 16px;
   }
   header {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px 12px;
   }
   .role {
     margin-left: 0;
+    order: 3;
+  }
+  header .secondary {
+    margin-left: auto;
   }
   .filters {
     grid-template-columns: 1fr;
+  }
+  .mobile-sort {
+    display: grid;
   }
   .detail-grid,
   .two-column {
@@ -314,5 +343,79 @@ td small {
   }
   .work-heading {
     align-items: flex-start;
+  }
+
+  /* Bulk toolbar: buttons fill the row rather than overflow it. */
+  .bulk-toolbar {
+    flex-wrap: wrap;
+  }
+  .bulk-toolbar button {
+    flex: 1 1 45%;
+  }
+
+  /* Saved views: one control per line. */
+  .saved-views {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .saved-views input,
+  .saved-views select {
+    width: 100%;
+  }
+
+  .detail-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Work list becomes a stack of cards — the wide table does not scroll on a phone. */
+  .work-panel table,
+  .work-panel tbody,
+  .work-panel tr,
+  .work-panel td {
+    display: block;
+    width: 100%;
+  }
+  .work-panel thead {
+    display: none;
+  }
+  .work-panel tr {
+    position: relative;
+    border: 1px solid #e5eaf1;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    padding: 10px 14px 12px;
+  }
+  .work-panel td {
+    border-bottom: 0;
+    padding: 6px 0;
+  }
+  .work-panel td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #667085;
+  }
+  .work-panel td.title-cell {
+    padding-right: 40px; /* clear the corner checkbox */
+  }
+  .work-panel td.title-cell a strong {
+    font-size: 1.05rem;
+  }
+  .work-panel td.select-cell {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: auto;
+    padding: 0;
+  }
+  .work-panel td.select-cell input {
+    width: 26px;
+    height: 26px;
   }
 }
