@@ -119,6 +119,13 @@ and requires the `Work.AssignEmployee` capability.
 
 Success is `{ "changed": true }`; repeating the same assignment returns `{ "changed": false }` and creates no duplicate timeline entry. Unknown work/vendor/employee IDs, including other organizations' IDs, return 404. Invalid IDs return 400. A database concurrency conflict returns 409 and requires a reload. Assigning a vendor or employee to work in `New` moves it to `Assigned`; any other status is left alone. Tenant, actor and permissions come only from the session; extra JSON fields, query strings and tenant headers cannot override them.
 
+**Terminal work takes no assignment.** Work in `Completed` or `Cancelled` returns
+400 `Completed and cancelled work cannot be assigned`, for the vendor route, the employee route
+and the bulk route alike, and nothing is written. This is the same rule `ChangeStatus` applies
+when refusing to move out of those two statuses (`src/PropFlow.Domain/Work/WorkItem.cs`). Repeating
+an assignment that a work item already carries is still `{ "changed": false }` rather than a 400,
+so replaying a completed action is not an error.
+
 `POST /api/work/bulk/vendor` applies one vendor to a bounded batch:
 
 ```json

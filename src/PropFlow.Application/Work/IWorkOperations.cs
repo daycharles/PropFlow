@@ -3,7 +3,7 @@ using PropFlow.Domain.Work;
 
 namespace PropFlow.Application.Work;
 
-public enum AssignmentOutcome { Updated, Unchanged, NotFound, Conflict }
+public enum AssignmentOutcome { Updated, Unchanged, NotFound, Conflict, NotAssignable }
 public enum WorkWriteOutcome { Updated, NotFound, Conflict }
 public sealed record WorkListQuery(string? Search, Guid? CategoryId, WorkStatus? Status, WorkPriority? Priority, Guid? PropertyId, Guid? SpaceId, string? Sort, bool Descending, int Page, int PageSize);
 public sealed record WorkListPage(IReadOnlyList<WorkListItem> Items, int TotalCount, int Page, int PageSize);

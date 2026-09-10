@@ -87,6 +87,8 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     public async Task<AssignmentOutcome> AssignVendorAsync(Guid id, Guid vendorId, Guid actorId, uint? version, CancellationToken ct)
     {
         var work = await store.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (work is null || !await store.Vendors.AnyAsync(x => x.Id == vendorId, ct)) return AssignmentOutcome.NotFound;
+        // Ask before telling: the domain throws on terminal work, and this layer reports outcomes.
+        if (work.IsTerminal) return AssignmentOutcome.NotAssignable;
         if (version is { } v) store.Entry(work).Property("Version").OriginalValue = v;
         var change = work.AssignVendor(vendorId, actorId, clock.GetUtcNow()); if (change is null) return AssignmentOutcome.Unchanged;
         store.Timeline.Add(TimelineEntry.From(change)); try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
@@ -95,6 +97,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     public async Task<AssignmentOutcome> AssignEmployeeAsync(Guid id, Guid employeeId, Guid actorId, uint? version, CancellationToken ct)
     {
         var work = await store.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (work is null || !await store.Employees.AnyAsync(x => x.Id == employeeId, ct)) return AssignmentOutcome.NotFound;
+        if (work.IsTerminal) return AssignmentOutcome.NotAssignable;
         if (version is { } v) store.Entry(work).Property("Version").OriginalValue = v;
         var change = work.AssignEmployee(employeeId, actorId, clock.GetUtcNow()); if (change is null) return AssignmentOutcome.Unchanged;
         store.Timeline.Add(TimelineEntry.Record(change.OrganizationId, change.ActorId, change.OccurredAt, nameof(EmployeeAssigned), "WorkItem", change.WorkId,
@@ -110,6 +113,10 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         if (!await store.Vendors.AnyAsync(x => x.Id == vendorId, ct)) return new(AssignmentOutcome.NotFound, 0, 0, total);
         await using var transaction = await store.Database.BeginTransactionAsync(ct);
         var ids = items.Select(x => x.WorkId).ToArray(); var works = await store.WorkItems.Where(x => ids.Contains(x.Id)).ToListAsync(ct); if (works.Count != items.Count) return new(AssignmentOutcome.NotFound, 0, 0, total);
+        // All-or-nothing includes assignability: one terminal item refuses the whole batch, before
+        // anything is mutated. A select-all over an unfiltered list must not quietly hand a vendor
+        // to completed and cancelled work.
+        if (works.Any(x => x.IsTerminal)) return new(AssignmentOutcome.NotAssignable, 0, 0, total);
         var byId = items.ToDictionary(x => x.WorkId); var changed = 0;
         foreach (var work in works) { store.Entry(work).Property("Version").OriginalValue = byId[work.Id].Version; var e = work.AssignVendor(vendorId, actorId, clock.GetUtcNow()); if (e is not null) { changed++; store.Timeline.Add(TimelineEntry.From(e)); } }
         try { await store.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total); }

@@ -75,6 +75,7 @@ populated milestone-2 database.
 | PF-3.24 | e2e (Playwright): the full vertical-slice workflow against seeded data, in CI | tests | M | PF-3.20, PF-3.22 |
 | PF-3.25 | CI: add web install/lint/build/unit steps and the Playwright job to `.github/workflows/ci.yml` | ci | S | PF-3.01 |
 | PF-3.26 | Update `docs/api.md` and `docs/local-development.md` for the new endpoints and the web dev server | chore | S | PF-3.13 |
+| PF-3.27 | Refuse vendor/employee assignment on `Completed` and `Cancelled` work, and write the demo script | fix | S | PF-3.16, PF-3.20 |
 
 ---
 
