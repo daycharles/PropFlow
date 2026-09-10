@@ -1,6 +1,6 @@
 namespace PropFlow.Domain.Work;
 
-public enum WorkStatus { Draft, New, Assigned, Scheduled, InProgress, OnHold, Completed, Cancelled }
+public enum WorkStatus { Draft, New, Assigned, Scheduled, OnTheWay, InProgress, OnHold, Completed, Cancelled }
 public enum WorkPriority { Low, Normal, High, Critical }
 public enum WorkType { MaintenanceRequest, WorkOrder, InspectionFollowUp, PreventiveMaintenance, UnitTurnTask, ProjectTask }
 
