@@ -413,6 +413,47 @@ export const api = {
           items: bulkItems(input),
         }),
       }),
+    bulkStatus: (input: {
+      workIds: string[];
+      status: string;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: input.status, items: bulkItems(input) }),
+      }),
+    bulkPriority: (input: {
+      workIds: string[];
+      priority: string;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/priority", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: input.priority, items: bulkItems(input) }),
+      }),
+    bulkNote: (input: {
+      workIds: string[];
+      note: string;
+      internal: boolean;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: input.note,
+          internal: input.internal,
+          items: bulkItems(input),
+        }),
+      }),
+    bulkReopen: (input: { workIds: string[]; concurrencyTokens?: Record<string, string> }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/reopen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: bulkItems(input) }),
+      }),
     // POST /api/work/{id}/message — queue one resident message for this work item's resident.
     // 202 { queued } on success; the caller classifies 4xx (no resident / no consent / etc.).
     sendMessage: (id: string, templateId: string) =>

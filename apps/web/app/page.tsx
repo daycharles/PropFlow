@@ -17,6 +17,7 @@ import {
 import { hasCapability } from "../lib/capabilities";
 import { AppShell } from "./components/app-shell";
 import { AssignNotifyFlow } from "./components/assign-notify";
+import { BulkEditFlow } from "./components/bulk-edit";
 
 const statuses = [
   "Draft",
@@ -150,6 +151,7 @@ function WorkList({ session }: { session: Session }) {
   const [error, setError] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [assignNotify, setAssignNotify] = useState(false);
+  const [bulkEdit, setBulkEdit] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [bulkAction, setBulkAction] = useState<"vendor" | "employee" | "message">("vendor");
@@ -551,6 +553,13 @@ function WorkList({ session }: { session: Session }) {
           >
             Send resident message
           </button>
+          <button
+            className="secondary"
+            onClick={() => setBulkEdit(true)}
+            disabled={!hasCapability(session, "Work.Update")}
+          >
+            Bulk edit…
+          </button>
           <button className="secondary" onClick={() => setSelected(new Set())}>
             Clear selection
           </button>
@@ -650,6 +659,19 @@ function WorkList({ session }: { session: Session }) {
           vendors={vendors}
           onClose={(reload) => {
             setAssignNotify(false);
+            if (reload) {
+              setSelected(new Set());
+              void loadWork();
+            }
+          }}
+        />
+      )}
+      {bulkEdit && (
+        <BulkEditFlow
+          session={session}
+          items={visibleSelected}
+          onClose={(reload) => {
+            setBulkEdit(false);
             if (reload) {
               setSelected(new Set());
               void loadWork();

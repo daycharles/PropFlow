@@ -141,6 +141,7 @@ workflows.
 | PF-5.09 | ✅ Technician mobile view: my assigned work, status changes, add note/photo | web | L | PF-5.02, PF-4.09 |
 | PF-5.10 | ✅ e2e: technician On The Way demo workflow in CI | tests | M | PF-5.03, PF-5.09 |
 | PF-5.11 | ✅ Tests: scope model denies cross-property/cross-assignment access for technician + vendor | tests | M | PF-5.01 |
+| PF-5.12 | ✅ Expose the remaining authorized bulk actions on the work-list toolbar — a "Bulk edit…" flow (gated by `Work.Update`) that applies status, priority, schedule, resident/internal note or reopen to the selected batch via the existing bounded, all-or-nothing `/api/work/bulk/*` endpoints. Shows changed / unchanged / total on success and treats any rollback (409 / not-assignable) as a failure with nothing changed. `e2e/bulk-edit.spec.ts` covers status (desktop) and note (phone viewport). | web | M | PF-4.07, PF-5.08 |
 
 ---
 
