@@ -32,10 +32,7 @@ public sealed class EfRepeatRepairDetector(OperationsStore store, TimeProvider c
         var asset = await store.Assets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == assetId, cancellationToken);
         if (asset is null) return null;
 
-        var policy = await store.RepeatRepairPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var threshold = policy?.RepairThreshold ?? RepeatRepairPolicy.DefaultThreshold;
-        var windowDays = policy?.WindowDays ?? RepeatRepairPolicy.DefaultWindowDays;
-        var matchByCategory = policy?.MatchByCategory ?? false;
+        var (threshold, windowDays, matchByCategory) = await ResolvePolicyAsync(cancellationToken);
 
         var since = clock.GetUtcNow().AddDays(-windowDays);
         var window = store.WorkItems.AsNoTracking().Where(w => w.AssetId == assetId && w.CreatedAt >= since);
@@ -51,5 +48,26 @@ public sealed class EfRepeatRepairDetector(OperationsStore store, TimeProvider c
 
         return new RepeatRepairAssessment(threshold, windowDays, matchByCategory, count, since,
             rollup?.Cost ?? 0m, age, count >= threshold);
+    }
+
+    public async Task<IReadOnlySet<Guid>> RepeatRepairAssetIdsAsync(CancellationToken cancellationToken)
+    {
+        var (threshold, windowDays, _) = await ResolvePolicyAsync(cancellationToken);
+        var since = clock.GetUtcNow().AddDays(-windowDays);
+        var ids = await store.WorkItems.AsNoTracking()
+            .Where(w => w.AssetId != null && w.CreatedAt >= since)
+            .GroupBy(w => w.AssetId!.Value)
+            .Where(g => g.Count() >= threshold)
+            .Select(g => g.Key)
+            .ToListAsync(cancellationToken);
+        return ids.ToHashSet();
+    }
+
+    private async Task<(int Threshold, int WindowDays, bool MatchByCategory)> ResolvePolicyAsync(CancellationToken cancellationToken)
+    {
+        var policy = await store.RepeatRepairPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        return (policy?.RepairThreshold ?? RepeatRepairPolicy.DefaultThreshold,
+            policy?.WindowDays ?? RepeatRepairPolicy.DefaultWindowDays,
+            policy?.MatchByCategory ?? false);
     }
 }

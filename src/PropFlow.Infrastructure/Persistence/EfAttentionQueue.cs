@@ -1,38 +1,23 @@
 using Microsoft.EntityFrameworkCore;
+using PropFlow.Application.Assets;
 using PropFlow.Application.Attention;
-using PropFlow.Domain.Assets;
 using PropFlow.Domain.Attention;
 using PropFlow.Domain.Work;
 
 namespace PropFlow.Infrastructure.Persistence;
 
 // Builds the attention queue in three tenant-scoped queries — the open work rows, the last
-// timeline activity per work, and the assets currently over the repeat-repair threshold — then
-// runs the pure AttentionRules over each row. Every query rides the EF tenant filter and RLS.
-public sealed class EfAttentionQueue(OperationsStore store, TimeProvider clock) : IAttentionQueue
+// timeline activity for those rows, and the assets currently over the repeat-repair threshold —
+// then runs the pure AttentionRules over each row. Every query rides the EF tenant filter and RLS.
+public sealed class EfAttentionQueue(OperationsStore store, IRepeatRepairDetector repeatRepair, TimeProvider clock) : IAttentionQueue
 {
     public async Task<AttentionQueue> BuildAsync(CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
 
-        var policy = await store.RepeatRepairPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var threshold = policy?.RepairThreshold ?? RepeatRepairPolicy.DefaultThreshold;
-        var windowStart = now.AddDays(-(policy?.WindowDays ?? RepeatRepairPolicy.DefaultWindowDays));
-        // The queue flags any asset over the raw repair count; the policy's category-similarity
-        // option only narrows the per-asset assessment surface, not this sweep.
-        var repeatRepairAssets = (await store.WorkItems.AsNoTracking()
-            .Where(w => w.AssetId != null && w.CreatedAt >= windowStart)
-            .GroupBy(w => w.AssetId!.Value)
-            .Select(g => new { AssetId = g.Key, Count = g.Count() })
-            .Where(x => x.Count >= threshold)
-            .Select(x => x.AssetId)
-            .ToListAsync(cancellationToken)).ToHashSet();
-
-        var lastActivity = (await store.Timeline.AsNoTracking()
-            .Where(t => t.WorkId != null)
-            .GroupBy(t => t.WorkId!.Value)
-            .Select(g => new { WorkId = g.Key, At = g.Max(t => t.OccurredAt) })
-            .ToListAsync(cancellationToken)).ToDictionary(x => x.WorkId, x => x.At);
+        // The window/threshold live in the repeat-repair detector; this is the tenant-wide sweep
+        // (the policy's category-similarity option is not applied here).
+        var repeatRepairAssets = await repeatRepair.RepeatRepairAssetIdsAsync(cancellationToken);
 
         var rows = await (
             from w in store.WorkItems.AsNoTracking()
@@ -55,6 +40,13 @@ public sealed class EfAttentionQueue(OperationsStore store, TimeProvider clock) 
                 w.ResidentId,
                 w.AssetId,
             }).ToListAsync(cancellationToken);
+
+        var openIds = rows.Select(r => r.Id).ToHashSet();
+        var lastActivity = (await store.Timeline.AsNoTracking()
+            .Where(t => t.WorkId != null && openIds.Contains(t.WorkId!.Value))
+            .GroupBy(t => t.WorkId!.Value)
+            .Select(g => new { WorkId = g.Key, At = g.Max(t => t.OccurredAt) })
+            .ToListAsync(cancellationToken)).ToDictionary(x => x.WorkId, x => x.At);
 
         var items = new List<AttentionItem>();
         foreach (var row in rows)

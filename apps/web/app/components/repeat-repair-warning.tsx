@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApiError, type RepeatRepairAssessment } from "../../lib/api";
+import { api, type RepeatRepairAssessment } from "../../lib/api";
 
 const money = (value: number) =>
   new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
@@ -41,9 +41,9 @@ export function RepeatRepairWarning({
       .then((assessment) => {
         if (active) setEntry({ key: `${assetId}|${categoryId ?? ""}`, assessment });
       })
-      .catch((cause) => {
-        // A missing asset or a transient error simply suppresses the warning.
-        if (!(cause instanceof ApiError)) throw cause;
+      .catch(() => {
+        // A missing asset, a lost session or a network blip simply suppresses the warning —
+        // it is an alert, never load-bearing.
       });
     return () => {
       active = false;
