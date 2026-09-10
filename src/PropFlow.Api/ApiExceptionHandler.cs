@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using PropFlow.Application;
 
 namespace PropFlow.Api;
@@ -8,6 +9,7 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
+        var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
         var (status, title) = exception switch
         {
             TenantAccessException => (403, "Organization access denied"),
@@ -18,9 +20,9 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             ArgumentException => (400, "Invalid request"),
             _ => (500, "An unexpected error occurred")
         };
-        if (status == 500) logger.LogError(exception, "Request failed. TraceId: {TraceId}", context.TraceIdentifier);
+        if (status == 500) logger.LogError(exception, "Request failed. TraceId: {TraceId}", traceId);
         await Results.Problem(statusCode: status, title: title,
-            extensions: new Dictionary<string, object?> { ["traceId"] = context.TraceIdentifier }).ExecuteAsync(context);
+            extensions: new Dictionary<string, object?> { ["traceId"] = traceId }).ExecuteAsync(context);
         return true;
     }
 }

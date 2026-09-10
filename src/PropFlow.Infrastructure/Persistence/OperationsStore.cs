@@ -29,6 +29,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -144,6 +145,17 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.OccurredAt });
+        });
+        model.Entity<Attachment>(entity =>
+        {
+            entity.ToTable("Attachments");
+            entity.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.StorageKey).HasMaxLength(300).IsRequired();
+            entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.CreatedAt });
+            entity.HasIndex(x => new { x.OrganizationId, x.RetainUntil });
         });
 
         // One convention for every business entity, including future modules.

@@ -92,6 +92,29 @@ public sealed class OutboxMessageTests
     }
 
     [Fact]
+    public void Provider_callback_records_terminal_status_and_is_replay_safe()
+    {
+        var message = Sms();
+        message.BeginDelivery(When);
+        message.MarkSent("provider-1", When);
+
+        message.ApplyProviderCallback(ProviderDeliveryStatus.Delivered, null, When.AddMinutes(1));
+        message.ApplyProviderCallback(ProviderDeliveryStatus.Failed, "late duplicate", When);
+
+        Assert.Equal(ProviderDeliveryStatus.Delivered, message.ProviderDeliveryStatus);
+        Assert.Equal(When.AddMinutes(1), message.ProviderUpdatedAt);
+        Assert.Equal(OutboxStatus.Sent, message.Status);
+    }
+
+    [Fact]
+    public void Failed_provider_callback_requires_a_reason()
+    {
+        var message = Sms();
+        Assert.Throws<ArgumentException>(() =>
+            message.ApplyProviderCallback(ProviderDeliveryStatus.Failed, null, When));
+    }
+
+    [Fact]
     public void RecordFailedAttempt_keeps_the_message_pending_until_the_cap()
     {
         var message = Sms();

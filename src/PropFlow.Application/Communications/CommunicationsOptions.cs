@@ -17,4 +17,33 @@ public sealed class CommunicationsOptions
 
     // How long a claimed (Sending) message may sit before another dispatcher reclaims it.
     public TimeSpan StaleClaimTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    // Terminal message payloads are retained for audit/replay visibility, then removed.
+    public TimeSpan RetentionPeriod { get; set; } = TimeSpan.FromDays(30);
+
+    public string SmsProvider { get; set; } = "Mock";
+    public string EmailProvider { get; set; } = "Mock";
+    public string? TwilioAccountSid { get; set; }
+    public string? TwilioAuthToken { get; set; }
+    public string? TwilioFromNumber { get; set; }
+    public string? SendGridApiKey { get; set; }
+    public string? SendGridFromAddress { get; set; }
+
+    public void Validate(bool productionOrStaging)
+    {
+        ValidateProvider(SmsProvider, "SMS");
+        ValidateProvider(EmailProvider, "email");
+        if (SmsProvider.Equals("Twilio", StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(TwilioAccountSid) || string.IsNullOrWhiteSpace(TwilioAuthToken) || string.IsNullOrWhiteSpace(TwilioFromNumber)))
+            throw new InvalidOperationException("Twilio SMS requires account SID, auth token, and from number.");
+        if (EmailProvider.Equals("SendGrid", StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(SendGridApiKey) || string.IsNullOrWhiteSpace(SendGridFromAddress)))
+            throw new InvalidOperationException("SendGrid email requires API key and from address.");
+    }
+
+    private static void ValidateProvider(string provider, string channel)
+    {
+        if (provider is "Mock" or "Twilio" or "SendGrid") return;
+        throw new InvalidOperationException($"Unsupported {channel} provider '{provider}'.");
+    }
 }

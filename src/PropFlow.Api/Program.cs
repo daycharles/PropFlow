@@ -4,16 +4,19 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
 using PropFlow.Application;
 using PropFlow.Application.Assets;
+using PropFlow.Application.Attachments;
 using PropFlow.Application.Attention;
 using PropFlow.Application.Communications;
 using PropFlow.Application.Integrations;
 using PropFlow.Application.Search;
 using PropFlow.Application.Work;
 using PropFlow.Infrastructure.Communications;
+using PropFlow.Infrastructure.Attachments;
 using PropFlow.Infrastructure.Identity;
 using PropFlow.Infrastructure.Integrations;
 using PropFlow.Infrastructure.Persistence;
@@ -21,14 +24,18 @@ using PropFlow.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 var connection = builder.Configuration.GetConnectionString("Database")
     ?? throw new InvalidOperationException("Set ConnectionStrings__Database to the restricted PostgreSQL runtime account.");
+DeploymentConfiguration.ValidatePostgresTls(connection, builder.Environment);
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    DeploymentConfiguration.ConfigureForwardedHeaders(options, builder.Configuration, builder.Environment));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddSingleton<IAttachmentStorage, LocalAttachmentStorage>();
 
 // Data Protection secures the auth and antiforgery cookies. In a real deployment the key ring
 // must persist and be shared across instances (and encrypted at rest); Development/Testing keep
@@ -68,11 +75,19 @@ builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
+builder.Services.AddHttpClient();
+var communicationsOptions = builder.Configuration.GetSection(CommunicationsOptions.SectionName).Get<CommunicationsOptions>() ?? new CommunicationsOptions();
+communicationsOptions.Validate(builder.Environment.IsProduction() || builder.Environment.IsStaging());
+builder.Services.AddSingleton(communicationsOptions);
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
-builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
-builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
-builder.Services.AddSingleton(builder.Configuration.GetSection(CommunicationsOptions.SectionName)
-    .Get<CommunicationsOptions>() ?? new CommunicationsOptions());
+if (communicationsOptions.SmsProvider.Equals("Twilio", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddSingleton<IMessageSender, TwilioMessageSender>();
+else
+    builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
+if (communicationsOptions.EmailProvider.Equals("SendGrid", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddSingleton<IMessageSender, SendGridMessageSender>();
+else
+    builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
 builder.Services.AddSingleton<OutboxRelay>();
 // The background poller is off under integration tests, which drive OutboxRelay directly.
 if (!builder.Environment.IsEnvironment("Testing"))
@@ -130,6 +145,8 @@ builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
 
 var app = builder.Build();
 app.UseExceptionHandler();
+app.UseForwardedHeaders();
+app.UseMiddleware<RequestObservabilityMiddleware>();
 if (!app.Environment.IsDevelopment())
     app.UseHsts();
 // The API only ever returns JSON. Lock everything else down on every response.
@@ -151,7 +168,8 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api"))
     {
         context.Response.Headers.CacheControl = "no-store";
-        if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
+        if (!context.Request.Path.StartsWithSegments("/api/communications/provider-callback") &&
+            !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
             && !HttpMethods.IsOptions(context.Request.Method))
         {
             try { await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context); }
@@ -165,6 +183,7 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.MapGet("/health/live", () => Results.Ok(new { status = "healthy", service = "PropFlow.Api" }));
+app.MapGet("/health/metrics", () => Results.Ok(PropFlowObservability.Snapshot()));
 app.MapHealthChecks("/health/ready");
 app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
@@ -174,11 +193,13 @@ app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
+app.MapAttachmentEndpoints();
 app.MapSearchEndpoints();
 app.MapAttentionEndpoints();
 app.MapSavedViewEndpoints();
 app.MapIntegrationEndpoints();
 app.MapAutomationEndpoints();
+app.MapProviderCallbackEndpoints();
 app.Run();
 
 public partial class Program { }

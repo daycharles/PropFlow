@@ -24,11 +24,11 @@ public static class WorkEndpoints
             var results = await work.ListAsync(new(request.Search, request.CategoryId, request.Status, request.Priority, request.PropertyId, request.SpaceId, request.Sort, request.Descending, page, size, scope, subject), ct);
             return Results.Ok(new { results.Items, results.TotalCount, results.Page, results.PageSize });
         });
-        group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, MembershipAccess memberships, IWorkOperations work, CancellationToken ct) =>
+        group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, MembershipAccess memberships, IWorkOperations work, OperationsStore operations, CancellationToken ct) =>
         {
             var item = await work.GetAsync(id, ct);
             return item is not null && await AllowsAsync(item, user, memberships, ct)
-                ? Results.Ok(new WorkResponse(item, (await work.VersionAsync(id, ct))!.Value)) : Results.NotFound();
+                ? Results.Ok(await ResponseAsync(item, (await work.VersionAsync(id, ct))!.Value, operations, ct)) : Results.NotFound();
         });
         // The staff timeline includes internal activity. `residentVisibleOnly` is deliberately an
         // opt-in projection for a future resident-scoped caller; it never promotes an internal
@@ -79,19 +79,19 @@ public static class WorkEndpoints
             }
             return Results.Ok(new { changed = true, queued });
         }).RequireAuthorization(Capabilities.MarkOnTheWay);
-        group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
+        group.MapPost("/", async (CreateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, OperationsStore operations, CancellationToken ct) =>
         {
             if (request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Property ID is required");
             if (!Enum.IsDefined(request.WorkType) || !Enum.IsDefined(request.Priority)) return Results.Problem(statusCode: 400, title: "A valid work type and priority are required");
-            try { var item = await work.CreateAsync(request.ToCommand(Actor(user)), ct); return Results.Created($"/api/work/{item.Id}", new WorkResponse(item, (await work.VersionAsync(item.Id, ct))!.Value)); }
+            try { var item = await work.CreateAsync(request.ToCommand(Actor(user)), ct); return Results.Created($"/api/work/{item.Id}", await ResponseAsync(item, (await work.VersionAsync(item.Id, ct))!.Value, operations, ct)); }
             catch (KeyNotFoundException) { return Results.NotFound(); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); }
         }).RequireAuthorization(Capabilities.CreateWork);
-        group.MapPut("/{id:guid}", async (Guid id, UpdateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, CancellationToken ct) =>
+        group.MapPut("/{id:guid}", async (Guid id, UpdateWorkRequest request, ClaimsPrincipal user, IWorkOperations work, OperationsStore operations, CancellationToken ct) =>
         {
             if (id == Guid.Empty || request.PropertyId == Guid.Empty) return Results.Problem(statusCode: 400, title: "Work and property IDs are required");
             if (!Enum.IsDefined(request.Priority) || (request.Status is { } st && !Enum.IsDefined(st)))
                 return Results.Problem(statusCode: 400, title: "A valid priority and status are required");
-            try { var outcome = await work.UpdateAsync(id, request.ToCommand(Actor(user)), ct); return outcome switch { WorkWriteOutcome.NotFound => Results.NotFound(), WorkWriteOutcome.Conflict => Results.Problem(statusCode: 409, title: "Work item was changed by another user"), _ => Results.Ok(new WorkResponse((await work.GetAsync(id, ct))!, (await work.VersionAsync(id, ct))!.Value)) }; }
+            try { var outcome = await work.UpdateAsync(id, request.ToCommand(Actor(user)), ct); return outcome switch { WorkWriteOutcome.NotFound => Results.NotFound(), WorkWriteOutcome.Conflict => Results.Problem(statusCode: 409, title: "Work item was changed by another user"), _ => Results.Ok(await ResponseAsync((await work.GetAsync(id, ct))!, (await work.VersionAsync(id, ct))!.Value, operations, ct)) }; }
             catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } catch (InvalidOperationException e) { return Results.Problem(statusCode: 400, title: e.Message); }
         }).RequireAuthorization(Capabilities.UpdateWork);
@@ -162,6 +162,19 @@ public static class WorkEndpoints
             return BulkResult(summary, "Only completed or cancelled work can be reopened");
         }).RequireAuthorization(Capabilities.UpdateWork);
     }
+    private static async Task<WorkResponse> ResponseAsync(WorkItem item, uint version, OperationsStore operations, CancellationToken ct)
+    {
+        var zoneId = await operations.Properties.AsNoTracking().Where(x => x.Id == item.PropertyId).Select(x => x.TimeZoneId).SingleOrDefaultAsync(ct);
+        TimeZoneInfo? zone = null;
+        if (!string.IsNullOrWhiteSpace(zoneId))
+        {
+            try { zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId); }
+            catch (TimeZoneNotFoundException) { }
+            catch (InvalidTimeZoneException) { }
+        }
+        DateTimeOffset? Local(DateTimeOffset? value) => value is { } instant && zone is not null ? TimeZoneInfo.ConvertTime(instant, zone) : value;
+        return new WorkResponse(item, version, zoneId, Local(item.ScheduledStart), Local(item.ScheduledEnd));
+    }
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static async Task<(WorkAccessScope? Scope, WorkScopeSubject? Subject)> ScopeAsync(ClaimsPrincipal user, MembershipAccess memberships, CancellationToken ct)
     {
@@ -195,7 +208,8 @@ public static class WorkEndpoints
 }
 
 public sealed record WorkListRequest(string? Search, Guid? CategoryId, WorkStatus? Status, WorkPriority? Priority, Guid? PropertyId, Guid? SpaceId, string? Sort, bool Descending = false, int Page = 1, int PageSize = 25);
-public sealed record WorkResponse(WorkItem Item, uint Version);
+public sealed record WorkResponse(WorkItem Item, uint Version, string? PropertyTimeZone = null,
+    DateTimeOffset? ScheduledStartLocal = null, DateTimeOffset? ScheduledEndLocal = null);
 public sealed record AssignVendorRequest(Guid VendorId, uint? Version = null);
 public sealed record AssignEmployeeRequest(Guid EmployeeId, uint? Version = null);
 public sealed record BulkWorkVersion(Guid WorkId, uint Version);
