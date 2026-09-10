@@ -374,8 +374,8 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
     [Fact]
     public async Task Timeline_returns_an_entry_related_to_the_work_item_but_carrying_no_work_id()
     {
-        // The shape PF-4.06 needs: a communication record hangs off a work item by
-        // related-object reference only, with no WorkId and no actor.
+        // The shape PF-4.06 needs: an entry hangs off a work item by related-object reference
+        // only, with no WorkId and no actor. Before the read path was widened it was invisible.
         await using var s = await fixture.CreateScenarioAsync();
         var entryId = Guid.NewGuid();
         await using (var store = s.AdminStore(s.OrganizationA))
@@ -384,14 +384,16 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
                 "CommunicationQueued", "WorkItem", s.WorkA, null, "Queued", workId: null, id: entryId));
             await store.SaveChangesAsync();
         }
+        await using (var verify = s.Store(s.OrganizationA))
+            Assert.Null((await verify.Timeline.AsNoTracking().SingleAsync(x => x.Id == entryId)).WorkId);
         await s.LoginAsync();
 
         var timeline = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}/timeline");
         var entry = timeline.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == entryId);
         Assert.Equal("CommunicationQueued", entry.GetProperty("eventType").GetString());
-        Assert.Equal(JsonValueKind.Null, entry.GetProperty("workId").ValueKind);
         Assert.Equal("WorkItem", entry.GetProperty("relatedObjectType").GetString());
         Assert.Equal(s.WorkA, entry.GetProperty("relatedObjectId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("actorId").ValueKind);
     }
 
     [Fact]

@@ -68,10 +68,41 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
 
     public Task<WorkItem?> GetAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
     public Task<uint?> VersionAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().Where(x => x.Id == id).Select(x => (uint?)EF.Property<uint>(x, "Version")).SingleOrDefaultAsync(ct);
-    // Entries may hang off a work item either directly (WorkId) or only by related-object
-    // reference — a communication record, for instance, carries no WorkId. The OR keeps both
-    // reachable without duplicating the rows that set both.
-    public async Task<IReadOnlyList<TimelineEntry>?> TimelineAsync(Guid id, CancellationToken ct) { if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null; return await store.Timeline.AsNoTracking().Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id)).OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToListAsync(ct); }
+    public async Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, CancellationToken ct)
+    {
+        if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null;
+
+        // An entry may hang off a work item either directly (WorkId) or only by related-object
+        // reference. The OR keeps both reachable without duplicating the rows that set both.
+        var events = await store.Timeline.AsNoTracking()
+            .Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id))
+            .Select(x => new TimelineItem(x.Id, x.EventType, x.OccurredAt, x.ActorId,
+                x.OldValue, x.NewValue, x.RelatedObjectType, x.RelatedObjectId, x.Changes, false))
+            .ToListAsync(ct);
+
+        // Communications live in their own context; a work item's messages are folded into its
+        // history on read, so there is no cross-context write.
+        var messages = await comms.OutboxMessages.AsNoTracking().Where(x => x.WorkId == id)
+            .Select(x => new { x.Id, x.Channel, x.RecipientAddress, x.Subject, x.Status, x.CreatedAt, x.LastAttemptAt, x.ProviderReference, x.FailureReason, x.ResidentVisible })
+            .ToListAsync(ct);
+
+        events.AddRange(messages.Select(m => new TimelineItem(
+            m.Id,
+            m.Status switch
+            {
+                OutboxStatus.Sent => "MessageSent",
+                OutboxStatus.Failed => "MessageFailed",
+                OutboxStatus.Sending => "MessageSending",
+                _ => "MessageQueued"
+            },
+            m.LastAttemptAt ?? m.CreatedAt, null,
+            m.Channel.ToString(), $"{m.Channel} to {m.RecipientAddress}",
+            "OutboxMessage", m.Id,
+            JsonSerializer.Serialize(new { channel = m.Channel.ToString(), recipient = m.RecipientAddress, subject = m.Subject, status = m.Status.ToString(), providerReference = m.ProviderReference, failureReason = m.FailureReason }),
+            m.ResidentVisible)));
+
+        return events.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToList();
+    }
 
     public async Task<WorkItem> CreateAsync(CreateWorkCommand c, CancellationToken ct)
     {
