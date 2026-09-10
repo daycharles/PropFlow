@@ -27,8 +27,11 @@ of them (`backlog.md:5-15`). GitHub milestones `M3`–`M7`, epic issues `#1`–`
   `feat/pf-3-14-short-slug`, `fix/…`, `chore/…`, `docs/…`.
 - **Push `-u` the day the branch is created.** Nothing stays local-only overnight; an
   unreachable branch is work nobody can review or recover.
-- PRs open as **draft** until CI is green, then get marked ready. `verify` is the protected
-  check on `main`; `web` and `e2e` also gate a PR (`.github/workflows/ci.yml:24,41`).
+- PRs open as **draft** until CI is green, then get marked ready. `verify`, `web` and `e2e` all
+  gate a PR (`.github/workflows/ci.yml:6,24,41`) — but none of them is a **required** check:
+  `main` carries no branch protection and no ruleset (verified 2026-09-10), so `gh pr merge`
+  will happily merge red. Read `gh pr checks <n>` yourself before merging; see
+  `docs/followups.md` for the open item.
 
 ## Teardown is part of Done
 
