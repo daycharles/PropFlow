@@ -33,4 +33,11 @@ public interface IRepeatRepairDetector
     /// Returns <c>null</c> when the asset does not exist in this tenant.
     /// </summary>
     Task<RepeatRepairAssessment?> AssessAsync(Guid assetId, Guid? categoryId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The ids of every asset in this tenant at or over the repeat-repair count within the policy
+    /// window. The category-similarity option is not applied — this is the tenant-wide sweep the
+    /// attention queue uses, so the window/threshold live in one place.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> RepeatRepairAssetIdsAsync(CancellationToken cancellationToken);
 }
