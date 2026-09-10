@@ -16,7 +16,7 @@ public sealed class DeploymentConfigurationTests
             PropFlow.Api.DeploymentConfiguration.ValidatePostgresTls(
                 "Host=db;Database=propflow;Username=app;Password=secret;Ssl Mode=Require", environment));
 
-        Assert.Contains("Ssl Mode=VerifyFull", exception.Message);
+        Assert.Contains("non-local PostgreSQL", exception.Message);
     }
 
     [Fact]
