@@ -19,15 +19,40 @@ public sealed class WorkItem : TenantEntity
     public Guid? CategoryId { get; private set; }
     public Guid? VendorId { get; private set; }
     public Guid? EmployeeId { get; private set; }
+    // Resident is intentionally an opaque id until occupancy is introduced in M4.
+    public Guid? ResidentId { get; private set; }
     public Guid CreatorId { get; private set; }
     public DateTimeOffset? ScheduledStart { get; private set; }
     public DateTimeOffset? ScheduledEnd { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
+    public DateTimeOffset? DueDate { get; private set; }
+    public decimal? Cost { get; private set; }
+    public string? InternalNotes { get; private set; }
+    public string? ResidentVisibleNotes { get; private set; }
     public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
+    public void SetLocation(Guid propertyId, Guid? buildingId, Guid? spaceId, Guid? residentId)
+    {
+        PropertyId = RequiredId(propertyId, nameof(propertyId));
+        BuildingId = buildingId;
+        SpaceId = spaceId;
+        ResidentId = residentId;
+    }
+    public void SetDueDate(DateTimeOffset? dueDate) => DueDate = dueDate?.ToUniversalTime();
+    public void SetCost(decimal? cost)
+    {
+        if (cost is < 0) throw new ArgumentOutOfRangeException(nameof(cost));
+        Cost = cost;
+    }
+    public void SetNotes(string? internalNotes, string? residentVisibleNotes)
+    {
+        InternalNotes = Optional(internalNotes, 4000);
+        ResidentVisibleNotes = Optional(residentVisibleNotes, 4000);
+    }
     public void AssignVendor(Guid vendorId) { VendorId = RequiredId(vendorId, nameof(vendorId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
     public VendorAssigned? AssignVendor(Guid vendorId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (VendorId == vendorId) return null; var prior = VendorId; AssignVendor(vendorId); return new VendorAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, vendorId); }
     public void AssignEmployee(Guid employeeId) { EmployeeId = RequiredId(employeeId, nameof(employeeId)); if (Status == WorkStatus.New) Status = WorkStatus.Assigned; }
+    public EmployeeAssigned? AssignEmployee(Guid employeeId, Guid actorId, DateTimeOffset occurredAt) { if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId)); if (EmployeeId == employeeId) return null; var prior = EmployeeId; AssignEmployee(employeeId); return new EmployeeAssigned(Guid.NewGuid(), OrganizationId, actorId, occurredAt.ToUniversalTime(), Id, prior, employeeId); }
     public void Publish(DateTimeOffset at) { if (Status != WorkStatus.Draft) throw new InvalidOperationException("Only drafts may be published."); Status = WorkStatus.New; CreatedAt = at.ToUniversalTime(); }
     public void Schedule(DateTimeOffset start, DateTimeOffset? end) { if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
     public void ChangeStatus(WorkStatus status, DateTimeOffset at) { if (Status is WorkStatus.Completed or WorkStatus.Cancelled) throw new InvalidOperationException("Completed and cancelled work is terminal."); if (status == WorkStatus.Draft || status == Status) throw new InvalidOperationException("Invalid status transition."); Status = status; if (status == WorkStatus.Completed) CompletedAt = at.ToUniversalTime(); }
@@ -38,3 +63,4 @@ public sealed class WorkItem : TenantEntity
 }
 
 public sealed record VendorAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousVendorId, Guid VendorId) : IDomainEvent;
+public sealed record EmployeeAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousEmployeeId, Guid EmployeeId) : IDomainEvent;

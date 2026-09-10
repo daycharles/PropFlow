@@ -13,3 +13,7 @@
 *.log
 **/TestResults/
 .claude/settings.local.json
+**/test-results/
+**/playwright-report/
+**/playwright/.cache/
+*.tsbuildinfo
