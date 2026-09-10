@@ -12,8 +12,14 @@ Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 
 ## M4 — what's left
 
-M3 is complete (all `#6`–`#31` closed, promoted to `main`). **PF-4.01–4.07 are done** (PF-4.03
-+ PF-4.06 landed in PR #108). What remains in M4:
+M3 is complete (all `#6`–`#31` closed, promoted to `main`); PF-3.27 shipped after the issues
+were cut and so has none. **PF-4.01–4.07 are done** (PF-4.03 + PF-4.06 landed in PR #108).
+
+`develop` and `main` are level, nothing is flag-gated and nothing is held back on a feature branch,
+so `main` is the whole truth. Re-check with
+`git rev-list --left-right --count origin/main...origin/develop` rather than trusting this line.
+
+What remains in M4:
 
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
@@ -23,6 +29,8 @@ M3 is complete (all `#6`–`#31` closed, promoted to `main`). **PF-4.01–4.07 a
 | PF-4.10 (#41) — full Tidewater demo seed (~3 properties, ~80 spaces, ~70 residents, 6 vendors, ~100 work items, ~60 assets, ≥18 pest-control) | backlog.md M4 | unassigned | All the domain exists (residents/occupancy/assets/hierarchy). Standalone; unblocks PF-4.11. `infra` / the `PropFlow.Admin` seed |
 | PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Needs PF-4.08 + PF-4.10 |
 | PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Outbox idempotency + rendering + consent are covered (`CommunicationsTests`, `ResidentMessageTests`, `TemplateRendererTests`). Left: an explicit "no duplicate send on retry after a transient failure" scenario end-to-end |
+
+---
 
 ## Needs a decision
 
