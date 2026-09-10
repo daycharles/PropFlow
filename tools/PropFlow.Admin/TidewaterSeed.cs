@@ -10,8 +10,8 @@ namespace PropFlow.Admin;
 /// <summary>
 /// The realistic Tidewater Residential Management dataset (PF-4.10): three properties, 10
 /// buildings, ~80 spaces, ~70 residents with mixed consent, 6 vendors, 5 employees, ~70 assets
-/// and 100 work items spanning every status and priority, with ~20 pest-control requests and a
-/// mix of overdue / upcoming / completed. Deterministic — a fixed RNG seed makes every run
+/// and 100 work items spanning every status and priority, 30 of them pest-control, with a mix
+/// of overdue / upcoming / completed. Deterministic — a fixed RNG seed makes every run
 /// identical, and the caller only invokes it when the organization has no work items yet.
 /// </summary>
 internal static class TidewaterSeed
@@ -138,7 +138,7 @@ internal static class TidewaterSeed
 
         // --- residents + occupancies (70 of the ~80 spaces occupied) --------------------
         var occupiedSpaces = spaces.OrderBy(_ => rng.Next()).Take(Math.Min(70, spaces.Count - 8)).ToList();
-        var residents = new List<(Guid Id, Guid SpaceId)>();
+        var residents = new List<(Guid Id, Guid SpaceId, DateOnly MovedIn)>();
         foreach (var space in occupiedSpaces)
         {
             var residentId = Guid.NewGuid();
@@ -146,7 +146,7 @@ internal static class TidewaterSeed
             var handle = $"{Slug(fullName)}{rng.Next(10, 99)}";
             var resident = new Resident(organizationId, residentId, fullName,
                 $"{handle}@residents.example.test", $"+1555{rng.Next(1000000, 9999999)}");
-            // Mixed consent: ~55% both, ~20% sms only, ~10% email only, ~15% none.
+            // Mixed consent from one roll: ~55% SMS only, ~20% both, ~10% email only, ~15% none.
             var roll = rng.Next(100);
             if (roll < 75) resident.SetConsent(PropFlow.Domain.Communications.MessageChannel.Sms, granted: true, now);
             if (roll is >= 55 and < 85) resident.SetConsent(PropFlow.Domain.Communications.MessageChannel.Email, granted: true, now);
@@ -155,22 +155,24 @@ internal static class TidewaterSeed
             var movedIn = today.AddDays(-rng.Next(60, 1400));
             var occupancy = new Occupancy(organizationId, Guid.NewGuid(), residentId, space.Id, movedIn);
             store.Occupancies.Add(occupancy);
-            residents.Add((residentId, space.Id));
+            residents.Add((residentId, space.Id, movedIn));
         }
-        // A handful of prior tenancies that have ended, so occupancy history is not all-current.
-        foreach (var space in occupiedSpaces.Take(6))
+        // A handful of prior tenancies that ended before the current resident moved in, so
+        // occupancy history is not all-current and the ranges never overlap for a space.
+        foreach (var (_, spaceId, movedIn) in residents.Take(6))
         {
             var priorId = Guid.NewGuid();
             store.Residents.Add(new Resident(organizationId, priorId,
                 $"{FirstNames[rng.Next(FirstNames.Length)]} {LastNames[rng.Next(LastNames.Length)]}", null, $"+1555{rng.Next(1000000, 9999999)}"));
-            var start = today.AddDays(-rng.Next(1500, 2500));
-            var priorOccupancy = new Occupancy(organizationId, Guid.NewGuid(), priorId, space.Id, start);
-            priorOccupancy.EndOn(start.AddDays(rng.Next(200, 900)));
+            var priorEnd = movedIn.AddDays(-rng.Next(30, 365));
+            var priorStart = priorEnd.AddDays(-rng.Next(200, 900));
+            var priorOccupancy = new Occupancy(organizationId, Guid.NewGuid(), priorId, spaceId, priorStart);
+            priorOccupancy.EndOn(priorEnd);
             store.Occupancies.Add(priorOccupancy);
         }
 
-        // --- assets (~60): HVAC per building, water heaters + appliances per space ------
-        var assetsByProperty = spaces.Select(s => s.PropertyId).Distinct().ToList();
+        // --- assets (~70): HVAC per building, water heaters + appliances per space, plus
+        //     roof / panel / generator per property ------------------------------------------
         var buildingsSeen = new HashSet<Guid>();
         var assetCount = 0;
         foreach (var space in spaces)
@@ -191,20 +193,18 @@ internal static class TidewaterSeed
                 assetCount++;
             }
         }
-        foreach (var propertyId in assetsByProperty)
+        foreach (var propertyId in propertyIds)
         {
             AddAsset(store, organizationId, propertyId, null, AssetKind.Roof, "Main roof membrane", rng, today);
             AddAsset(store, organizationId, propertyId, null, AssetKind.ElectricalPanel, "Main electrical panel", rng, today);
             AddAsset(store, organizationId, propertyId, null, AssetKind.Generator, "Emergency generator", rng, today);
         }
 
-        // --- work items (~100), every status + priority, 18+ pest control ----------------
+        // --- work items (100), every status + priority ----------------------------------
+        // Templates round-robin over the 23 titles; the first 6 are pest-control, so 30 of the
+        // 100 items land in that category. Status is drawn from a shuffled plan (BuildStatusPlan).
         var statusPlan = BuildStatusPlan();
         var templateOrder = Enumerable.Range(0, 100).Select(i => WorkTemplates[i % WorkTemplates.Length]).ToList();
-        // Guarantee ≥ 20 pest-control items by swapping non-pest templates for pest ones.
-        var pestTemplates = WorkTemplates.Where(t => t.Category == "Pest control").ToArray();
-        for (var i = 0; templateOrder.Count(t => t.Category == "Pest control") < 20; i += 3)
-            templateOrder[i % templateOrder.Count] = pestTemplates[i % pestTemplates.Length];
 
         for (var i = 0; i < 100; i++)
         {
@@ -212,44 +212,55 @@ internal static class TidewaterSeed
             var status = statusPlan[i];
             var space = spaces[rng.Next(spaces.Count)];
             var resident = residents.FirstOrDefault(r => r.SpaceId == space.Id);
+            var isOpen = status is not (WorkStatus.Completed or WorkStatus.Cancelled);
 
             var work = new WorkItem(organizationId, Guid.NewGuid(), title, space.PropertyId, creatorId);
             work.Edit(title, "Reported by the resident.", categoryIds[categoryName], priority);
             work.SetLocation(space.PropertyId, space.BuildingId, space.Id, resident.Id == Guid.Empty ? null : resident.Id);
-
-            // Overdue for a third of the still-open items; upcoming otherwise.
-            var overdue = status is not (WorkStatus.Completed or WorkStatus.Cancelled) && rng.Next(3) == 0;
-            work.SetDueDate(now.AddDays(overdue ? -rng.Next(1, 14) : rng.Next(1, 21)));
             if (rng.Next(4) == 0) work.SetCost(rng.Next(75, 900));
 
-            if (status is not WorkStatus.Draft)
+            if (status is WorkStatus.Draft)
             {
-                work.Publish(now.AddDays(-rng.Next(1, 30)));
-                switch (status)
-                {
-                    case WorkStatus.Assigned:
-                        work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
-                        break;
-                    case WorkStatus.Scheduled:
-                        work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
-                        var slot = now.AddDays(rng.Next(1, 6));
-                        work.Schedule(slot, slot.AddHours(2));
-                        break;
-                    case WorkStatus.InProgress:
-                        work.AssignEmployee(employeeIds[rng.Next(employeeIds.Count)]);
-                        work.ChangeStatus(WorkStatus.InProgress, now);
-                        break;
-                    case WorkStatus.OnHold:
-                        work.ChangeStatus(WorkStatus.OnHold, now);
-                        break;
-                    case WorkStatus.Completed:
-                        work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
-                        work.ChangeStatus(WorkStatus.Completed, now.AddDays(-rng.Next(1, 20)));
-                        break;
-                    case WorkStatus.Cancelled:
-                        work.ChangeStatus(WorkStatus.Cancelled, now);
-                        break;
-                }
+                // A draft is never published — no reported/due dates, stays out of the pipeline.
+                store.WorkItems.Add(work);
+                continue;
+            }
+
+            var reportedDaysAgo = rng.Next(2, 30);
+            var reportedAt = now.AddDays(-reportedDaysAgo);
+            work.Publish(reportedAt);
+            // Overdue for a third of the still-open items (due date between the report and now);
+            // a future due date otherwise.
+            var overdue = isOpen && rng.Next(3) == 0;
+            work.SetDueDate(overdue
+                ? now.AddDays(-rng.Next(1, reportedDaysAgo))
+                : now.AddDays(rng.Next(3, 21)));
+
+            switch (status)
+            {
+                case WorkStatus.Assigned:
+                    work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
+                    break;
+                case WorkStatus.Scheduled:
+                    work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
+                    var slot = now.AddDays(rng.Next(1, 6));
+                    work.Schedule(slot, slot.AddHours(2));
+                    break;
+                case WorkStatus.InProgress:
+                    work.AssignEmployee(employeeIds[rng.Next(employeeIds.Count)]);
+                    work.ChangeStatus(WorkStatus.InProgress, now);
+                    break;
+                case WorkStatus.OnHold:
+                    work.ChangeStatus(WorkStatus.OnHold, now);
+                    break;
+                case WorkStatus.Completed:
+                    work.AssignVendor(vendorIds[rng.Next(vendorIds.Count)]);
+                    // Closed somewhere between the day after it was reported and now.
+                    work.ChangeStatus(WorkStatus.Completed, reportedAt.AddDays(rng.Next(1, reportedDaysAgo)));
+                    break;
+                case WorkStatus.Cancelled:
+                    work.ChangeStatus(WorkStatus.Cancelled, now);
+                    break;
             }
             store.WorkItems.Add(work);
         }
@@ -290,7 +301,7 @@ internal static class TidewaterSeed
 
     private static string Slug(string value)
     {
-        var chars = value.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray();
-        return new string(chars).Trim('-').Replace("--", "-");
+        var cleaned = new string(value.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
+        return string.Join('-', cleaned.Split('-', StringSplitOptions.RemoveEmptyEntries));
     }
 }

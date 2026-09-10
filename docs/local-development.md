@@ -64,7 +64,7 @@ HVAC per building, water heaters and appliances per unit, roof/panel/generator p
 age-based condition and replacement cost), and **100 work items**. The work items span **all
 eight** `WorkStatus` values (Draft, New, Assigned, Scheduled, InProgress, OnHold, Completed,
 Cancelled) and **all four** `WorkPriority` values (Low, Normal, High, Critical), weighted toward
-the active middle of the pipeline, with ~20 pest-control requests and a third of the open items
+the active middle of the pipeline, with 30 pest-control requests and a third of the open items
 overdue. Sixteen stay in `New`, so a "filter to New, select all, assign vendor" demo always has
 work to act on. `Draft` rows are never published — `WorkItem.ChangeStatus` refuses a move back
 to `Draft`.
