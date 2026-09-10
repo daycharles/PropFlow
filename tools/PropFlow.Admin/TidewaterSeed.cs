@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Domain.Assets;
+using PropFlow.Domain.Communications;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Work;
@@ -266,6 +267,27 @@ internal static class TidewaterSeed
         }
 
         await store.SaveChangesAsync();
+        await SeedTemplatesAsync(adminConnection, organizationId);
+    }
+
+    // Resident message templates for the PF-4.08 "assign & notify" flow. Kept in their own
+    // context/transaction — the operations seed above is unchanged.
+    private static async Task SeedTemplatesAsync(string adminConnection, Guid organizationId)
+    {
+        await using var comms = DatabaseProvisioner.CreateCommunicationsStore(adminConnection, organizationId);
+        if (await comms.MessageTemplates.AnyAsync()) return;
+
+        comms.MessageTemplates.Add(new MessageTemplate(organizationId, Guid.NewGuid(),
+            "Visit scheduled (SMS)", MessageChannel.Sms, null,
+            "Hi {{ resident.name }}, {{ property.name }} has scheduled \"{{ work.title }}\" for {{ schedule.start }}. Reply with any access notes."));
+        comms.MessageTemplates.Add(new MessageTemplate(organizationId, Guid.NewGuid(),
+            "Visit scheduled (email)", MessageChannel.Email, "Your maintenance visit is scheduled",
+            "Hello {{ resident.name }},\n\nA technician will visit {{ property.name }} for \"{{ work.title }}\" starting {{ schedule.start }}.\n\nPlease make sure the unit is accessible. Reply to this message with any questions.\n\nProperty Management"));
+        comms.MessageTemplates.Add(new MessageTemplate(organizationId, Guid.NewGuid(),
+            "Work completed (SMS)", MessageChannel.Sms, null,
+            "Hi {{ resident.name }}, \"{{ work.title }}\" at {{ property.name }} is now complete ({{ work.status }}). Contact the office with any concerns."));
+
+        await comms.SaveChangesAsync();
     }
 
     private static void AddAsset(OperationsStore store, Guid org, Guid propertyId, Guid? spaceId,

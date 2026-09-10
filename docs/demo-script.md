@@ -53,11 +53,12 @@ with an audit trail per item.
    column — some rows carry a vendor's name, some read *Unassigned*.
 2. Set **Status → New**. Four items, all unassigned. *"This is the morning queue: work that has
    come in and nobody owns yet."*
-3. Tick the header checkbox. The toolbar shows **4 selected**.
-4. **Assign vendor** → choose *Tidewater Pest Services* → **Continue**.
+3. Tick the header checkbox. The toolbar shows **N selected**.
+4. **Assign vendor only** → choose *Tidewater Pest Services* → **Continue**. (The neighbouring
+   **Assign &amp; notify** button is the M4 flow — see section 6.)
 5. The confirm step names the vendor and the count before anything is written. **Confirm
    assignment**.
-6. The summary reads **"Assigned 4 of 4 work items to Tidewater Pest Services."**
+6. The summary reads **"Assigned N of N work items to Tidewater Pest Services."**
 
    Land on the counts — they are the point. If some of the selection already had that vendor the
    summary says so: *"Assigned 4 of 6 … (2 already had this vendor)."* The server reports what it
@@ -99,6 +100,25 @@ Bulk assignment is only useful over the right selection, so show the filters sec
 in the UI."* The runtime role holds `SELECT, INSERT` on that table and a trigger rejects `UPDATE`
 and `DELETE`, so an edit is refused at three separate layers.
 
+## 3a. Assign &amp; notify — the M4 flow (2 min)
+
+The pest-control workflow as one operation: a vendor, a visit window, and a resident message
+across a filtered selection.
+
+1. **Category → Pest control**, **Status → New**. Tick the header checkbox.
+2. **Assign &amp; notify**. Choose *Tidewater Pest Services*. Set a **Visit start** and **Visit
+   end**. Tick **Send a message to residents about this visit** and pick *Visit scheduled (SMS)*.
+3. **Continue** → the confirm step lists all three actions in plain language → **Confirm**.
+4. The summary reports each step: *"Assigned … to N of N"*, *"Scheduled N of N for …"*, and
+   *"Queued N of N resident messages · K skipped (no resident or consent)"* — a resident without
+   the right consent is skipped, not an error.
+5. Open one of the items: the **Timeline** now carries `VendorAssigned`, `Scheduled`, and a
+   `MessageQueued`/`MessageSent` entry with the rendered SMS.
+
+The three server steps are separate transactions — vendor and schedule are each all-or-nothing,
+the messages are best-effort per item. Assigning a vendor bumps every row's version, so the flow
+re-reads fresh versions before it schedules.
+
 ## 4. Tenant isolation, if the audience cares (1 min)
 
 Sign out, sign in as `isolation-demo` / `demo-admin@isolation.example.test` with the same
@@ -110,7 +130,8 @@ integration suite proves it with raw SQL that deliberately bypasses the ORM.
 
 - No mobile or field-technician view yet; the `Technician` and `Vendor` roles are deliberately
   denied all capabilities until assignment-level scoping exists.
-- Resident communication exists as an outbox with templates (M4), but there is no messaging UI in
-  this build.
-- Bulk actions cover **vendor assignment only**. Employee, status and due-date are single-item
-  operations today. If someone asks for those, that is a real signal — write it down.
+- Resident communication is a mock outbox — SMS/email are logged, not delivered to a real
+  provider. The **Assign &amp; notify** flow queues and "sends" them against seeded templates.
+- The web bulk toolbar covers **vendor assignment** and the **Assign &amp; notify** flow
+  (vendor + schedule + message). The API also has bulk status/priority/schedule/note/reopen
+  (PF-4.07); those are not all surfaced in the UI yet.
