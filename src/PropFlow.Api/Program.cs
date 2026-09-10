@@ -60,6 +60,7 @@ builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
+builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();

@@ -1,10 +1,14 @@
 # PropFlow backlog
 
-Epics and tasks for the remaining roadmap (milestones 3–6 from [milestones.md](milestones.md)).
+Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md](milestones.md)).
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
-implemented, and milestone 3 (the first usable vertical slice) is implemented — see the M3
-**Progress** note below for what remains open against it. Milestone 4 is in flight alongside.
-This document is the source for GitHub milestones and issues.
+implemented. **Milestone 3 is complete** — all 26 task issues closed and promoted to `main` in
+`b31b864` — see the M3 **Progress** note for what was carried forward rather than closed.
+**Milestone 4 is in flight** (7 of 12 tasks closed). **Milestone 6 was started ahead of milestone
+5**: 3 of its 13 tasks are closed, all API/domain only, while milestone 5 has not begun. Milestone
+7 has 1 of 6 closed. This document is the source for GitHub milestones and issues.
+
+Counts above were read from GitHub on 2026-09-10; re-measure rather than propagating them.
 
 ## How this maps to GitHub
 
@@ -15,6 +19,13 @@ This document is the source for GitHub milestones and issues.
 - Suggested labels: `epic`, `area:web`, `area:api`, `area:application`, `area:domain`,
   `area:infra`, `area:tests`, `area:ci`, `type:feature`, `type:chore`, `type:test`.
 - Estimates: `S` ≈ ≤1 day, `M` ≈ 2–3 days, `L` ≈ 4–8 days, `XL` needs a split before starting.
+- **✅ in the Task cell means the GitHub issue is closed.** It is a binary marker and nothing more;
+  where the truth needs a qualifier — a carve-out, a caveat, work carried forward — that lives in
+  the epic's `Progress:` prose or in the row text, not in the glyph. PF-3.27 is the one ✅ with no
+  GitHub issue: it shipped after the M3 issues were cut.
+
+The full closed/open split per milestone is in [milestones.md](milestones.md). To re-derive it:
+`gh issue list --state all --limit 200 --json number,title,state,milestone`.
 
 Task IDs are stable references; do not renumber. Add new tasks with the next free number.
 
@@ -28,54 +39,47 @@ running end to end through a real Next.js UI against persisted property/vendor/w
 **Definition of done:** the demo workflow above works in a browser against seeded data;
 integration + e2e tests cover the success and failure paths; CI builds and tests the web app.
 
-**Progress:** the slice is delivered end to end. PF-3.01–3.04 (Next.js app, API/session layer,
-auth UI, capability-gated navigation), PF-3.05–3.10 (property hierarchy, expanded
-`Vendor`/`Employee`/`WorkItem`, their migrations with forced RLS, generalized `TimelineEntry`),
-PF-3.11–3.13 (create/update use cases, timeline events, work + reference endpoints),
-**PF-3.14** (search/filter/sort/pagination on `GET /api/work/`), **PF-3.15** (the `xmin`
-version on every work response, required on updates, 409 on mismatch), **PF-3.16** (bounded
-all-or-nothing bulk vendor assignment), **PF-3.17**/**PF-3.21** (user-scoped saved views,
-entity through UI), PF-3.18–3.20 (work list with multi-select and bulk toolbar, work detail
-workspace with autosaving notes, the confirm-and-summarize bulk vendor flow), **PF-3.22**
-(demo seed covering all eight statuses and all four priorities), PF-3.23 (integration tests for
-stale 409, bulk atomicity, cross-tenant concealment, capability denial), PF-3.24/PF-3.25
-(Playwright spec plus the `web` and `e2e` CI jobs) and **PF-3.26** (this doc pass) are done.
-Employee assignment (`POST /api/work/{id}/employee`, `Work.AssignEmployee`) landed with the
+**Progress:** the slice is delivered end to end. Every task row below is ✅ — issues `#6`–`#31`
+(PF-3.01–PF-3.26) are closed and the slice was promoted to `main` in `b31b864`. **PF-3.27** shipped
+in `baf4498` (PR #98) with no tracker issue, because it was written after the M3 issues were cut.
+Employee assignment (`POST /api/work/{id}/employee`, `Work.AssignEmployee`) also landed with the
 slice although no task numbered it.
-Carried forward rather than closed, tracked in [followups.md](followups.md): `TimelineEntry`
-is only half generalized (`From()` still writes the legacy vendor columns), Tailwind is
-installed but nothing processes it, and the `M3Operations` migration is not safe against a
-populated milestone-2 database.
+
+Carried forward rather than closed, tracked in [followups.md](followups.md): Tailwind is declared
+(`apps/web/package.json:24`) and imported (`apps/web/app/styles.css:1`) but nothing processes it —
+no PostCSS config, no `@tailwindcss/postcss` — and the `M3Operations` migration is not safe against
+a populated milestone-2 database. The third carry-forward, the half-finished `TimelineEntry`
+generalization, was closed by PF-3.10 in `c362bfd` (PR #107).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-3.01 | Scaffold `apps/web` Next.js app (TypeScript, App Router, Tailwind, ESLint/Prettier, env config) | web | M | — |
-| PF-3.02 | API client + session layer in web: CSRF token fetch/refresh, `no-store`, 401/403 handling, cookie passthrough | web | M | PF-3.01 |
-| PF-3.03 | Auth UI: login page (email / password / organizationId), logout, session bootstrap on load | web | M | PF-3.02 |
-| PF-3.04 | Capability-gated routing/navigation in web (hide/deny routes by `capabilities` from `/api/session`) | web | S | PF-3.03 |
-| PF-3.05 | Domain + persistence: `Portfolio`, `Property`, `Building`, `Unit/Space` tenant entities with the Organization→Portfolio→Property→Building→Unit hierarchy; not apartment-specific | domain | L | — |
-| PF-3.06 | Migration + RLS policies/grants for the property hierarchy tables (follow the per-table RLS rule in architecture.md) | infra | M | PF-3.05 |
-| PF-3.07 | Expand `Vendor` (contact info, trade/category, active flag) and add `Employee`/staff entity; migrations + RLS | domain | M | — |
-| PF-3.08 | Expand `WorkItem`: description, workType, category, priority, status, property/building/unit/resident refs, scheduledStart/End, dueDate, createdDate, completedDate, cost, internal vs resident-visible notes | domain | L | PF-3.05, PF-3.07 |
-| PF-3.09 | Migration + RLS for the expanded work schema; composite tenant FKs for new work relationships | infra | M | PF-3.08 |
-| PF-3.10 | Generalize the timeline: `TimelineEntry` records arbitrary event type, actor, old value, new value, related object refs (not just `VendorAssigned`) | domain | M | PF-3.08 |
-| PF-3.11 | Application use cases: create work, update work (low-risk field edits), with `Work.Create` / `Work.Update` capabilities mapped centrally | application | M | PF-3.08 |
-| PF-3.12 | Emit timeline events for work created, status changed, priority changed, scheduled, vendor assigned, employee assigned | application | M | PF-3.10, PF-3.11 |
-| PF-3.13 | API: work create/update endpoints; vendor list/detail; property-hierarchy read endpoints; employee list — all tenant-scoped, CSRF on mutations | api | M | PF-3.11 |
-| PF-3.14 | API: work list filtering + search (category, status, priority, property/unit, text) with sort and pagination beyond the current top-100 | api | M | PF-3.13 |
-| PF-3.15 | Client-facing concurrency token: expose the work version (xmin) in work responses; require it on updates; 409 on mismatch | api | S | PF-3.13 |
-| PF-3.16 | API: bulk vendor assignment endpoint — bounded batch size, all-or-nothing transaction, per-item concurrency check, one timeline entry per item, `Work.AssignVendor` | api | L | PF-3.15, PF-3.12 |
-| PF-3.17 | Server-side saved views (named filter + column sets, tenant + user scoped): entity, migration, CRUD endpoints | api | M | PF-3.14 |
-| PF-3.18 | Web: Work list view — table, filters, text search, sortable columns, multi-select, bulk-action toolbar | web | L | PF-3.04, PF-3.14 |
-| PF-3.19 | Web: unified Work detail workspace — details, scheduling, vendor, employee, internal notes, timeline; autosave low-risk fields, explicit confirm for consequential actions | web | L | PF-3.13, PF-3.15 |
-| PF-3.20 | Web: bulk "assign vendor" flow — select → assign vendor → confirm → success summary → refreshed timeline | web | M | PF-3.18, PF-3.16 |
-| PF-3.21 | Web: saved views UI (create/apply/delete, default view) | web | S | PF-3.18, PF-3.17 |
-| PF-3.22 | Seed data: two organizations for isolation plus a minimal property/vendor/employee/work dataset covering each status and priority | infra | M | PF-3.09 |
-| PF-3.23 | Integration tests: assignment rollback on audit failure, unauthorized assignment (403), stale update (409), audit entry created, cross-tenant read/write blocked, bulk all-or-nothing | tests | L | PF-3.16 |
-| PF-3.24 | e2e (Playwright): the full vertical-slice workflow against seeded data, in CI | tests | M | PF-3.20, PF-3.22 |
-| PF-3.25 | CI: add web install/lint/build/unit steps and the Playwright job to `.github/workflows/ci.yml` | ci | S | PF-3.01 |
-| PF-3.26 | Update `docs/api.md` and `docs/local-development.md` for the new endpoints and the web dev server | chore | S | PF-3.13 |
-| PF-3.27 | Refuse vendor/employee assignment on `Completed` and `Cancelled` work, and write the demo script | fix | S | PF-3.16, PF-3.20 |
+| PF-3.01 | ✅ Scaffold `apps/web` Next.js app (TypeScript, App Router, Tailwind, ESLint/Prettier, env config) | web | M | — |
+| PF-3.02 | ✅ API client + session layer in web: CSRF token fetch/refresh, `no-store`, 401/403 handling, cookie passthrough | web | M | PF-3.01 |
+| PF-3.03 | ✅ Auth UI: login page (email / password / organizationId), logout, session bootstrap on load | web | M | PF-3.02 |
+| PF-3.04 | ✅ Capability-gated routing/navigation in web (hide/deny routes by `capabilities` from `/api/session`) | web | S | PF-3.03 |
+| PF-3.05 | ✅ Domain + persistence: `Portfolio`, `Property`, `Building`, `Unit/Space` tenant entities with the Organization→Portfolio→Property→Building→Unit hierarchy; not apartment-specific | domain | L | — |
+| PF-3.06 | ✅ Migration + RLS policies/grants for the property hierarchy tables (follow the per-table RLS rule in architecture.md) | infra | M | PF-3.05 |
+| PF-3.07 | ✅ Expand `Vendor` (contact info, trade/category, active flag) and add `Employee`/staff entity; migrations + RLS | domain | M | — |
+| PF-3.08 | ✅ Expand `WorkItem`: description, workType, category, priority, status, property/building/unit/resident refs, scheduledStart/End, dueDate, createdDate, completedDate, cost, internal vs resident-visible notes | domain | L | PF-3.05, PF-3.07 |
+| PF-3.09 | ✅ Migration + RLS for the expanded work schema; composite tenant FKs for new work relationships | infra | M | PF-3.08 |
+| PF-3.10 | ✅ Generalize the timeline: `TimelineEntry` records arbitrary event type, actor, old value, new value, related object refs (not just `VendorAssigned`) | domain | M | PF-3.08 |
+| PF-3.11 | ✅ Application use cases: create work, update work (low-risk field edits), with `Work.Create` / `Work.Update` capabilities mapped centrally | application | M | PF-3.08 |
+| PF-3.12 | ✅ Emit timeline events for work created, status changed, priority changed, scheduled, vendor assigned, employee assigned | application | M | PF-3.10, PF-3.11 |
+| PF-3.13 | ✅ API: work create/update endpoints; vendor list/detail; property-hierarchy read endpoints; employee list — all tenant-scoped, CSRF on mutations | api | M | PF-3.11 |
+| PF-3.14 | ✅ API: work list filtering + search (category, status, priority, property/unit, text) with sort and pagination beyond the current top-100 | api | M | PF-3.13 |
+| PF-3.15 | ✅ Client-facing concurrency token: expose the work version (xmin) in work responses; require it on updates; 409 on mismatch | api | S | PF-3.13 |
+| PF-3.16 | ✅ API: bulk vendor assignment endpoint — bounded batch size, all-or-nothing transaction, per-item concurrency check, one timeline entry per item, `Work.AssignVendor` | api | L | PF-3.15, PF-3.12 |
+| PF-3.17 | ✅ Server-side saved views (named filter + column sets, tenant + user scoped): entity, migration, CRUD endpoints | api | M | PF-3.14 |
+| PF-3.18 | ✅ Web: Work list view — table, filters, text search, sortable columns, multi-select, bulk-action toolbar | web | L | PF-3.04, PF-3.14 |
+| PF-3.19 | ✅ Web: unified Work detail workspace — details, scheduling, vendor, employee, internal notes, timeline; autosave low-risk fields, explicit confirm for consequential actions | web | L | PF-3.13, PF-3.15 |
+| PF-3.20 | ✅ Web: bulk "assign vendor" flow — select → assign vendor → confirm → success summary → refreshed timeline | web | M | PF-3.18, PF-3.16 |
+| PF-3.21 | ✅ Web: saved views UI (create/apply/delete, default view) | web | S | PF-3.18, PF-3.17 |
+| PF-3.22 | ✅ Seed data: two organizations for isolation plus a minimal property/vendor/employee/work dataset covering each status and priority | infra | M | PF-3.09 |
+| PF-3.23 | ✅ Integration tests: assignment rollback on audit failure, unauthorized assignment (403), stale update (409), audit entry created, cross-tenant read/write blocked, bulk all-or-nothing | tests | L | PF-3.16 |
+| PF-3.24 | ✅ e2e (Playwright): the full vertical-slice workflow against seeded data, in CI | tests | M | PF-3.20, PF-3.22 |
+| PF-3.25 | ✅ CI: add web install/lint/build/unit steps and the Playwright job to `.github/workflows/ci.yml` | ci | S | PF-3.01 |
+| PF-3.26 | ✅ Update `docs/api.md` and `docs/local-development.md` for the new endpoints and the web dev server | chore | S | PF-3.13 |
+| PF-3.27 | ✅ Refuse vendor/employee assignment on `Completed` and `Cancelled` work, and write the demo script | fix | S | PF-3.16, PF-3.20 |
 
 ---
 
@@ -86,24 +90,29 @@ populated milestone-2 database.
 assign a vendor, schedule a window, notify residents, confirm — completes as one fast operation
 with a success summary, durable communication dispatch, and a full seeded demo dataset.
 
-**Progress:** the Communications module core is in — `MessageTemplate` + renderer + consent
-type (#75), then the `CommunicationsStore` context, mock SMS/email senders, transactional
-outbox + dispatcher, template CRUD API, and their tests. **PF-4.01 is done** — `Resident`
-and `Occupancy` entities (contact fields + per-channel consent + `AllowsContact`), the
-`operations`-schema tables with forced RLS, read endpoints, and tests. **PF-4.02 is done** — consent lives on `Resident`, and the resident/consent/occupancy write
-endpoints (`People.Manage`) landed with it.
-PF-4.04, PF-4.05 and PF-4.12 are substantially done; PF-4.03 is done bar the resident-data
-wiring. PF-4.06–4.11 remain (they need more of milestone 3).
+**Progress:** 7 of 12 tasks closed — PF-4.01, PF-4.02, PF-4.03, PF-4.04, PF-4.05, PF-4.06 and
+PF-4.07 (issues `#32`–`#38`). That is the resident/occupancy domain with per-channel consent, the
+`communications`-schema context with mock SMS/email senders, the transactional outbox and its
+at-most-once dispatcher, resident message templates rendered and queued through
+`POST /api/work/{id}/message`, communication records folded into the work timeline, and the
+extended bulk work actions. See [milestones.md](milestones.md) for what each one delivered.
+
+Carry-forward and caveats the ✅ column cannot express: `add tag` is carved out of PF-4.07 pending
+the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half only — outbox rows
+carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
+audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
+triggers it) is still deferred to the M5 event wiring. PF-4.08–PF-4.11 are the remaining
+web/seed/e2e work.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-4.01 | `Resident`/`Person` domain + occupancy (unit ↔ resident over time); migrations + RLS | domain | L | PF-3.05 |
-| PF-4.02 | Contact channels (SMS/email) with per-channel consent state on residents | domain | M | PF-4.01 |
-| PF-4.03 | Resident message templates: entity + CRUD endpoints + variable substitution (work, property, schedule fields) | api | M | PF-4.01 |
-| PF-4.04 | Communication provider abstraction with mock SMS + mock email implementations (no real send) | application | M | PF-4.02 |
-| PF-4.05 | Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
-| PF-4.06 | Communication records + delivery status surfaced as timeline entries with explicit visibility | application | M | PF-4.05, PF-3.10 |
-| PF-4.07 | ⚠️ Extend bulk actions — **done bar `add tag`**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
+| PF-4.01 | ✅ `Resident`/`Person` domain + occupancy (unit ↔ resident over time); migrations + RLS | domain | L | PF-3.05 |
+| PF-4.02 | ✅ Contact channels (SMS/email) with per-channel consent state on residents | domain | M | PF-4.01 |
+| PF-4.03 | ✅ Resident message templates: entity + CRUD endpoints + variable substitution. `POST /api/work/{id}/message` renders a template against `resident.name`/`work.*`/`property.name`/`schedule.*` and queues it. | api | M | PF-4.01 |
+| PF-4.04 | ✅ Communication provider abstraction with mock SMS + mock email implementations (no real send) | application | M | PF-4.02 |
+| PF-4.05 | ✅ Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
+| PF-4.06 | ✅ Communication records + delivery status surfaced as timeline entries with explicit visibility. Outbox messages carry `WorkId` + `ResidentVisible`; `GET /api/work/{id}/timeline` folds them in as `MessageQueued`/`Sent`/`Failed` (read-side merge, no cross-context write). The C11 "enqueue atomic with the work event" half is still deferred. | application | M | PF-4.05, PF-3.10 |
+| PF-4.07 | ✅ Extend bulk actions — **`add tag` carved out**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
 | PF-4.08 | Bulk "assign & notify" flow in web: vendor + schedule window + resident message + confirm + success summary | web | L | PF-4.07, PF-4.03, PF-3.20 |
 | PF-4.09 | Mobile-responsive Work list and detail; large touch targets for field use | web | M | PF-3.19 |
 | PF-4.10 | Seed: Tidewater Residential Management — 3 properties, ~10 buildings, ~80 spaces, ~70 residents, 6 vendors, 5 employees, ~100 work items, ~60 assets, ≥18 pest-control requests, mix of emergency/overdue/completed | infra | M | PF-4.01, PF-3.22 |

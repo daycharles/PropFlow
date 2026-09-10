@@ -1,4 +1,9 @@
-# Milestone 3 API
+# PropFlow HTTP API
+
+The contract for every endpoint that exists today: the milestone-3 slice (auth, session, work,
+assignment, bulk vendor, reference data, saved views), the milestone-4 communications surfaces
+(residents, templates, the other bulk work actions) and the milestone-6 API-only surfaces (assets,
+global search, integrations). Section headings name the milestone each group came from.
 
 Use HTTPS and retain cookies. API responses are JSON except successful 204s and the minimal readiness endpoint. API session/data responses use Cache-Control: no-store. Authentication failures return 401, authorization failures return 403; no HTML login redirects are used.
 
@@ -109,6 +114,35 @@ a status change goes through the domain state machine, so moving out of `Complet
 or back to `Draft` is rejected with 400, and scheduling without a vendor or employee is
 rejected with 400. Title, priority, status and schedule changes each append their own timeline
 entry. A stale `version` returns 409 and requires a reload.
+
+`GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
+`{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
+changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`,
+`EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`,
+and the communication events `MessageQueued` / `MessageSent` / `MessageFailed`); `oldValue` /
+`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
+object with the details. `residentVisible` is `false` for work-history events and `true` for a
+resident communication. Communication entries are folded in from the outbox on read — there is
+no separate write — so a `MessageQueued` entry becomes `MessageSent` in place once the
+dispatcher delivers it.
+
+There are no event-specific fields — in particular no `vendorId` / `previousVendorId`; a vendor
+assignment reports the vendor through `newValue` and `changes` like every other event. `actorId`
+is null for a system-generated entry. A stored entry is included whether it carries the work
+item in its own `WorkId` **or** references it through `relatedObjectType: "WorkItem"` +
+`relatedObjectId`, so an entry with no `WorkId` of its own still appears on the work item's
+timeline.
+
+`POST /api/work/{id}/message` (`Communications.SendMessage` + CSRF) queues a resident message
+about the work item: body `{ "templateId": "<guid>" }`. It resolves the work item's resident,
+checks per-channel consent, renders the template's subject/body against
+`resident.name` / `work.title` / `work.status` / `property.name` / `schedule.start` /
+`schedule.end`, and enqueues on the template's channel. 202 with `{ "queued": true }` on
+success; 404 for an unknown work item or template; 409 when the work item has no resident, the
+template is inactive, or the resident has not consented to that channel; 400 for a template
+placeholder with no value or a control character reaching a rendered subject. The same template
+sent to the same work item on the same channel twice within an hour is de-duplicated —
+`{ "queued": false }`, 202, nothing enqueued.
 
 ### Assignment
 

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
+using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 using Xunit;
 
@@ -368,6 +369,46 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         var titles = result.GetProperty("items").EnumerateArray()
             .Select(x => x.GetProperty("title").GetString()).ToList();
         Assert.Equal(["Unit a_b inspection"], titles);
+    }
+
+    [Fact]
+    public async Task Timeline_returns_an_entry_related_to_the_work_item_but_carrying_no_work_id()
+    {
+        // The shape PF-4.06 needs: an entry hangs off a work item by related-object reference
+        // only, with no WorkId and no actor. Before the read path was widened it was invisible.
+        await using var s = await fixture.CreateScenarioAsync();
+        var entryId = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Timeline.Add(TimelineEntry.Record(s.OrganizationA, null, DateTimeOffset.UtcNow,
+                "CommunicationQueued", "WorkItem", s.WorkA, null, "Queued", workId: null, id: entryId));
+            await store.SaveChangesAsync();
+        }
+        await using (var verify = s.Store(s.OrganizationA))
+            Assert.Null((await verify.Timeline.AsNoTracking().SingleAsync(x => x.Id == entryId)).WorkId);
+        await s.LoginAsync();
+
+        var timeline = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}/timeline");
+        var entry = timeline.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == entryId);
+        Assert.Equal("CommunicationQueued", entry.GetProperty("eventType").GetString());
+        Assert.Equal("WorkItem", entry.GetProperty("relatedObjectType").GetString());
+        Assert.Equal(s.WorkA, entry.GetProperty("relatedObjectId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("actorId").ValueKind);
+    }
+
+    [Fact]
+    public async Task Timeline_entries_no_longer_expose_the_legacy_vendor_fields()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        Assert.Equal(HttpStatusCode.OK, (await s.AssignAsync(s.WorkA, s.VendorA)).StatusCode);
+
+        var timeline = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}/timeline");
+        var entry = timeline.EnumerateArray().Single(x => x.GetProperty("eventType").GetString() == nameof(VendorAssigned));
+        Assert.False(entry.TryGetProperty("vendorId", out _));
+        Assert.False(entry.TryGetProperty("previousVendorId", out _));
+        Assert.Equal(s.VendorA.ToString(), entry.GetProperty("newValue").GetString());
+        Assert.Contains(s.VendorA.ToString(), entry.GetProperty("changes").GetString());
     }
 
     private static async Task<uint> VersionAsync(Scenario s, Guid workId)

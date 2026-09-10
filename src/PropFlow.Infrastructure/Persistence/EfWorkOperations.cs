@@ -1,12 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application.Work;
+using PropFlow.Domain.Communications;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
+using PropFlow.Infrastructure.Communications;
 
 namespace PropFlow.Infrastructure.Persistence;
 
-public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) : IWorkOperations
+public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore comms, TimeProvider clock) : IWorkOperations
 {
     // Kept for existing internal callers; API callers supply the client concurrency version.
     public Task<AssignmentOutcome> AssignVendorAsync(Guid id, Guid vendorId, Guid actorId, CancellationToken ct) =>
@@ -66,7 +68,41 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
 
     public Task<WorkItem?> GetAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
     public Task<uint?> VersionAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().Where(x => x.Id == id).Select(x => (uint?)EF.Property<uint>(x, "Version")).SingleOrDefaultAsync(ct);
-    public async Task<IReadOnlyList<TimelineEntry>?> TimelineAsync(Guid id, CancellationToken ct) { if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null; return await store.Timeline.AsNoTracking().Where(x => x.WorkId == id).OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToListAsync(ct); }
+    public async Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, CancellationToken ct)
+    {
+        if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null;
+
+        // An entry may hang off a work item either directly (WorkId) or only by related-object
+        // reference. The OR keeps both reachable without duplicating the rows that set both.
+        var events = await store.Timeline.AsNoTracking()
+            .Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id))
+            .Select(x => new TimelineItem(x.Id, x.EventType, x.OccurredAt, x.ActorId,
+                x.OldValue, x.NewValue, x.RelatedObjectType, x.RelatedObjectId, x.Changes, false))
+            .ToListAsync(ct);
+
+        // Communications live in their own context; a work item's messages are folded into its
+        // history on read, so there is no cross-context write.
+        var messages = await comms.OutboxMessages.AsNoTracking().Where(x => x.WorkId == id)
+            .Select(x => new { x.Id, x.Channel, x.RecipientAddress, x.Subject, x.Status, x.CreatedAt, x.LastAttemptAt, x.ProviderReference, x.FailureReason, x.ResidentVisible })
+            .ToListAsync(ct);
+
+        events.AddRange(messages.Select(m => new TimelineItem(
+            m.Id,
+            m.Status switch
+            {
+                OutboxStatus.Sent => "MessageSent",
+                OutboxStatus.Failed => "MessageFailed",
+                OutboxStatus.Sending => "MessageSending",
+                _ => "MessageQueued"
+            },
+            m.LastAttemptAt ?? m.CreatedAt, null,
+            m.Channel.ToString(), $"{m.Channel} to {m.RecipientAddress}",
+            "OutboxMessage", m.Id,
+            JsonSerializer.Serialize(new { channel = m.Channel.ToString(), recipient = m.RecipientAddress, subject = m.Subject, status = m.Status.ToString(), providerReference = m.ProviderReference, failureReason = m.FailureReason }),
+            m.ResidentVisible)));
+
+        return events.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToList();
+    }
 
     public async Task<WorkItem> CreateAsync(CreateWorkCommand c, CancellationToken ct)
     {
@@ -110,9 +146,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
         if (work.IsTerminal) return AssignmentOutcome.NotAssignable;
         if (version is { } v) store.Entry(work).Property("Version").OriginalValue = v;
         var change = work.AssignEmployee(employeeId, actorId, clock.GetUtcNow()); if (change is null) return AssignmentOutcome.Unchanged;
-        store.Timeline.Add(TimelineEntry.Record(change.OrganizationId, change.ActorId, change.OccurredAt, nameof(EmployeeAssigned), "WorkItem", change.WorkId,
-            change.PreviousEmployeeId?.ToString(), change.EmployeeId.ToString(), change.WorkId,
-            JsonSerializer.Serialize(new { oldValue = change.PreviousEmployeeId, newValue = change.EmployeeId })));
+        store.Timeline.Add(TimelineEntry.From(change));
         try { await store.SaveChangesAsync(ct); return AssignmentOutcome.Updated; } catch (DbUpdateConcurrencyException) { return AssignmentOutcome.Conflict; }
     }
 
@@ -222,8 +256,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
                     null, c.Note, work.Id, JsonSerializer.Serialize(new { note = c.Note, visibility = c.NoteInternal ? "internal" : "resident" })));
                 return true;
             case BulkWorkAction.Reopen:
-                var reopened = work.Reopen(c.ActorId, now);
-                store.Timeline.Add(Event(work, c.ActorId, nameof(WorkReopened), reopened.PreviousStatus.ToString(), reopened.NewStatus.ToString(), now));
+                store.Timeline.Add(TimelineEntry.From(work.Reopen(c.ActorId, now)));
                 return true;
             default:
                 throw new ArgumentOutOfRangeException(nameof(c), c.Action, "Unknown bulk action.");
