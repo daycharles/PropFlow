@@ -65,4 +65,17 @@ public sealed class AutomationRuleTests
         Assert.True(rule.Matches(WorkStatus.New, category));
         Assert.False(rule.Matches(WorkStatus.New, null));
     }
+
+    [Fact]
+    public void The_note_added_trigger_round_trips_and_matches_like_any_other()
+    {
+        var rule = new AutomationRule(Guid.NewGuid(), Guid.NewGuid(), "notify on note",
+            AutomationTrigger.WorkNoteAdded,
+            [new(AutomationConditionKind.WorkStatusEquals, Status: WorkStatus.InProgress)],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: Guid.NewGuid())], DateTimeOffset.UtcNow);
+
+        Assert.Equal(AutomationTrigger.WorkNoteAdded, rule.Trigger);
+        Assert.True(rule.Matches(WorkStatus.InProgress, categoryId: null));
+        Assert.False(rule.Matches(WorkStatus.New, categoryId: null));
+    }
 }

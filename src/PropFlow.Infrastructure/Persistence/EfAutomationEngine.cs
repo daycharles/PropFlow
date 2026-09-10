@@ -18,7 +18,8 @@ namespace PropFlow.Infrastructure.Persistence;
 // run for this occurrence and is skipped. Individual actions are idempotent too — SetPriority is
 // a no-op when the priority already matches, SendResidentMessage rides the outbox idempotency
 // key. Each rule runs in its own try/catch and its own SaveChanges, so one bad rule neither
-// fails the work operation nor touches another rule's work.
+// fails the work operation nor touches another rule's work. The audit entry's Changes record
+// every message action's outcome, so a "skipped: no consent" is visible on the timeline.
 public sealed class EfAutomationEngine(
     OperationsStore store,
     IResidentMessenger messenger,
@@ -29,6 +30,18 @@ public sealed class EfAutomationEngine(
     {
         var work = await store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == workId, cancellationToken);
         if (work is null) return AutomationRunSummary.Empty;
+
+        // A note-triggered message can render {{ note.text }}. Only a resident-visible note gets
+        // here (EfWorkOperations does not raise WorkNoteAdded for an internal one), but re-check
+        // the committed entry so a stale trigger cannot leak an internal note into a message.
+        string? noteText = null;
+        if (trigger == AutomationTrigger.WorkNoteAdded)
+        {
+            var note = await store.Timeline.AsNoTracking()
+                .SingleOrDefaultAsync(t => t.Id == occurrenceId && t.EventType == "WorkNote", cancellationToken);
+            if (note is null || !note.ResidentVisible) return AutomationRunSummary.Empty;
+            noteText = note.NewValue ?? "";
+        }
 
         var rules = await store.AutomationRules.AsNoTracking()
             .Where(r => r.IsEnabled && r.Trigger == trigger)
@@ -42,7 +55,7 @@ public sealed class EfAutomationEngine(
             matched++;
             try
             {
-                if (await ApplyAsync(rule, workId, occurrenceId, cancellationToken)) applied++;
+                if (await ApplyAsync(rule, workId, occurrenceId, noteText, cancellationToken)) applied++;
             }
             catch (Exception exception)
             {
@@ -60,13 +73,15 @@ public sealed class EfAutomationEngine(
     }
 
     // Returns false when the rule had already been applied for this occurrence.
-    private async Task<bool> ApplyAsync(AutomationRule rule, Guid workId, Guid occurrenceId, CancellationToken cancellationToken)
+    private async Task<bool> ApplyAsync(AutomationRule rule, Guid workId, Guid occurrenceId, string? noteText, CancellationToken cancellationToken)
     {
         var fenceId = Deterministic(rule.Id, occurrenceId);
         if (await store.Timeline.AsNoTracking().AnyAsync(t => t.Id == fenceId, cancellationToken))
             return false;
 
         var now = clock.GetUtcNow();
+        var extraValues = noteText is null ? null : new Dictionary<string, string>(StringComparer.Ordinal) { ["note.text"] = noteText };
+        var messageOutcomes = new List<object>();
 
         // Messages first — the outbox is a separate context and its own transaction, so a
         // SetPriority/audit rollback below cannot orphan a queued message (the idempotency key
@@ -74,7 +89,8 @@ public sealed class EfAutomationEngine(
         foreach (var action in rule.ReadActions().Where(a => a.Kind == AutomationActionKind.SendResidentMessage))
         {
             var key = $"automation:{rule.Id:N}:{occurrenceId:N}:{action.TemplateId:N}";
-            var result = await messenger.QueueForWorkAsync(workId, action.TemplateId!.Value, key, cancellationToken);
+            var result = await messenger.QueueForWorkAsync(workId, action.TemplateId!.Value, key, extraValues, cancellationToken);
+            messageOutcomes.Add(new { templateId = action.TemplateId, outcome = result.Outcome.ToString() });
             if (result.Outcome is ResidentMessageOutcome.RenderFailed or ResidentMessageOutcome.TemplateNotFound)
                 throw new InvalidOperationException($"Rule {rule.Id} message action: {result.Outcome} ({result.Detail}).");
             if (!result.Persisted)
@@ -102,7 +118,7 @@ public sealed class EfAutomationEngine(
 
         store.Timeline.Add(TimelineEntry.Record(tracked.OrganizationId, actorId: null, now, "AutomationApplied", "AutomationRule", rule.Id,
             oldValue: null, newValue: rule.Name, workId: tracked.Id,
-            JsonSerializer.Serialize(new { ruleId = rule.Id, ruleName = rule.Name, occurrenceId }), id: fenceId));
+            JsonSerializer.Serialize(new { ruleId = rule.Id, ruleName = rule.Name, occurrenceId, messages = messageOutcomes }), id: fenceId));
 
         try
         {

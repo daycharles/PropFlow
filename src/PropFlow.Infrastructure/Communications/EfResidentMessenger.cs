@@ -15,7 +15,8 @@ public sealed class EfResidentMessenger(
     IOutbox outbox,
     ITemplateRenderer renderer) : IResidentMessenger
 {
-    public async Task<ResidentMessageResult> QueueForWorkAsync(Guid workId, Guid templateId, string idempotencyKey, CancellationToken cancellationToken)
+    public async Task<ResidentMessageResult> QueueForWorkAsync(Guid workId, Guid templateId, string idempotencyKey,
+        IReadOnlyDictionary<string, string>? extraValues = null, CancellationToken cancellationToken = default)
     {
         var work = await operations.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == workId, cancellationToken);
         if (work is null) return new(ResidentMessageOutcome.WorkNotFound);
@@ -44,7 +45,10 @@ public sealed class EfResidentMessenger(
             ["property.name"] = property?.Name ?? "",
             ["schedule.start"] = LocalTime(work.ScheduledStart),
             ["schedule.end"] = LocalTime(work.ScheduledEnd),
+            ["note.text"] = "",
         };
+        if (extraValues is not null)
+            foreach (var pair in extraValues) values[pair.Key] = pair.Value;
 
         string body;
         string? subject;

@@ -47,12 +47,12 @@ public sealed class AutomationEngineTests(DatabaseFixture fixture)
         await store.SaveChangesAsync();
     }
 
-    private static async Task<Guid> SeedSmsTemplateAsync(Scenario s, Guid org)
+    private static async Task<Guid> SeedSmsTemplateAsync(Scenario s, Guid org,
+        string body = "Hi {{ resident.name }}, {{ work.title }}.")
     {
         var id = Guid.NewGuid();
         await using var store = s.CommsAsAdmin(org);
-        store.MessageTemplates.Add(new MessageTemplate(org, id, "auto", MessageChannel.Sms, null,
-            "Hi {{ resident.name }}, {{ work.title }}."));
+        store.MessageTemplates.Add(new MessageTemplate(org, id, "auto", MessageChannel.Sms, null, body));
         await store.SaveChangesAsync();
         return id;
     }
@@ -257,5 +257,185 @@ public sealed class AutomationEngineTests(DatabaseFixture fixture)
 
         var detail = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}");
         Assert.Equal("Low", detail.GetProperty("item").GetProperty("priority").GetString());
+    }
+
+    // --- PF-5.14: WorkNoteAdded ---
+
+    private static async Task<Guid> AddNoteAsync(Scenario s, Guid org, Guid actorId, Guid workId, string text, bool residentVisible)
+    {
+        var id = Guid.NewGuid();
+        await using var store = s.AdminStore(org);
+        store.Timeline.Add(PropFlow.Domain.Timeline.TimelineEntry.Record(org, actorId, DateTimeOffset.UtcNow,
+            "WorkNote", "WorkItem", workId, null, text, workId,
+            System.Text.Json.JsonSerializer.Serialize(new { note = text, visibility = residentVisible ? "resident" : "internal" }),
+            id: id, residentVisible: residentVisible));
+        await store.SaveChangesAsync();
+        return id;
+    }
+
+    [Fact]
+    public async Task A_resident_visible_note_fires_a_message_rule_with_the_note_text()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA, "Update on {{ work.title }}: {{ note.text }}");
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var occurrence = await AddNoteAsync(s, s.OrganizationA, s.AdminA, s.WorkA, "the roof is patched", residentVisible: true);
+
+        await using var store = s.Store(s.OrganizationA);
+        await using var comms2 = s.Comms(s.OrganizationA);
+        var summary = await Engine(store, comms2).RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+
+        Assert.Equal(new AutomationRunSummary(1, 1, 0), summary);
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        var message = await verifyComms.OutboxMessages.SingleAsync(x => x.WorkId == s.WorkA);
+        Assert.Contains("the roof is patched", message.Body);
+    }
+
+    [Fact]
+    public async Task An_internal_note_does_not_reach_a_message_rule()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA);
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var occurrence = await AddNoteAsync(s, s.OrganizationA, s.AdminA, s.WorkA, "gate code 4417", residentVisible: false);
+
+        await using var store = s.Store(s.OrganizationA);
+        await using var comms = s.Comms(s.OrganizationA);
+        var summary = await Engine(store, comms).RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+
+        Assert.Equal(AutomationRunSummary.Empty, summary);
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        Assert.Equal(0, await verifyComms.OutboxMessages.CountAsync(x => x.WorkId == s.WorkA));
+    }
+
+    [Fact]
+    public async Task A_resident_without_consent_is_skipped_and_the_reason_is_on_the_timeline()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var emailTemplate = Guid.NewGuid();
+        await using (var comms = s.CommsAsAdmin(s.OrganizationA))
+        {
+            // ResidentA consented to SMS only (fixture), so an email rule is a no-consent skip.
+            comms.MessageTemplates.Add(new MessageTemplate(s.OrganizationA, emailTemplate, "email note", MessageChannel.Email,
+                "Update", "Hello {{ resident.name }}"));
+            await comms.SaveChangesAsync();
+        }
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: emailTemplate)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var occurrence = await AddNoteAsync(s, s.OrganizationA, s.AdminA, s.WorkA, "update", residentVisible: true);
+
+        await using var store = s.Store(s.OrganizationA);
+        await using var comms2 = s.Comms(s.OrganizationA);
+        var summary = await Engine(store, comms2).RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+
+        Assert.Equal(1, summary.RulesApplied);
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        Assert.Equal(0, await verifyComms.OutboxMessages.CountAsync(x => x.WorkId == s.WorkA));
+        await using var verify = s.AdminStore(s.OrganizationA);
+        var audit = await verify.Timeline.SingleAsync(t => t.WorkId == s.WorkA && t.EventType == "AutomationApplied");
+        Assert.Contains("NoConsent", audit.Changes);
+    }
+
+    [Fact]
+    public async Task A_note_that_is_re_delivered_does_not_double_send()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA);
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var occurrence = await AddNoteAsync(s, s.OrganizationA, s.AdminA, s.WorkA, "one message only", residentVisible: true);
+
+        await using var store = s.Store(s.OrganizationA);
+        await using var comms = s.Comms(s.OrganizationA);
+        var engine = Engine(store, comms);
+        await engine.RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+        var second = await engine.RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+
+        Assert.Equal(0, second.RulesApplied);
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        Assert.Equal(1, await verifyComms.OutboxMessages.CountAsync(x => x.WorkId == s.WorkA));
+    }
+
+    [Fact]
+    public async Task Posting_a_resident_visible_note_through_the_api_notifies_the_resident()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA);
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var version = (await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}")).GetProperty("version").GetUInt32();
+
+        var visible = await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "Your unit's water heater has been replaced.", @internal = false,
+            items = new[] { new { workId = s.WorkA, version } },
+        });
+        Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        Assert.Equal(1, await verifyComms.OutboxMessages.CountAsync(x => x.WorkId == s.WorkA));
+
+        // An internal note on the same work item does not add a second message.
+        var v2 = (await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{s.WorkA}")).GetProperty("version").GetUInt32();
+        await s.Client.PostAsJsonAsync("/api/work/bulk/note", new
+        {
+            note = "Vendor invoice #55 filed.", @internal = true,
+            items = new[] { new { workId = s.WorkA, version = v2 } },
+        });
+        Assert.Equal(1, await verifyComms.OutboxMessages.CountAsync(x => x.WorkId == s.WorkA));
+    }
+
+    [Fact]
+    public async Task Note_rules_are_tenant_scoped()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA);
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        var occurrence = await AddNoteAsync(s, s.OrganizationB, s.AdminB, s.WorkB, "org b note", residentVisible: true);
+
+        await using var store = s.Store(s.OrganizationB);
+        await using var comms = s.Comms(s.OrganizationB);
+        var summary = await Engine(store, comms).RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkB, occurrence, default);
+
+        Assert.Equal(AutomationRunSummary.Empty, summary);
     }
 }

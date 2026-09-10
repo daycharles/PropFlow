@@ -6,7 +6,7 @@ namespace PropFlow.Domain.Automation;
 // v1 is deliberately closed: administrators choose from these values rather than supplying
 // expressions or scripts. The JSON payload keeps the persisted rule shape forward-compatible
 // with a future visual builder without turning the database into an executable DSL.
-public enum AutomationTrigger { WorkCreated, WorkStatusChanged }
+public enum AutomationTrigger { WorkCreated, WorkStatusChanged, WorkNoteAdded }
 public enum AutomationConditionKind { WorkStatusEquals, CategoryEquals }
 public enum AutomationActionKind { SendResidentMessage, SetPriority }
 

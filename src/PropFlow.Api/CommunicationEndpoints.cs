@@ -91,7 +91,7 @@ public static class CommunicationEndpoints
             // template id already implies the channel, so it is not in the key. A deliberate
             // re-send an hour later still goes through.
             var key = $"work-message:{workId:N}:{request.TemplateId:N}:{clock.GetUtcNow():yyyyMMddHH}";
-            var result = await messenger.QueueForWorkAsync(workId, request.TemplateId, key, ct);
+            var result = await messenger.QueueForWorkAsync(workId, request.TemplateId, key, cancellationToken: ct);
             return result.Outcome switch
             {
                 ResidentMessageOutcome.Queued => Results.Accepted($"/api/work/{workId}/timeline", new { queued = true }),
