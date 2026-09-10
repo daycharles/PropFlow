@@ -160,7 +160,8 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api"))
     {
         context.Response.Headers.CacheControl = "no-store";
-        if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
+        if (!context.Request.Path.StartsWithSegments("/api/communications/provider-callback") &&
+            !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
             && !HttpMethods.IsOptions(context.Request.Method))
         {
             try { await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context); }
@@ -190,6 +191,7 @@ app.MapAttentionEndpoints();
 app.MapSavedViewEndpoints();
 app.MapIntegrationEndpoints();
 app.MapAutomationEndpoints();
+app.MapProviderCallbackEndpoints();
 app.Run();
 
 public partial class Program { }
