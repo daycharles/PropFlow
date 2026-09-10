@@ -134,6 +134,11 @@ export type AttentionReason =
   | "WaitingOnResident"
   | "RepeatRepair"
   | "UnitTurnAtRisk";
+export type AttentionFinding = {
+  reason: AttentionReason;
+  severity: AttentionSeverity;
+  detail: string;
+};
 export type AttentionItem = {
   workId: string;
   title: string;
@@ -142,9 +147,9 @@ export type AttentionItem = {
   status: string;
   priority: string;
   dueDate?: string | null;
-  reason: AttentionReason;
+  // The most urgent severity among findings; findings carry every rule this work item tripped.
   severity: AttentionSeverity;
-  detail: string;
+  findings: AttentionFinding[];
 };
 export type AttentionQueue = {
   items: AttentionItem[];

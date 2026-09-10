@@ -63,24 +63,15 @@ public sealed class EfAttentionQueue(OperationsStore store, IRepeatRepairDetecto
                 lastActivity.TryGetValue(row.Id, out var at) ? at : row.CreatedAt,
                 row.DueDate);
 
-            foreach (var finding in AttentionRules.Evaluate(snapshot, now))
-                items.Add(new AttentionItem(row.Id, row.Title, row.PropertyId, row.PropertyName,
-                    row.Status, row.Priority, row.DueDate, finding.Reason, finding.Severity, finding.Detail));
+            // One entry per work item, carrying every rule it tripped — the builder derives the
+            // per-severity counts from these same rows, so the cards cannot outrun the list.
+            var findings = AttentionRules.Evaluate(snapshot, now);
+            if (findings.Count == 0) continue;
+
+            items.Add(new AttentionItem(row.Id, row.Title, row.PropertyId, row.PropertyName,
+                row.Status, row.Priority, row.DueDate, findings));
         }
 
-        var ordered = items
-            .OrderByDescending(i => i.Severity)
-            .ThenBy(i => i.DueDate ?? DateTimeOffset.MaxValue)
-            .ThenBy(i => i.WorkId)
-            .ThenBy(i => i.Reason)
-            .ToList();
-
-        int Distinct(AttentionSeverity severity) =>
-            ordered.Where(i => i.Severity == severity).Select(i => i.WorkId).Distinct().Count();
-
-        return new AttentionQueue(ordered,
-            Distinct(AttentionSeverity.Critical),
-            Distinct(AttentionSeverity.Warning),
-            Distinct(AttentionSeverity.Informational));
+        return AttentionQueueBuilder.Build(items);
     }
 }

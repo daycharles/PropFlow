@@ -615,6 +615,28 @@ td small {
   gap: 4px;
   align-content: start;
 }
+.attention-findings {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.attention-finding {
+  display: grid;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 2px solid var(--muted);
+}
+.attention-finding.finding-critical {
+  border-left-color: var(--terracotta);
+}
+.attention-finding.finding-warning {
+  border-left-color: #b3801f;
+}
+.attention-finding.finding-informational {
+  border-left-color: var(--green);
+}
 .attention-reason {
   font-size: 11px;
   font-weight: 800;
