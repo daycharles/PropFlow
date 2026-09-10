@@ -90,6 +90,22 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.ToTable("Assets", "operations");
                 });
 
+            modelBuilder.Entity("PropFlow.Domain.Automation.AutomationRule", b =>
+                {
+                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
+                    b.Property<Guid>("Id").HasColumnType("uuid");
+                    b.Property<string>("Actions").IsRequired().HasColumnType("jsonb");
+                    b.Property<string>("Conditions").IsRequired().HasColumnType("jsonb");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<bool>("IsEnabled").HasColumnType("boolean");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<string>("Trigger").IsRequired().HasMaxLength(50).HasColumnType("character varying(50)");
+                    b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("OrganizationId", "Id");
+                    b.HasIndex("OrganizationId", "IsEnabled", "Trigger");
+                    b.ToTable("AutomationRules", "operations");
+                });
+
             modelBuilder.Entity("PropFlow.Domain.People.Employee", b =>
                 {
                     b.Property<Guid>("OrganizationId")
