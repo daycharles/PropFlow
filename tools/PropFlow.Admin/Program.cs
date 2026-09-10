@@ -105,7 +105,35 @@ internal static class DemoSeeder
         var secondary = await EnsureOrganizationAsync(identity, users, "Isolation Test Management", SecondarySlug,
             "demo-admin@isolation.example.test", password);
         await PropFlow.Admin.TidewaterSeed.SeedAsync(adminConnection, primary.OrganizationId, primary.UserId);
+        await EnsureTechnicianAsync(identity, users, adminConnection, primary.OrganizationId, password);
         await SeedOperationsAsync(adminConnection, secondary.OrganizationId, secondary.UserId, "Isolation", "Private Place", "A1");
+    }
+
+    private static async Task EnsureTechnicianAsync(IdentityStore identity, UserManager<ApplicationUser> users,
+        string adminConnection, Guid organizationId, string password)
+    {
+        const string email = "demo-technician@tidewater.example.test";
+        var user = await users.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, LockoutEnabled = true };
+            var created = await users.CreateAsync(user, password);
+            if (!created.Succeeded) throw new ArgumentException(string.Join("; ", created.Errors.Select(x => x.Code)));
+        }
+
+        await using var operations = DatabaseProvisioner.CreateOperationsStore(adminConnection, organizationId);
+        var employeeId = await operations.Employees.Where(x => x.IsActive).OrderBy(x => x.DisplayName)
+            .Select(x => x.Id).FirstAsync();
+        var membership = await identity.Memberships.SingleOrDefaultAsync(x => x.OrganizationId == organizationId && x.UserId == user.Id);
+        if (membership is null)
+            identity.Memberships.Add(new OrganizationMembership { OrganizationId = organizationId, UserId = user.Id, Role = "Technician", EmployeeId = employeeId });
+        else
+        {
+            membership.Role = "Technician";
+            membership.EmployeeId = employeeId;
+            membership.IsActive = true;
+        }
+        await identity.SaveChangesAsync();
     }
 
     private static async Task<(Guid OrganizationId, Guid UserId)> EnsureOrganizationAsync(IdentityStore store, UserManager<ApplicationUser> users,
