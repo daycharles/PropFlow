@@ -85,6 +85,11 @@ public sealed class WorkItem : TenantEntity
     private static string? Optional(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length <= max ? value.Trim() : throw new ArgumentException("Value is too long.");
 }
 
+// The two automation triggers. Raised by the application layer *after* the work change commits;
+// they carry only the identity of what happened — the evaluator re-reads the committed work item.
+public sealed record WorkCreated(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId) : IDomainEvent;
+public sealed record WorkStatusChanged(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, WorkStatus PreviousStatus, WorkStatus NewStatus) : IDomainEvent;
+
 public sealed record VendorAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousVendorId, Guid VendorId) : IDomainEvent;
 public sealed record EmployeeAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousEmployeeId, Guid EmployeeId) : IDomainEvent;
 public sealed record WorkReopened(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, WorkStatus PreviousStatus, WorkStatus NewStatus) : IDomainEvent;

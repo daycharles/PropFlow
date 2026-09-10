@@ -32,4 +32,37 @@ public sealed class AutomationRuleTests
         Assert.Throws<ArgumentException>(() => new AutomationRule(Guid.NewGuid(), Guid.NewGuid(), "No template",
             AutomationTrigger.WorkStatusChanged, [], [new(AutomationActionKind.SendResidentMessage)], DateTimeOffset.UtcNow));
     }
+
+    private static AutomationRule Rule(IReadOnlyList<AutomationCondition> conditions) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), "r", AutomationTrigger.WorkCreated, conditions,
+            [new(AutomationActionKind.SetPriority, Priority: WorkPriority.High)], DateTimeOffset.UtcNow);
+
+    [Fact]
+    public void An_empty_condition_set_matches_anything()
+    {
+        Assert.True(Rule([]).Matches(WorkStatus.Completed, categoryId: null));
+    }
+
+    [Fact]
+    public void Conditions_are_anded()
+    {
+        var category = Guid.NewGuid();
+        var rule = Rule([
+            new(AutomationConditionKind.WorkStatusEquals, Status: WorkStatus.New),
+            new(AutomationConditionKind.CategoryEquals, CategoryId: category),
+        ]);
+
+        Assert.True(rule.Matches(WorkStatus.New, category));
+        Assert.False(rule.Matches(WorkStatus.New, Guid.NewGuid()));
+        Assert.False(rule.Matches(WorkStatus.Assigned, category));
+    }
+
+    [Fact]
+    public void Category_equals_distinguishes_a_missing_category()
+    {
+        var category = Guid.NewGuid();
+        var rule = Rule([new(AutomationConditionKind.CategoryEquals, CategoryId: category)]);
+        Assert.True(rule.Matches(WorkStatus.New, category));
+        Assert.False(rule.Matches(WorkStatus.New, null));
+    }
 }

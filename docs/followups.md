@@ -19,7 +19,7 @@ in #126.
 
 | Item | Source | Owner | Notes |
 | --- | --- | --- | --- |
-| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | `POST /api/work/{id}/message` enqueues atomically *within that call*, but there is still no path that enqueues from a **work status/schedule change**. That (and idempotent real providers) is where C11 bites — needs the M5 event wiring (PF-5.03), which has now landed, so this is doable |
+| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | PF-5.13 wired the automation `SendResidentMessage` action so a work event now *does* produce a message, but the engine runs **post-commit** (`EfWorkOperations` dispatches after `SaveChanges` / `CommitAsync`), not inside the triggering transaction. The message is idempotent (`automation:{rule}:{occurrence}:{template}` key), so a crash between commit and dispatch is recoverable on a replay — but there is no replay path yet (in-process `IAutomationEngine`, no durable event queue). True atomicity or a durable dispatch queue is still open |
 
 ---
 
