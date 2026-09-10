@@ -85,7 +85,10 @@ test("bulk internal note from the toolbar on a phone viewport", async ({ page })
   const rows = page.getByRole("row").filter({ has: page.locator('a[href^="/work/"]') });
   await expect(rows).toHaveCount(2);
 
-  await page.getByLabel("Select all visible work").check();
+  // The phone card layout hides the header "select all" checkbox (clipped thead); select each
+  // row's own checkbox instead.
+  await page.getByLabel(`Select Bulk edit ${runId} #1`).check();
+  await page.getByLabel(`Select Bulk edit ${runId} #2`).check();
   await page.getByRole("button", { name: "Bulk edit…" }).click();
 
   const dialog = page.getByRole("dialog");
