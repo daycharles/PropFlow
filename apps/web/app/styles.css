@@ -560,9 +560,9 @@ td small {
     display: none;
   }
   tbody td:first-child input {
-    width: 28px;
-    min-width: 28px;
-    min-height: 28px;
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
   }
   tbody tr:has(td[colspan]) td {
     display: block;

@@ -31,6 +31,13 @@ test("the phone Work list exposes a working Sort control and does not scroll sid
   const sort = page.getByLabel("Sort by");
   await expect(sort).toBeVisible();
 
+  // The row-select checkbox is a field-usable target.
+  const checkbox = page.locator('tbody tr:has(a[href^="/work/"]) input[type="checkbox"]').first();
+  const checkboxBox = await checkbox.boundingBox();
+  expect(checkboxBox?.height ?? 0, "row-select checkbox is >= 40px tall").toBeGreaterThanOrEqual(
+    40,
+  );
+
   // Choosing a sort option reorders the cards, and the control keeps the chosen value.
   const titles = () =>
     page.locator('tbody tr:has(a[href^="/work/"]) a[href^="/work/"]').allInnerTexts();
