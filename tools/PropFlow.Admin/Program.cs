@@ -18,7 +18,7 @@ try
     if (args[0] == "migrate")
     {
         await DatabaseProvisioner.MigrateAsync(admin);
-        Console.WriteLine("Identity, operations and communications migrations applied.");
+        Console.WriteLine("Identity, operations, communications and integrations migrations applied.");
         return 0;
     }
     if (args[0] == "configure-runtime")
