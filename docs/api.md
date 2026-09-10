@@ -130,9 +130,12 @@ dispatcher delivers it.
 about the work item: body `{ "templateId": "<guid>" }`. It resolves the work item's resident,
 checks per-channel consent, renders the template's subject/body against
 `resident.name` / `work.title` / `work.status` / `property.name` / `schedule.start` /
-`schedule.end`, and enqueues on the template's channel. 202 on success; 404 for an unknown work
-item or template; 409 when the work item has no resident, the template is inactive, or the
-resident has not consented to that channel; 400 for a template placeholder with no value.
+`schedule.end`, and enqueues on the template's channel. 202 with `{ "queued": true }` on
+success; 404 for an unknown work item or template; 409 when the work item has no resident, the
+template is inactive, or the resident has not consented to that channel; 400 for a template
+placeholder with no value or a control character reaching a rendered subject. The same template
+sent to the same work item on the same channel twice within an hour is de-duplicated —
+`{ "queued": false }`, 202, nothing enqueued.
 
 ### Assignment
 
