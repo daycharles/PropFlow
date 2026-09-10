@@ -4,7 +4,7 @@ Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md]
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
 implemented. **Milestone 3 is complete** — all 26 task issues closed and promoted to `main` in
 `b31b864` — see the M3 **Progress** note for what was carried forward rather than closed.
-**Milestone 4 is in flight** (5 of 12 tasks closed). **Milestone 6 was started ahead of milestone
+**Milestone 4 is in flight** (7 of 12 tasks closed). **Milestone 6 was started ahead of milestone
 5**: 3 of its 13 tasks are closed, all API/domain only, while milestone 5 has not begun. Milestone
 7 has 1 of 6 closed. This document is the source for GitHub milestones and issues.
 
@@ -45,12 +45,11 @@ in `baf4498` (PR #98) with no tracker issue, because it was written after the M3
 Employee assignment (`POST /api/work/{id}/employee`, `Work.AssignEmployee`) also landed with the
 slice although no task numbered it.
 
-Carried forward rather than closed, tracked in [followups.md](followups.md): `TimelineEntry` is
-only half generalized (`From()` still writes the legacy `PreviousVendorId`/`VendorId` columns and
-`Create()` is dead — `src/PropFlow.Domain/Timeline/TimelineEntry.cs:44`), Tailwind is declared
+Carried forward rather than closed, tracked in [followups.md](followups.md): Tailwind is declared
 (`apps/web/package.json:24`) and imported (`apps/web/app/styles.css:1`) but nothing processes it —
 no PostCSS config, no `@tailwindcss/postcss` — and the `M3Operations` migration is not safe against
-a populated milestone-2 database.
+a populated milestone-2 database. The third carry-forward, the half-finished `TimelineEntry`
+generalization, was closed by PF-3.10 in `c362bfd` (PR #107).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
@@ -91,17 +90,19 @@ a populated milestone-2 database.
 assign a vendor, schedule a window, notify residents, confirm — completes as one fast operation
 with a success summary, durable communication dispatch, and a full seeded demo dataset.
 
-**Progress:** 5 of 12 tasks closed — PF-4.01, PF-4.02, PF-4.04, PF-4.05 and PF-4.07 (issues `#32`,
-`#33`, `#35`, `#36`, `#38`). That is the resident/occupancy domain with per-channel consent, the
+**Progress:** 7 of 12 tasks closed — PF-4.01, PF-4.02, PF-4.03, PF-4.04, PF-4.05, PF-4.06 and
+PF-4.07 (issues `#32`–`#38`). That is the resident/occupancy domain with per-channel consent, the
 `communications`-schema context with mock SMS/email senders, the transactional outbox and its
-at-most-once dispatcher, and the extended bulk work actions. See
-[milestones.md](milestones.md) for what each one delivered.
+at-most-once dispatcher, resident message templates rendered and queued through
+`POST /api/work/{id}/message`, communication records folded into the work timeline, and the
+extended bulk work actions. See [milestones.md](milestones.md) for what each one delivered.
 
 Carry-forward and caveats the ✅ column cannot express: `add tag` is carved out of PF-4.07 pending
-the tag-vocabulary decision below; template CRUD and rendering shipped alongside PF-4.04/PF-4.05 but
-**PF-4.03 stays open** until templates are wired to resident data; and **PF-4.06 is the real
-blocker** for the rest of the milestone — delivery status cannot become a timeline entry until the
-PF-3.10 generalization above is finished. PF-4.08–PF-4.11 are web/seed/e2e work that follows.
+the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half only — outbox rows
+carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
+audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
+triggers it) is still deferred to the M5 event wiring. PF-4.08–PF-4.11 are the remaining
+web/seed/e2e work.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
