@@ -12,8 +12,9 @@ public static class Capabilities
     public const string ManagePeople = "People.Manage";
     public const string ManageAssets = "Assets.Manage";
     public const string ManageIntegrations = "Integrations.Manage";
+    public const string SendResidentMessage = "Communications.SendMessage";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets];
 

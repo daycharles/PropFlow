@@ -47,6 +47,8 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
             entity.Property<uint>("Version").IsRowVersion();
             entity.HasIndex(x => new { x.OrganizationId, x.IdempotencyKey }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
+            // The work timeline reads a work item's messages newest first.
+            entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.CreatedAt });
         });
 
         // Same tenant convention as the Operations context: composite key, no store-generated
