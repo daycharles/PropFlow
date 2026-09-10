@@ -251,7 +251,7 @@ reject control characters (a resident name is a template substitution value).
 | PUT | /api/assets/{id} | `Assets.Manage` + CSRF; same body; the property and space are fixed at creation; 200, 400, or 404 |
 | GET | /api/assets/repeat-repair-policy | `Work.Read`; the organization's repeat-repair thresholds — `{ repairThreshold, windowDays, matchByCategory }`; returns the defaults (`3`, `120`, `false`) until one is set |
 | PUT | /api/assets/repeat-repair-policy | `Assets.Manage` + CSRF; upserts the single per-org policy; `repairThreshold` 2–50, `windowDays` 7–3650; 200 with the saved policy, or 400 out of range |
-| GET | /api/assets/{id}/repeat-repair | `Work.Read`; assess one asset against the current policy — `{ repairThreshold, windowDays, matchByCategory, repairCount, since, totalCostInWindow, isRepeatRepair }`; counts published work linked to the asset with `createdAt` within the window; optional `?categoryId=` narrows the count to matching work when `matchByCategory` is on; 404 for an unknown or foreign asset |
+| GET | /api/assets/{id}/repeat-repair | `Work.Read`; assess one asset against the current policy — `{ repairThreshold, windowDays, matchByCategory, repairCount, since, totalCostInWindow, ageInYears, isRepeatRepair }`; counts published work linked to the asset with `createdAt` within the window; optional `?categoryId=` narrows the count to matching work when `matchByCategory` is on; 404 for an unknown or foreign asset |
 
 `kind` is one of `Hvac`, `WaterHeater`, `Appliance`, `Roof`, `ElectricalPanel`,
 `PlumbingFixture`, `Generator`, `Other`; `condition` is `Unknown`/`New`/`Good`/`Fair`/`Poor`/

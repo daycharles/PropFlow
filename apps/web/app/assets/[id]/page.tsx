@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
 import { ProtectedPage } from "../../components/protected-page";
+import { RepeatRepairWarning } from "../../components/repeat-repair-warning";
 import { api, ApiError, type AssetHistory, type Session } from "../../../lib/api";
 
 const kindLabels: Record<string, string> = {
@@ -88,6 +89,8 @@ function AssetDetail({ session, id }: { session: Session; id: string }) {
           </div>
           <span className="badge">{asset.condition}</span>
         </div>
+
+        <RepeatRepairWarning assetId={asset.id} ageInYears={data.ageInYears} />
 
         <div className="detail-grid">
           <section className="panel">

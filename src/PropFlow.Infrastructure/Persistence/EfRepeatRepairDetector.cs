@@ -29,7 +29,8 @@ public sealed class EfRepeatRepairDetector(OperationsStore store, TimeProvider c
 
     public async Task<RepeatRepairAssessment?> AssessAsync(Guid assetId, Guid? categoryId, CancellationToken cancellationToken)
     {
-        if (!await store.Assets.AsNoTracking().AnyAsync(x => x.Id == assetId, cancellationToken)) return null;
+        var asset = await store.Assets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == assetId, cancellationToken);
+        if (asset is null) return null;
 
         var policy = await store.RepeatRepairPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         var threshold = policy?.RepairThreshold ?? RepeatRepairPolicy.DefaultThreshold;
@@ -46,8 +47,9 @@ public sealed class EfRepeatRepairDetector(OperationsStore store, TimeProvider c
             .Select(g => new { Count = g.Count(), Cost = g.Sum(w => (decimal?)w.Cost) })
             .SingleOrDefaultAsync(cancellationToken);
         var count = rollup?.Count ?? 0;
+        var age = asset.AgeInYears(DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.Date));
 
         return new RepeatRepairAssessment(threshold, windowDays, matchByCategory, count, since,
-            rollup?.Cost ?? 0m, count >= threshold);
+            rollup?.Cost ?? 0m, age, count >= threshold);
     }
 }
