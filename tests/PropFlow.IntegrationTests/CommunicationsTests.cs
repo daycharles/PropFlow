@@ -38,6 +38,25 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
             Task.FromResult(MessageDeliveryResult.Rejected("provider unavailable"));
     }
 
+    // The provider actually delivers (and records the send) on every call, but the acknowledgement
+    // for the first attempt is "lost" — the outbox sees a failure and retries. The retry carries
+    // the same idempotency key, so the mock returns the original delivery without a second record.
+    private sealed class LostAcknowledgementSender(ISentMessageLog log) : IMessageSender
+    {
+        private readonly MockSmsSender inner = new(log);
+        private int calls;
+
+        public MessageChannel Channel => MessageChannel.Sms;
+
+        public async Task<MessageDeliveryResult> SendAsync(OutboundMessage message, string idempotencyKey, CancellationToken cancellationToken)
+        {
+            var delivered = await inner.SendAsync(message, idempotencyKey, cancellationToken);
+            return Interlocked.Increment(ref calls) == 1
+                ? MessageDeliveryResult.Rejected("acknowledgement timed out")
+                : delivered;
+        }
+    }
+
     [Fact]
     public async Task Outbox_delivers_pending_messages_through_the_matching_sender()
     {
@@ -101,6 +120,39 @@ public sealed class CommunicationsTests(DatabaseFixture fixture)
         var outbound = new OutboundMessage(MessageChannel.Sms, "+15550003333", null, "Completed.");
         await senders[0].SendAsync(outbound, "work-3-done", default);
         Assert.Single(log.Sent);
+    }
+
+    [Fact]
+    public async Task A_lost_acknowledgement_retries_without_sending_the_message_twice()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.Comms(s.OrganizationA))
+        {
+            store.OutboxMessages.Add(OutboxMessage.Create(s.OrganizationA, Guid.NewGuid(), MessageChannel.Sms,
+                "+15550007777", null, "Your visit is confirmed.", "work-7-lost-ack", DateTimeOffset.UtcNow));
+            await store.SaveChangesAsync();
+        }
+
+        var log = new InMemorySentMessageLog();
+        IMessageSender[] senders = [new LostAcknowledgementSender(log)];
+
+        // Attempt 1: the provider delivered but the acknowledgement was lost, so the outbox records
+        // a failed attempt and leaves the message pending (RetryDelay is zero).
+        await using (var store = s.Comms(s.OrganizationA))
+            Assert.Equal(0, await Processor(store, senders).ProcessPendingAsync(default));
+        // Attempt 2: the retry carries the same idempotency key; the provider returns the original
+        // delivery and the outbox marks the message sent.
+        await using (var store = s.Comms(s.OrganizationA))
+            Assert.Equal(1, await Processor(store, senders).ProcessPendingAsync(default));
+
+        // Exactly one real delivery, despite two provider round-trips.
+        var delivered = Assert.Single(log.Sent);
+        Assert.Equal("+15550007777", delivered.RecipientAddress);
+
+        await using var verify = s.Comms(s.OrganizationA);
+        var message = await verify.OutboxMessages.SingleAsync();
+        Assert.Equal(OutboxStatus.Sent, message.Status);
+        Assert.Equal(2, message.AttemptCount);
     }
 
     [Fact]

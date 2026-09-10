@@ -4,11 +4,11 @@ Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md]
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
 implemented. **Milestone 3 is complete** — all 26 task issues closed and promoted to `main` in
 `b31b864` — see the M3 **Progress** note for what was carried forward rather than closed.
-**Milestone 4 is in flight** (7 of 12 tasks closed). **Milestone 6 was started ahead of milestone
-5**: 3 of its 13 tasks are closed, all API/domain only, while milestone 5 has not begun. Milestone
-7 has 1 of 6 closed. This document is the source for GitHub milestones and issues.
+**Milestone 4 is all but complete** — 11 of 12 tasks closed; only PF-4.06's atomicity half is
+carried forward (it waits on the M5 event wiring). **Milestones 5 and 6 are in flight in
+parallel.** This document is the source for GitHub milestones and issues.
 
-Counts above were read from GitHub on 2026-09-10; re-measure rather than propagating them.
+Counts here drift; re-measure with `gh issue list --state all` rather than propagating them.
 
 ## How this maps to GitHub
 
@@ -102,7 +102,8 @@ the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half 
 carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
 audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
 triggers it) is still deferred to the M5 event wiring. PF-4.10 landed the Tidewater demo seed and
-PF-4.08 the web assign &amp; notify flow and PF-4.09 the mobile pass; PF-4.11 (e2e) is the last M4 item.
+PF-4.08 the web assign &amp; notify flow, PF-4.09 the mobile pass, PF-4.11 the demo e2e and PF-4.12
+the outbox/rendering/consent tests. Every M4 task is done bar PF-4.06's atomicity half.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
@@ -116,8 +117,8 @@ PF-4.08 the web assign &amp; notify flow and PF-4.09 the mobile pass; PF-4.11 (e
 | PF-4.08 | ✅ Bulk "assign &amp; notify" flow in web: vendor + schedule window + resident message + confirm + success summary. `AssignNotifyFlow` runs `bulk/vendor` → `bulk/schedule` (fresh version re-read) → per-item `POST /api/work/{id}/message`, with a per-step outcome summary (queued / deduped / skipped-no-consent / failed). Seed gains 3 message templates. e2e: `assign-notify.spec.ts`. | web | L | PF-4.07, PF-4.03, PF-3.20 |
 | PF-4.09 | ✅ Mobile-responsive Work list and detail; large touch targets for field use. The card-layout table + sidebar collapse + 44px targets landed as the `m4-mobile-prereq` (`1d523b8`); the phone Sort control that replaces the hidden column headers landed separately. `e2e/responsive-work.spec.ts` + `e2e/mobile-sort.spec.ts`. | web | M | PF-3.19 |
 | PF-4.10 | ✅ Seed: Tidewater Residential Management — deterministic `TidewaterSeed` (fixed RNG): 3 properties, 10 buildings, ~80 spaces, ~70 current residents with mixed consent, 6 vendors, 5 employees, 6 categories, ~70 assets, 100 work items across every status/priority, 30 pest-control, a third of open items overdue. The isolation tenant keeps the minimal 12-item seed. | infra | M | PF-4.01, PF-3.22 |
-| PF-4.11 | e2e: bulk pest-control assignment + notify demo workflow in CI | tests | M | PF-4.08, PF-4.10 |
-| PF-4.12 | Tests: outbox idempotency (no duplicate sends on retry), template rendering, consent respected | tests | M | PF-4.05 |
+| PF-4.11 | ✅ e2e: bulk pest-control assignment + notify demo workflow in CI. `apps/web/e2e/pest-control-demo.spec.ts` — provisions its own pest-control queue, follows the demo-script §3a filter → select → assign &amp; notify → confirm sequence, asserts the summary + the vendor/schedule/message timeline. Runs in the CI `e2e` job. | tests | M | PF-4.08, PF-4.10 |
+| PF-4.12 | ✅ Tests: outbox idempotency (no duplicate sends on retry), template rendering, consent respected. Idempotency: `Enqueue_is_idempotent_by_key`, `Retried_dispatch_does_not_send_a_message_twice`, `Competing_dispatchers_claim_a_message_at_most_once`, and the new `A_lost_acknowledgement_retries_without_sending_the_message_twice`. Rendering: `TemplateRendererTests` + `Persisted_template_body_renders_against_supplied_values` + `A_scheduled_visit_renders_in_the_property_time_zone`. Consent: `Sending_is_refused_without_consent_a_resident_or_a_template`. | tests | M | PF-4.05 |
 
 ---
 
