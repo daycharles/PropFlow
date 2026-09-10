@@ -138,3 +138,12 @@ Known stale, verified 2026-09-09 — fix them if your change touches them:
   Identity, Operations, Communications.
 
 Counts in prose rot. Re-measure them; do not propagate them.
+`docs/backlog.md` is the task source. GitHub milestones `M3`–`M7`, epic issues `#1`–`#5`,
+task issues `#6`–`#73`. Reference the `PF-x.yy` id in branch names, commits, and PRs.
+
+Keep the tracker in step with git, and **assign the task issue to the human whose agent it is**
+so the board shows whose agent did what — on the macOS box that is `mday440` (Michael Day), not
+the `daycharles` account the PAT authenticates as. Assign + move to *In progress* when you
+branch, close with a PR-linking comment when it merges. Full procedure, ids, and the
+fine-grained-PAT fallback (Issues write, no Projects access) are in
+`.claude/rules/workflow.md` → *Tracker status mirrors git*.

@@ -83,7 +83,8 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 | Item | Source | Owner | Unblocks when |
 | --- | --- | --- | --- |
 | `main` branch protection not configured | Slack #agent-updates 2026-09-09; CLAUDE.md ("Protected: `verify` must be green") | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI. This already broke `main` once (commit `8c88b20`, recovered by PR #79). Blocked because the PAT lacks the Administration scope |
-| PAT scope gaps | Slack #agent-updates 2026-09-09 | unassigned | Token lacks `workflow` (blocks the CI fix above) and Administration (blocks branch protection). Needs a re-scoped token |
+| PAT scope gaps | Slack #agent-updates 2026-09-09 | unassigned | Fine-grained PAT lacks `workflow` (blocks the CI fix above), Administration (blocks branch protection), and **Projects** (an agent session on the macOS box can assign/close issues but cannot move Projects-v2 cards — `gh project …` → `Resource not accessible by personal access token`). Board relies on built-in *item closed → Done* / auto-add workflows in the meantime. Needs a re-scoped token |
+| `gh` on the macOS box was hand-installed to `~/.local/bin/gh` (2.63.2) | 2026-09-09 agent session | unassigned | Not from a package manager, not on `PATH` by default in every shell, older than the 2.97.0 the workflow doc assumed. Pin/upgrade deliberately or add to the documented toolchain setup |
 | `daycdev` pushes M3 directly to `main` rather than via PR into `develop` | CLAUDE.md branching rules; git log (`8c88b20` direct) | daycdev | Process drift; ties into branch protection above |
 
 ---
