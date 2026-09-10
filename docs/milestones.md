@@ -14,9 +14,11 @@ Add ASP.NET Identity, organization membership, capability mappings, cookie login
 
 Delivered: explicit administrative provisioning, revocable secure-cookie sessions, current-membership capability checks, PostgreSQL RLS with a restricted runtime role, centrally scoped EF reads/writes, real migrations, single-item assignment with atomic append-only history, OpenAPI, local setup instructions, dependency locks and database-backed CI. The Next.js UI, bulk assignment and full property/demo data are still milestone 3.
 
-## 3 — First usable vertical slice
+## 3 — First usable vertical slice (implemented)
 
 Create Next.js UI, property/space/vendor/work persistence, seed two organizations for isolation tests, and implement login → work list → multi-select → assign vendor → confirm → updated timeline. Provide search/filtering and a unified work detail workspace. Test rollback, unauthorized assignment, stale updates, and successful audit creation end to end.
+
+Delivered: the Organization→Portfolio→Property→Building→Space hierarchy, expanded `Vendor`/`Employee`/`WorkItem` entities with migrations and forced RLS, the generalized `TimelineEntry`, work create/update behind `Work.Create`/`Work.Update`, a filtered/sorted/paginated work list with the `xmin` version on every row, single and bulk vendor assignment plus employee assignment, user-scoped saved views, a demo seed covering every status and priority, the Next.js work list/detail/saved-views UI, and the `web` and `e2e` CI jobs. Still open against this milestone: the `TimelineEntry` generalization is only half applied (`From()` still writes the legacy vendor columns), Tailwind is installed but unwired, and the migration note below stands.
 
 > **Migration note:** the `M3Operations` migration adds required `WorkItems` columns (`PropertyId`, `CreatorId`) and their foreign keys in one step with a `Guid.Empty` default, and backfills `Vendors.IsActive` to `false`. It applies cleanly only to a database with no pre-M3 `WorkItems`/`Vendors` rows. Before the first real deployment the M3 migration set must be squashed or rewritten to be safe against a populated milestone-2 database (nullable column → backfill → set NOT NULL → add FK).
 

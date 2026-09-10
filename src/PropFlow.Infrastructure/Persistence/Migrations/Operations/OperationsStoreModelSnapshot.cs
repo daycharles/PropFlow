@@ -198,6 +198,10 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
@@ -213,6 +217,10 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<string>("Phone")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Trade")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("OrganizationId", "Id");
 
@@ -324,7 +332,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ActorId")
+                    b.Property<Guid?>("ActorId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Changes")
@@ -336,16 +344,31 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<Guid?>("PreviousVendorId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("RelatedObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RelatedObjectType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<Guid?>("VendorId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("WorkId")
+                    b.Property<Guid?>("WorkId")
                         .HasColumnType("uuid");
 
                     b.HasKey("OrganizationId", "Id");
@@ -353,6 +376,43 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "WorkId", "OccurredAt");
 
                     b.ToTable("Timeline", "operations");
+                });
+
+            modelBuilder.Entity("PropFlow.Domain.Work.SavedView", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Columns")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Filters")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "UserId", "IsDefault");
+
+                    b.HasIndex("OrganizationId", "UserId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("SavedViews", "operations");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Work.WorkCategory", b =>
@@ -399,6 +459,10 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("Cost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -409,14 +473,28 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<DateTimeOffset?>("DueDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("EmployeeId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("InternalNotes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ResidentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResidentVisibleNotes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<DateTimeOffset?>("ScheduledEnd")
                         .HasColumnType("timestamp with time zone");
@@ -530,8 +608,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasOne("PropFlow.Domain.Work.WorkItem", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "WorkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Work.WorkItem", b =>

@@ -24,6 +24,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
+    public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
@@ -37,6 +38,9 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.ToTable("WorkItems");
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.InternalNotes).HasMaxLength(4000);
+            entity.Property(x => x.ResidentVisibleNotes).HasMaxLength(4000);
+            entity.Property(x => x.Cost).HasPrecision(18, 2);
             entity.Property<uint>("Version").IsRowVersion();
             entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -52,6 +56,8 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(254);
             entity.Property(x => x.Phone).HasMaxLength(40);
+            entity.Property(x => x.Trade).HasMaxLength(100);
+            entity.Property(x => x.Category).HasMaxLength(100);
         });
         model.Entity<Employee>(entity => { entity.ToTable("Employees"); entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254); entity.Property(x => x.Phone).HasMaxLength(40); });
         model.Entity<Portfolio>(entity => { entity.ToTable("Portfolios"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); });
@@ -95,11 +101,24 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId });
         });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<SavedView>(entity =>
+        {
+            entity.ToTable("SavedViews");
+            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Filters).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.Columns).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.UserId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.UserId, x.IsDefault });
+        });
         model.Entity<TimelineEntry>(entity =>
         {
             entity.ToTable("Timeline");
             entity.Property(x => x.EventType).HasMaxLength(100).IsRequired();
             entity.Property(x => x.Changes).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.RelatedObjectType).HasMaxLength(100);
+            entity.Property(x => x.OldValue).HasMaxLength(4000);
+            entity.Property(x => x.NewValue).HasMaxLength(4000);
             entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.OccurredAt });
