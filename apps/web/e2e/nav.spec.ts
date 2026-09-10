@@ -16,7 +16,13 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
 
   const nav = page.getByRole("navigation", { name: "Primary navigation" });
   const links = nav.getByRole("link");
-  await expect(links).toHaveText(["Work", "Needs attention", "Categories", "Integrations"]);
+  await expect(links).toHaveText([
+    "Work",
+    "Needs attention",
+    "Categories",
+    "Automation",
+    "Integrations",
+  ]);
   await expect(nav.getByRole("link", { name: "Work" })).toHaveAttribute("href", "/");
   await expect(nav.getByRole("link", { name: "Needs attention" })).toHaveAttribute(
     "href",
@@ -25,6 +31,10 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
   await expect(nav.getByRole("link", { name: "Categories" })).toHaveAttribute(
     "href",
     "/settings/categories",
+  );
+  await expect(nav.getByRole("link", { name: "Automation" })).toHaveAttribute(
+    "href",
+    "/settings/automation",
   );
   await expect(nav.getByRole("link", { name: "Integrations" })).toHaveAttribute(
     "href",
