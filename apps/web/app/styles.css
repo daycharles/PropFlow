@@ -118,6 +118,7 @@ input,
 select,
 textarea,
 button {
+  min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -283,6 +284,8 @@ td small {
   gap: 6px;
 }
 .inline-check input {
+  min-height: 24px;
+  min-width: 24px;
   width: auto;
   padding: 0;
   accent-color: var(--terracotta);
@@ -437,6 +440,12 @@ td small {
   }
   nav {
     display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  nav a {
+    min-height: 44px;
+    white-space: nowrap;
   }
   .role {
     display: none;
@@ -451,5 +460,111 @@ td small {
   }
   .work-heading {
     align-items: flex-start;
+    flex-direction: column;
+  }
+  .work-heading > button {
+    width: 100%;
+  }
+  .saved-views,
+  .bulk-toolbar,
+  .modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .saved-views > *,
+  .bulk-toolbar > *,
+  .modal-actions > * {
+    width: 100%;
+  }
+  .saved-views .inline-check {
+    width: auto;
+  }
+  .saved-views input {
+    width: 100%;
+  }
+  .table-wrap {
+    overflow: visible;
+  }
+  table {
+    margin-top: 12px;
+  }
+  table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+    width: 100%;
+  }
+  tbody {
+    display: grid;
+    gap: 10px;
+  }
+  tbody tr {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  tbody td {
+    display: grid;
+    grid-template-columns: minmax(84px, 0.7fr) minmax(0, 1.3fr);
+    gap: 10px;
+    min-height: 40px;
+    padding: 7px 0;
+    border: 0;
+    align-items: center;
+  }
+  tbody td::before {
+    content: attr(data-label);
+    color: var(--secondary);
+    font:
+      800 12px/1.2 "Nunito",
+      sans-serif;
+  }
+  tbody td:first-child {
+    grid-template-columns: 1fr;
+    padding-bottom: 4px;
+  }
+  tbody td:first-child::before {
+    display: none;
+  }
+  tbody td:first-child input {
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+  tbody tr:has(td[colspan]) td {
+    display: block;
+  }
+  tbody tr:has(td[colspan]) td::before {
+    display: none;
+  }
+  .detail-heading {
+    flex-direction: column;
+  }
+  .detail-heading .badge {
+    align-self: flex-start;
+  }
+  .detail-grid .panel,
+  .timeline {
+    padding: 16px;
+  }
+  .modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+  .modal {
+    width: 100%;
+    max-height: min(86vh, 760px);
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
   }
 }

@@ -560,7 +560,7 @@ function WorkList({ session }: { session: Session }) {
             ) : (
               work.map((item) => (
                 <tr key={item.id}>
-                  <td>
+                  <td data-label="Select">
                     <input
                       aria-label={`Select ${item.title}`}
                       type="checkbox"
@@ -568,22 +568,22 @@ function WorkList({ session }: { session: Session }) {
                       onChange={() => toggle(item.id)}
                     />
                   </td>
-                  <td>
+                  <td data-label="Work">
                     <Link href={`/work/${item.id}`}>
                       <strong>{item.title}</strong>
                     </Link>
                     {item.propertyName && <small>{item.propertyName}</small>}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <span className={`badge ${statusClass(item.status)}`}>{item.status}</span>
                   </td>
-                  <td>
+                  <td data-label="Priority">
                     <span className={`priority ${priorityClass(item.priority, item.status)} `}>
                       {item.priority}
                     </span>
                   </td>
-                  <td>{item.vendorName ?? "Unassigned"}</td>
-                  <td>{formatDate(item.dueDate)}</td>
+                  <td data-label="Vendor">{item.vendorName ?? "Unassigned"}</td>
+                  <td data-label="Due">{formatDate(item.dueDate)}</td>
                 </tr>
               ))
             )}
