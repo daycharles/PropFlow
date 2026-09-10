@@ -64,6 +64,18 @@ buttons, a `.mobile-sort` `<select>` (hidden `≥ 700px`, explicit `aria-label="
 controls are `min-height: 44px`. `e2e/responsive-work.spec.ts` (no API) and
 `e2e/mobile-sort.spec.ts` (real app) guard it.
 
+## Primary navigation (PF-6.12)
+
+`lib/navigation.ts` is the single source for the header nav. `PRIMARY_NAV` lists each
+destination with the capability it needs; `AppShell` renders only the entries
+`visibleNav(session)` returns, and hides the search control entirely without `Work.Read`.
+
+**A nav entry ships only when its destination is a finished feature the signed-in user can
+use.** No "coming soon" links, no link a role cannot follow (it would only lead to the
+`ProtectedPage` "Access denied" panel), no entry for an unbuilt reports or integrations
+surface. Add the route to `PRIMARY_NAV` the day it lands. Detail pages (`/work/[id]`,
+`/assets/[id]`) are reached from their list and never appear here.
+
 ## AGENTS.md
 
 `apps/web/CLAUDE.md` is a single `@AGENTS.md` include, chaining to the generated
