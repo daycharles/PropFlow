@@ -116,11 +116,17 @@ rejected with 400. Title, priority, status and schedule changes each append thei
 entry. A stale `version` returns 409 and requires a reload.
 
 `GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
-`{ eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
-changes }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`, `EmployeeAssigned`,
-`StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`, …); `oldValue` /
-`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
-object with the same pair. There are no event-specific fields.
+`{ id, organizationId, workId, actorId, occurredAt, eventType, changes, relatedObjectType,
+relatedObjectId, oldValue, newValue }`. `eventType` is the event name (`WorkCreated`,
+`VendorAssigned`, `EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`,
+`WorkNote`, `WorkReopened`, …); `oldValue` / `newValue` are the human-readable before/after
+(a name, a status, an id); `changes` is a JSON *string* holding an object with the same pair.
+There are no event-specific fields — in particular no `vendorId` / `previousVendorId`; a vendor
+assignment reports the vendor through `newValue` and `changes` like every other event.
+
+`actorId` is null for a system-generated entry, and `workId` is null for one that references the
+work item only through `relatedObjectType: "WorkItem"` + `relatedObjectId`. The route returns
+both kinds: an entry matches on `workId` **or** on that related-object reference.
 
 ### Assignment
 

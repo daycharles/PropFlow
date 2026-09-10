@@ -66,7 +66,10 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
 
     public Task<WorkItem?> GetAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
     public Task<uint?> VersionAsync(Guid id, CancellationToken ct) => store.WorkItems.AsNoTracking().Where(x => x.Id == id).Select(x => (uint?)EF.Property<uint>(x, "Version")).SingleOrDefaultAsync(ct);
-    public async Task<IReadOnlyList<TimelineEntry>?> TimelineAsync(Guid id, CancellationToken ct) { if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null; return await store.Timeline.AsNoTracking().Where(x => x.WorkId == id).OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToListAsync(ct); }
+    // Entries may hang off a work item either directly (WorkId) or only by related-object
+    // reference — a communication record, for instance, carries no WorkId. The OR keeps both
+    // reachable without duplicating the rows that set both.
+    public async Task<IReadOnlyList<TimelineEntry>?> TimelineAsync(Guid id, CancellationToken ct) { if (!await store.WorkItems.AnyAsync(x => x.Id == id, ct)) return null; return await store.Timeline.AsNoTracking().Where(x => x.WorkId == id || (x.RelatedObjectType == "WorkItem" && x.RelatedObjectId == id)).OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).ToListAsync(ct); }
 
     public async Task<WorkItem> CreateAsync(CreateWorkCommand c, CancellationToken ct)
     {
