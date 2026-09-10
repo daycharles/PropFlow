@@ -52,6 +52,18 @@ only sees it when the request looks same-origin.
 rewrite carry it. Mutations need the `X-CSRF-TOKEN` header from `GET /api/auth/csrf`, re-fetched
 after login (`docs/local-development.md:56-63`).
 
+## Responsive layout (PF-4.09)
+
+Plain CSS, one breakpoint: `@media (max-width: 700px)` in `app/styles.css`. Below it the fixed
+sidebar `header` goes static with a horizontally-scrolling `nav`, the grids drop to one column,
+and the Work `<table>` becomes a stack of cards — `thead` is visually hidden (1px `clip`) and
+each `<td>` prints its column name from `td[data-label]::before`, so the list `<td>`s in
+`page.tsx` carry a `data-label`. Because the hidden `thead` also hides the `SortHeader` sort
+buttons, a `.mobile-sort` `<select>` (hidden `≥ 700px`, explicit `aria-label="Sort by"` so
+`getByLabel("Status")` in the specs doesn't match its option text) stands in. Interactive
+controls are `min-height: 44px`. `e2e/responsive-work.spec.ts` (no API) and
+`e2e/mobile-sort.spec.ts` (real app) guard it.
+
 ## AGENTS.md
 
 `apps/web/CLAUDE.md` is a single `@AGENTS.md` include, chaining to the generated

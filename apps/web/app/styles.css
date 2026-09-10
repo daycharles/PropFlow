@@ -261,6 +261,9 @@ td small {
 .filter-clear {
   white-space: nowrap;
 }
+.mobile-sort {
+  display: none; /* the sortable column headers cover this above 700px */
+}
 .bulk-toolbar {
   margin: 14px 0;
   padding: 12px;
@@ -474,6 +477,9 @@ td small {
   .detail-grid,
   .two-column {
     grid-template-columns: 1fr;
+  }
+  .mobile-sort {
+    display: grid;
   }
   .work-heading {
     align-items: flex-start;
