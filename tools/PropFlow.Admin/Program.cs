@@ -104,7 +104,7 @@ internal static class DemoSeeder
             "demo-admin@tidewater.example.test", password);
         var secondary = await EnsureOrganizationAsync(identity, users, "Isolation Test Management", SecondarySlug,
             "demo-admin@isolation.example.test", password);
-        await SeedOperationsAsync(adminConnection, primary.OrganizationId, primary.UserId, "Tidewater", "Harbor View", "101");
+        await PropFlow.Admin.TidewaterSeed.SeedAsync(adminConnection, primary.OrganizationId, primary.UserId);
         await SeedOperationsAsync(adminConnection, secondary.OrganizationId, secondary.UserId, "Isolation", "Private Place", "A1");
     }
 

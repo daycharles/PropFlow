@@ -101,8 +101,8 @@ Carry-forward and caveats the ✅ column cannot express: `add tag` is carved out
 the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half only — outbox rows
 carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
 audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
-triggers it) is still deferred to the M5 event wiring. PF-4.08–PF-4.11 are the remaining
-web/seed/e2e work.
+triggers it) is still deferred to the M5 event wiring. PF-4.10 landed the Tidewater demo seed and
+PF-4.08 the web assign &amp; notify flow and PF-4.09 the mobile pass; PF-4.11 (e2e) is the last M4 item.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
@@ -113,9 +113,9 @@ web/seed/e2e work.
 | PF-4.05 | ✅ Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
 | PF-4.06 | ✅ Communication records + delivery status surfaced as timeline entries with explicit visibility. Outbox messages carry `WorkId` + `ResidentVisible`; `GET /api/work/{id}/timeline` folds them in as `MessageQueued`/`Sent`/`Failed` (read-side merge, no cross-context write). The C11 "enqueue atomic with the work event" half is still deferred. | application | M | PF-4.05, PF-3.10 |
 | PF-4.07 | ✅ Extend bulk actions — **`add tag` carved out**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
-| PF-4.08 | Bulk "assign & notify" flow in web: vendor + schedule window + resident message + confirm + success summary | web | L | PF-4.07, PF-4.03, PF-3.20 |
-| PF-4.09 | Mobile-responsive Work list and detail; large touch targets for field use | web | M | PF-3.19 |
-| PF-4.10 | Seed: Tidewater Residential Management — 3 properties, ~10 buildings, ~80 spaces, ~70 residents, 6 vendors, 5 employees, ~100 work items, ~60 assets, ≥18 pest-control requests, mix of emergency/overdue/completed | infra | M | PF-4.01, PF-3.22 |
+| PF-4.08 | ✅ Bulk "assign &amp; notify" flow in web: vendor + schedule window + resident message + confirm + success summary. `AssignNotifyFlow` runs `bulk/vendor` → `bulk/schedule` (fresh version re-read) → per-item `POST /api/work/{id}/message`, with a per-step outcome summary (queued / deduped / skipped-no-consent / failed). Seed gains 3 message templates. e2e: `assign-notify.spec.ts`. | web | L | PF-4.07, PF-4.03, PF-3.20 |
+| PF-4.09 | ✅ Mobile-responsive Work list and detail; large touch targets for field use. The card-layout table + sidebar collapse + 44px targets landed as the `m4-mobile-prereq` (`1d523b8`); the phone Sort control that replaces the hidden column headers landed separately. `e2e/responsive-work.spec.ts` + `e2e/mobile-sort.spec.ts`. | web | M | PF-3.19 |
+| PF-4.10 | ✅ Seed: Tidewater Residential Management — deterministic `TidewaterSeed` (fixed RNG): 3 properties, 10 buildings, ~80 spaces, ~70 current residents with mixed consent, 6 vendors, 5 employees, 6 categories, ~70 assets, 100 work items across every status/priority, 30 pest-control, a third of open items overdue. The isolation tenant keeps the minimal 12-item seed. | infra | M | PF-4.01, PF-3.22 |
 | PF-4.11 | e2e: bulk pest-control assignment + notify demo workflow in CI | tests | M | PF-4.08, PF-4.10 |
 | PF-4.12 | Tests: outbox idempotency (no duplicate sends on retry), template rendering, consent respected | tests | M | PF-4.05 |
 

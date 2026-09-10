@@ -16,6 +16,7 @@ import {
 } from "../lib/api";
 import { hasCapability } from "../lib/capabilities";
 import { AppShell } from "./components/app-shell";
+import { AssignNotifyFlow } from "./components/assign-notify";
 
 const statuses = [
   "Draft",
@@ -124,6 +125,7 @@ function WorkList({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [assignNotify, setAssignNotify] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [bulkAction, setBulkAction] = useState<"vendor" | "employee" | "message">("vendor");
@@ -403,6 +405,26 @@ function WorkList({ session }: { session: Session }) {
             ))}
           </select>
         </label>
+        <label className="mobile-sort">
+          Sort by
+          <select
+            aria-label="Sort by"
+            value={`${query.sort ?? "title"}:${query.descending ? "desc" : "asc"}`}
+            onChange={(event) => {
+              const [sort, direction] = event.target.value.split(":");
+              defaultViewApplied.current = true;
+              setQuery((current) => ({ ...current, sort, descending: direction === "desc" }));
+            }}
+          >
+            <option value="title:asc">Title (A–Z)</option>
+            <option value="title:desc">Title (Z–A)</option>
+            <option value="status:asc">Status</option>
+            <option value="priority:desc">Priority (high first)</option>
+            <option value="priority:asc">Priority (low first)</option>
+            <option value="dueDate:asc">Due date (soonest)</option>
+            <option value="dueDate:desc">Due date (latest)</option>
+          </select>
+        </label>
         <button className="secondary filter-clear" onClick={clearFilters}>
           Clear filters
         </button>
@@ -469,6 +491,13 @@ function WorkList({ session }: { session: Session }) {
         <div className="bulk-toolbar" role="status">
           <strong>{selected.size} selected</strong>
           <button
+            onClick={() => setAssignNotify(true)}
+            disabled={!hasCapability(session, "Work.AssignVendor")}
+          >
+            Assign &amp; notify
+          </button>
+          <button
+            className="secondary"
             onClick={() => {
               setBulkAction("vendor");
               setVendorId("");
@@ -476,7 +505,7 @@ function WorkList({ session }: { session: Session }) {
             }}
             disabled={!hasCapability(session, "Work.AssignVendor")}
           >
-            Assign vendor
+            Assign vendor only
           </button>
           <button
             onClick={() => {
@@ -590,6 +619,20 @@ function WorkList({ session }: { session: Session }) {
           </tbody>
         </table>
       </div>
+      {assignNotify && (
+        <AssignNotifyFlow
+          session={session}
+          items={visibleSelected}
+          vendors={vendors}
+          onClose={(reload) => {
+            setAssignNotify(false);
+            if (reload) {
+              setSelected(new Set());
+              void loadWork();
+            }
+          }}
+        />
+      )}
       {flow && (
         <div className="modal-backdrop" role="presentation">
           <section

@@ -106,14 +106,19 @@ public static class CommunicationEndpoints
                 return Results.Problem(statusCode: 409, title: $"The resident has not consented to {channel} contact, or has no {channel} address");
 
             var property = await operations.Properties.AsNoTracking().SingleOrDefaultAsync(x => x.Id == work.PropertyId, ct);
+            // Schedule times are stored UTC; a resident reads them in the property's local zone.
+            // An unrecognised IANA id (or no property) falls back to the stored offset.
+            var zone = ResolveZone(property?.TimeZoneId);
+            string LocalTime(DateTimeOffset? instant) => instant is not { } value ? ""
+                : (zone is null ? value : TimeZoneInfo.ConvertTime(value, zone)).ToString("f");
             var values = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["resident.name"] = resident.FullName,
                 ["work.title"] = work.Title,
                 ["work.status"] = work.Status.ToString(),
                 ["property.name"] = property?.Name ?? "",
-                ["schedule.start"] = work.ScheduledStart?.ToString("f") ?? "",
-                ["schedule.end"] = work.ScheduledEnd?.ToString("f") ?? "",
+                ["schedule.start"] = LocalTime(work.ScheduledStart),
+                ["schedule.end"] = LocalTime(work.ScheduledEnd),
             };
 
             string body;
@@ -199,6 +204,16 @@ public static class CommunicationEndpoints
             var changed = queued.Count(x => x);
             return Results.Accepted("/api/work", new { changed, unchanged = queued.Count - changed, total = queued.Count });
         }).RequireAuthorization(Capabilities.SendResidentMessage);
+    }
+
+    // .NET 6+ resolves IANA ids on every platform; a stored id we cannot map is treated as
+    // "render in the original offset" rather than failing the send.
+    private static TimeZoneInfo? ResolveZone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId)) return null;
+        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return null; }
+        catch (InvalidTimeZoneException) { return null; }
     }
 }
 

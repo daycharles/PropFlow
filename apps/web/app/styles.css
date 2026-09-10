@@ -261,6 +261,9 @@ td small {
 .filter-clear {
   white-space: nowrap;
 }
+.mobile-sort {
+  display: none; /* the sortable column headers cover this above 700px */
+}
 .bulk-toolbar {
   margin: 14px 0;
   padding: 12px;
@@ -425,6 +428,23 @@ td small {
   justify-content: flex-end;
   margin-top: 22px;
 }
+.flow-group {
+  margin: 14px 0 0;
+  padding: 12px 14px 4px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+}
+.flow-group legend {
+  padding: 0 6px;
+  color: #526077;
+  font-weight: 600;
+}
+.flow-summary {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
 @media (max-width: 700px) {
   main {
     padding: 18px;
@@ -457,6 +477,9 @@ td small {
   .detail-grid,
   .two-column {
     grid-template-columns: 1fr;
+  }
+  .mobile-sort {
+    display: grid;
   }
   .work-heading {
     align-items: flex-start;
@@ -537,9 +560,9 @@ td small {
     display: none;
   }
   tbody td:first-child input {
-    width: 28px;
-    min-width: 28px;
-    min-height: 28px;
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
   }
   tbody tr:has(td[colspan]) td {
     display: block;

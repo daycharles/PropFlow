@@ -96,6 +96,8 @@ export type MessageTemplate = {
   name: string;
   channel: "Sms" | "Email";
   subject?: string | null;
+  body: string;
+  isActive: boolean;
 };
 export type Category = { id: string; name: string; isArchived: boolean; sortOrder: number };
 export type SavedView = {
@@ -141,6 +143,15 @@ async function csrf() {
 async function mutation<T>(path: string, init: RequestInit = {}) {
   const token = csrfToken ?? (await csrf());
   return request<T>(path, { ...init, headers: { "X-CSRF-TOKEN": token, ...init.headers } });
+}
+// The bulk work routes take `items: [{ workId, version }]`. A missing token becomes version 0,
+// which the server treats as a stale check and answers 409 — so the caller must pass a fresh
+// token per id (re-read after any earlier mutation in the same flow).
+function bulkItems(input: { workIds: string[]; concurrencyTokens?: Record<string, string> }) {
+  return input.workIds.map((workId) => ({
+    workId,
+    version: Number(input.concurrencyTokens?.[workId] ?? 0),
+  }));
 }
 function queryString(query: WorkListQuery) {
   const params = new URLSearchParams();
@@ -225,38 +236,54 @@ export const api = {
       workIds: string[];
       vendorId: string;
       concurrencyTokens?: Record<string, string>;
-    }) => {
-      const items = input.workIds.map((workId) => ({
-        workId,
-        version: Number(input.concurrencyTokens?.[workId] ?? 0),
-      }));
-      return mutation<BulkAssignmentResult>("/api/work/bulk/vendor", {
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/vendor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vendorId: input.vendorId, items }),
-      });
-    },
+        body: JSON.stringify({ vendorId: input.vendorId, items: bulkItems(input) }),
+      }),
     bulkAssignEmployee: (input: {
       workIds: string[];
       employeeId: string;
       concurrencyTokens?: Record<string, string>;
-    }) => {
-      const items = input.workIds.map((workId) => ({
-        workId,
-        version: Number(input.concurrencyTokens?.[workId] ?? 0),
-      }));
-      return mutation<BulkAssignmentResult>("/api/work/bulk/employee", {
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/employee", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: input.employeeId, items }),
-      });
-    },
+        body: JSON.stringify({ employeeId: input.employeeId, items: bulkItems(input) }),
+      }),
     bulkSendResidentMessage: (input: { workIds: string[]; templateId: string }) =>
       mutation<BulkAssignmentResult>("/api/work/bulk/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       }),
+    bulkSchedule: (input: {
+      workIds: string[];
+      scheduledStart: string;
+      scheduledEnd?: string | null;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduledStart: input.scheduledStart,
+          scheduledEnd: input.scheduledEnd ?? null,
+          items: bulkItems(input),
+        }),
+      }),
+    // POST /api/work/{id}/message — queue one resident message for this work item's resident.
+    // 202 { queued } on success; the caller classifies 4xx (no resident / no consent / etc.).
+    sendMessage: (id: string, templateId: string) =>
+      mutation<{ queued: boolean }>(`/api/work/${id}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId }),
+      }),
+  },
+  communication: {
+    templates: { list: () => request<MessageTemplate[]>("/api/communication/templates/") },
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },

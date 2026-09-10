@@ -51,17 +51,31 @@ Migration order is Identity, then Operations, then Communications, then Integrat
 
 ## Demo data
 
-After applying the M3 migrations, `seed-demo` creates (or preserves) two organizations:
-Tidewater Residential Management and an isolation tenant. It adds a portfolio/property/building/space,
-vendor, employee, two categories, and 12 work items per organization covering **all eight**
-`WorkStatus` values (Draft, New, Assigned, Scheduled, InProgress, OnHold, Completed, Cancelled)
-and **all four** `WorkPriority` values (Low, Normal, High, Critical), with a spread of overdue
-and upcoming due dates. Four of the twelve stay in `New`, so a "filter to New, select all,
-assign vendor" demo always has work to act on. The `Draft` row is the one that is never
-published — `WorkItem.ChangeStatus` refuses a move back to `Draft`. The command is safe to
-rerun: it never resets accounts and leaves an organization with existing work untouched. Sign in as `demo-admin@tidewater.example.test` using `Demo__Password`.
-The second tenant uses `demo-admin@isolation.example.test` with the same password; use it only to
-exercise tenant-isolation checks. These credentials are local demo data, not production defaults.
+After applying the migrations, `seed-demo` creates (or preserves) two organizations:
+Tidewater Residential Management and an isolation tenant.
+
+**Tidewater Residential Management** (`demo-admin@tidewater.example.test`, `Demo__Password`) gets
+the full PF-4.10 dataset — deterministic, generated from a fixed RNG seed so every run is
+identical: one portfolio, **3 properties** (Harbor View Apartments and Maple Court in New York,
+Riverside Commons in Chicago), **10 buildings**, **~80 spaces**, **~70 current residents** with
+mixed SMS/email consent (plus a handful of ended tenancies so occupancy history is not
+all-current), **6 vendors**, **5 employees**, **6 work categories**, **~70 assets** (rooftop
+HVAC per building, water heaters and appliances per unit, roof/panel/generator per property with
+age-based condition and replacement cost), and **100 work items**. The work items span **all
+eight** `WorkStatus` values (Draft, New, Assigned, Scheduled, InProgress, OnHold, Completed,
+Cancelled) and **all four** `WorkPriority` values (Low, Normal, High, Critical), weighted toward
+the active middle of the pipeline, with 30 pest-control requests and a third of the open items
+overdue. Sixteen stay in `New`, so a "filter to New, select all, assign vendor" demo always has
+work to act on. `Draft` rows are never published — `WorkItem.ChangeStatus` refuses a move back
+to `Draft`. It also seeds **3 active message templates** (`Visit scheduled` SMS + email,
+`Work completed` SMS) so the web **Assign &amp; notify** flow has something to send.
+
+**The isolation tenant** (`demo-admin@isolation.example.test`, same password) keeps a minimal
+seed — one portfolio/property/building/space, one vendor, one employee, two categories, and 12
+work items covering every status and priority. Use it only to exercise tenant-isolation checks.
+
+The command is safe to rerun: it never resets accounts and leaves an organization with existing
+work untouched. These credentials are local demo data, not production defaults.
 
 Local connection format: `Host=localhost;Database=propflow;Username=propflow_app;Password=<private runtime password>`. Use TLS with certificate validation for non-local PostgreSQL and HTTPS for API traffic. For multiple API instances, configure a shared encrypted ASP.NET Data Protection key store; keys and cookies must not be baked into images. The current default is single-host local key storage.
 
