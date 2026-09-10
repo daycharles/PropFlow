@@ -16,6 +16,9 @@ public sealed class WorkItem : TenantEntity
     public Guid PropertyId { get; private set; }
     public Guid? BuildingId { get; private set; }
     public Guid? SpaceId { get; private set; }
+    // The piece of equipment this work is about, if any. Drives the asset's maintenance history
+    // and repeat-repair detection (M6). Must live at the same property as the work item.
+    public Guid? AssetId { get; private set; }
     public Guid? CategoryId { get; private set; }
     public Guid? VendorId { get; private set; }
     public Guid? EmployeeId { get; private set; }
@@ -38,6 +41,9 @@ public sealed class WorkItem : TenantEntity
         SpaceId = spaceId;
         ResidentId = residentId;
     }
+    // Null clears the link. Cross-property consistency (the asset must belong to PropertyId) is
+    // enforced in the application layer, which has the asset to check against.
+    public void SetAsset(Guid? assetId) => AssetId = assetId;
     public void SetDueDate(DateTimeOffset? dueDate) => DueDate = dueDate?.ToUniversalTime();
     public void SetCost(decimal? cost)
     {

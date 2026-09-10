@@ -17,6 +17,7 @@ export type WorkItem = {
   propertyName?: string | null;
   buildingId?: string | null;
   spaceId?: string | null;
+  assetId?: string | null;
   vendorId?: string | null;
   vendorName?: string | null;
   employeeId?: string | null;
@@ -55,6 +56,7 @@ export type UpdateWorkInput = {
   buildingId?: string | null;
   spaceId?: string | null;
   residentId?: string | null;
+  assetId?: string | null;
   dueDate?: string | null;
   cost?: number | null;
   internalNotes?: string | null;
@@ -78,12 +80,140 @@ export type Employee = {
   phone?: string | null;
   isActive: boolean;
 };
+export type Asset = {
+  id: string;
+  propertyId: string;
+  spaceId?: string | null;
+  kind: string;
+  name: string;
+  manufacturer?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  installedOn?: string | null;
+  warrantyExpiresOn?: string | null;
+  expectedServiceLifeYears?: number | null;
+  condition: string;
+  replacementCostEstimate?: number | null;
+  notes?: string | null;
+};
+export type AssetHistoryItem = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  categoryName?: string | null;
+  vendorName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  cost?: number | null;
+};
+export type AssetHistory = {
+  asset: Asset;
+  ageInYears?: number | null;
+  underWarranty: boolean;
+  workOrderCount: number;
+  totalCost: number;
+  history: AssetHistoryItem[];
+};
+export type RepeatRepairAssessment = {
+  repairThreshold: number;
+  windowDays: number;
+  matchByCategory: boolean;
+  repairCount: number;
+  since: string;
+  totalCostInWindow: number;
+  ageInYears?: number | null;
+  isRepeatRepair: boolean;
+};
+export type AttentionSeverity = "Critical" | "Warning" | "Informational";
+export type AttentionReason =
+  | "UnassignedEmergency"
+  | "SlaBreach"
+  | "Overdue"
+  | "WaitingOnVendor"
+  | "WaitingOnResident"
+  | "RepeatRepair"
+  | "UnitTurnAtRisk";
+export type AttentionItem = {
+  workId: string;
+  title: string;
+  propertyId: string;
+  propertyName?: string | null;
+  status: string;
+  priority: string;
+  dueDate?: string | null;
+  reason: AttentionReason;
+  severity: AttentionSeverity;
+  detail: string;
+};
+export type AttentionQueue = {
+  items: AttentionItem[];
+  criticalCount: number;
+  warningCount: number;
+  informationalCount: number;
+};
+export type IntegrationSource = { sourceSystem: string; displayName: string };
+export type IntegrationHealth = {
+  id: string;
+  sourceSystem: string;
+  displayName: string;
+  isEnabled: boolean;
+  lastAttemptedAt?: string | null;
+  lastSucceededAt?: string | null;
+  consecutiveFailures: number;
+  lastError?: string | null;
+  trackedRecords: number;
+  failedRecords: number;
+};
+export type IntegrationSyncState = "Pending" | "Synced" | "Failed";
+export type IntegrationRecord = {
+  id: string;
+  connectionId: string;
+  kind: string;
+  externalId: string;
+  syncState: IntegrationSyncState;
+  lastSeenAt?: string | null;
+  lastError?: string | null;
+  contentHash?: string | null;
+};
+export type IntegrationRecordsPage = {
+  items: IntegrationRecord[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+};
+export type SyncReport = {
+  outcome: string;
+  seen: number;
+  added: number;
+  updated: number;
+  failed: number;
+  error?: string | null;
+};
+export type SearchHitType =
+  | "Property"
+  | "Building"
+  | "Space"
+  | "Resident"
+  | "Vendor"
+  | "Employee"
+  | "Category"
+  | "Asset"
+  | "Work";
+export type SearchHit = {
+  type: SearchHitType;
+  id: string;
+  label: string;
+  sublabel?: string | null;
+  score: number;
+};
 export type WorkListQuery = {
   search?: string;
   status?: string;
   priority?: string;
   categoryId?: string;
   propertyId?: string;
+  spaceId?: string;
   sort?: string;
   descending?: boolean;
   page?: number;
@@ -297,6 +427,40 @@ export const api = {
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },
+  assets: {
+    list: (propertyId?: string) =>
+      request<Asset[]>(`/api/assets/${propertyId ? `?propertyId=${propertyId}` : ""}`),
+    get: (id: string) => request<Asset>(`/api/assets/${id}`),
+    history: (id: string) => request<AssetHistory>(`/api/assets/${id}/history`),
+    repeatRepair: (id: string, categoryId?: string | null) =>
+      request<RepeatRepairAssessment>(
+        `/api/assets/${id}/repeat-repair${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`,
+      ),
+  },
+  attention: {
+    get: () => request<AttentionQueue>("/api/attention"),
+  },
+  integrations: {
+    sources: () => request<IntegrationSource[]>("/api/integrations/sources"),
+    list: () => request<IntegrationHealth[]>("/api/integrations"),
+    records: (id: string, page = 1, pageSize = 100) =>
+      request<IntegrationRecordsPage>(
+        `/api/integrations/${id}/records?page=${page}&pageSize=${pageSize}`,
+      ),
+    create: (input: { sourceSystem: string; displayName: string }) =>
+      mutation<{ id: string }>("/api/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    sync: (id: string) => mutation<SyncReport>(`/api/integrations/${id}/sync`, { method: "POST" }),
+    setEnabled: (id: string, enabled: boolean) =>
+      mutation<void>(`/api/integrations/${id}/${enabled ? "enable" : "disable"}`, {
+        method: "POST",
+      }),
+  },
+  search: (term: string, limit = 12) =>
+    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(term)}&limit=${limit}`),
   messageTemplates: {
     available: () => request<MessageTemplate[]>("/api/communication/templates/available"),
   },

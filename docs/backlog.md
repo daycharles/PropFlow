@@ -155,18 +155,18 @@ entities, and the integration abstraction exists (mocked).
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
 | PF-6.01 | ✅ `Asset` domain: type, manufacturer, model, serial, install date, warranty expiration, expected service life, condition, replacement cost estimate, notes; migrations + RLS; read/write API. Photos deferred to PF-7.01 (attachments). | domain | L | PF-3.06 |
-| PF-6.02 | Link work items to an optional asset; expose on work create/update and detail workspace | api | M | PF-6.01, PF-3.13 |
-| PF-6.03 | Asset detail page with complete maintenance history (all linked work + costs) | web | M | PF-6.02 |
-| PF-6.04 | Configurable repeat-repair detection (default: 3 repairs on an asset within 120 days; category-similarity option) | application | M | PF-6.02 |
-| PF-6.05 | "Repeat Repair Warning" surface: repair count, total repair cost, asset age; shown on work create and asset page | web | M | PF-6.04 |
-| PF-6.06 | Attention queue backend: rules for unassigned emergencies, overdue work, SLA breach, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk | application | L | PF-6.04 |
-| PF-6.07 | "Needs Your Attention" home screen: Critical / Warning / Informational cards, each click-through to a filtered work view | web | L | PF-6.06 |
+| PF-6.02 | ✅ Link work items to an optional asset; exposed on `POST`/`PUT /api/work` (`assetId`, `null` clears) and the web detail workspace's Details panel. The asset must be at the work's own property; a foreign/mismatched id is a 400. A change writes an `AssetLinked` timeline entry; `WorkItems` gains a `(OrganizationId, AssetId)` index and composite FK to `Assets`. | api | M | PF-6.01, PF-3.13 |
+| PF-6.03 | ✅ Asset detail page (`/assets/[id]`) with complete maintenance history. `GET /api/assets/{id}/history` returns the asset + every linked work item newest-first + roll-ups (`workOrderCount`, `totalCost`, `ageInYears`, `underWarranty`). The page shows the asset record, the roll-ups, and a history table linking each work item; reached from the work detail's "View asset maintenance history →" link. | web | M | PF-6.02 |
+| PF-6.04 | ✅ Configurable repeat-repair detection. Per-org `RepeatRepairPolicy` (threshold default 3, window default 120 days, category-similarity option), forced RLS, upserted via `GET`/`PUT /api/assets/repeat-repair-policy`. `IRepeatRepairDetector` counts published work linked to an asset within the window (narrowed to a matching category when the option is on); `GET /api/assets/{id}/repeat-repair` returns count, total cost in window and the `isRepeatRepair` flag. | application | M | PF-6.02 |
+| PF-6.05 | ✅ "Repeat Repair Warning" surface. `RepeatRepairWarning` component calls `GET /api/assets/{id}/repeat-repair` and, only when `isRepeatRepair`, shows repair count, total repair cost in the window and asset age. Full-width banner on the asset detail page; compact inline variant beside the work detail's asset picker (passes the work's `categoryId`). `ageInYears` added to the assessment response. | web | M | PF-6.04 |
+| PF-6.06 | ✅ Attention queue backend. `AttentionRules` (pure domain) evaluates seven rules — unassigned emergency, first-response SLA breach, overdue, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk — over each open work item. `IAttentionQueue` / `EfAttentionQueue` builds the tenant-scoped queue in three queries; `GET /api/attention` returns the findings (most urgent first) with per-severity distinct-work counts for PF-6.07's cards. Thresholds fixed in `AttentionThresholds` (not yet org-configurable). | application | L | PF-6.04 |
+| PF-6.07 | ✅ "Needs your attention" screen (`/attention`, in primary nav). Reads `GET /api/attention`; three severity cards (Critical / Warning / Informational) show the distinct-work counts and each toggles a filter on the item list below. Every item shows its reason, detail, property, priority, status and due date, and links to `/work/{id}`. | web | L | PF-6.06 |
 | PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
-| PF-6.09 | Global search UI (keyboard-first) in web | web | M | PF-6.08 |
+| PF-6.09 | ✅ Keyboard-first global search. `CommandSearch` palette mounted in the app shell — opens on `Cmd`/`Ctrl+K` anywhere (or `/` outside a field, or the header "Search" button), debounced calls to `GET /api/search`, `↑`/`↓` to move, `Enter` to open, `Esc` to close. Work → `/work/{id}`, Asset → `/assets/{id}`, Property/Space/Category → the work list filtered by that id (the list now seeds its query from the URL), other types → a work-list text search. | web | M | PF-6.08 |
 | PF-6.10 | ✅ Integration adapter abstraction: `IIntegrationAdapter` + canonical Property/Space/Occupancy/WorkOrder/Asset records, `MockIntegrationAdapter`, `integrations` schema (Connections + RecordLinks) with forced RLS, external-id / source-system / last-sync / per-record sync-state tracking, `/api/integrations` (behind `Integrations.Manage`). Reconciling external records into the domain tables is deferred — see `docs/followups.md`. | application | L | PF-6.01 |
-| PF-6.11 | Integration Health screen foundation: connected system, status, last successful sync, failure count, unresolved conflicts | web | M | PF-6.10 |
-| PF-6.12 | Keep unusable reports/integrations out of main navigation until functional | web | S | PF-6.11 |
-| PF-6.13 | e2e: repeat HVAC repair demo workflow in CI | tests | M | PF-6.05 |
+| PF-6.11 | ✅ Integration Health screen (`/integrations`, nav-gated by `Integrations.Manage`). One card per connection over `GET /api/integrations`: status (Healthy / Failing / Disabled / Never synced), last successful sync, last attempt, consecutive failures, tracked records, unresolved (failed) count, last error. Actions: **Sync now** (`POST /{id}/sync`), enable/disable, and an expandable record list (`GET /{id}/records`) with per-record sync state. A "Connect a system" form covers the source systems not yet connected. | web | M | PF-6.10 |
+| PF-6.12 | ✅ Navigation curation. `apps/web/lib/navigation.ts` is the single source for the header nav — each entry declares the capability its destination needs; `AppShell` renders only what `visibleNav(session)` returns and drops the search control without `Work.Read`. So Work / Needs attention hide for a role with no `Work.Read`, and no "coming soon" or role-inaccessible link ships. Rule documented in `.claude/rules/web.md`. | web | S | PF-6.11 |
+| PF-6.13 | ✅ e2e: repeat HVAC repair walkthrough (`apps/web/e2e/repeat-hvac-demo.spec.ts`). Creates an HVAC asset and three costed repairs inside the detection window, then asserts the asset page's repeat-repair warning (count 3) and full maintenance history, the compact warning on a work order, and the `RepeatRepair` row on `/attention` linking back to the work. | tests | M | PF-6.05 |
 
 ---
 
@@ -189,10 +189,13 @@ earlier milestones when a feature forces the issue.
 
 ## Open questions / decisions needed
 
-- **SLA model** (referenced by PF-6.06): is SLA a per-priority duration, a per-category policy,
-  or configurable per organization? Needed before the attention queue.
-- **Unit-turn workflow** (PF-6.06 "unit turn at risk"): is a unit turn a work type, a distinct
-  entity with checklist steps, or out of scope until a later milestone?
+- **SLA model** — *resolved in PF-6.06*: the attention queue uses a per-priority first-response
+  budget measured from creation while the work is still `New` (Critical 4h, High 24h, Normal 72h,
+  Low 120h), fixed in `AttentionThresholds`. Per-organization / per-category tuning is a future
+  task if the demand appears.
+- **Unit-turn workflow** — *resolved in PF-6.06*: a unit turn is the existing
+  `WorkType.UnitTurnTask`, not a distinct entity. "At risk" = a `UnitTurnTask` still
+  `New`/`Assigned` and due within 5 days. Checklist-style turn steps remain out of scope.
 - **Saved views scope** (PF-3.17): user-private only, or shareable/organization-default views?
 - **Portfolio depth** (PF-3.05): single portfolio layer, or arbitrary nesting for enterprise
   hierarchies?

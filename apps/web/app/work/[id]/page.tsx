@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { RepeatRepairWarning } from "../../components/repeat-repair-warning";
 import {
   api,
   ApiError,
+  type Asset,
   type Employee,
   type Session,
   type TimelineEntry,
@@ -64,6 +66,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -84,6 +87,8 @@ function Detail({ session, id }: { session: Session; id: string }) {
       setTimeline(entries);
       setVendors(vendorList.filter((vendor) => vendor.isActive));
       setEmployees(employeeList.filter((employee) => employee.isActive));
+      // The API rejects an asset at a different property, so only offer this property's assets.
+      setAssets(item.propertyId ? await api.assets.list(item.propertyId) : []);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Unable to load this work item.");
     }
@@ -110,6 +115,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
         buildingId: work.buildingId,
         spaceId: work.spaceId,
         residentId: work.residentId,
+        assetId: work.assetId,
         dueDate: work.dueDate,
         cost: work.cost,
         internalNotes: work.internalNotes,
@@ -271,6 +277,31 @@ function Detail({ session, id }: { session: Session; id: string }) {
               }
             />
           </label>
+          <label>
+            Asset
+            <select
+              value={work.assetId ?? ""}
+              onChange={(event) => change("assetId", event.target.value || null)}
+            >
+              <option value="">No asset</option>
+              {assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}
+                </option>
+              ))}
+              {work.assetId && !assets.some((asset) => asset.id === work.assetId) ? (
+                <option value={work.assetId}>Linked asset (not at this property)</option>
+              ) : null}
+            </select>
+          </label>
+          {work.assetId ? (
+            <>
+              <RepeatRepairWarning assetId={work.assetId} categoryId={work.categoryId} compact />
+              <Link className="hint" href={`/assets/${work.assetId}`}>
+                View asset maintenance history →
+              </Link>
+            </>
+          ) : null}
           <button disabled={saving || !hasCapability(session, "Work.Update")}>
             {saving ? "Saving…" : "Save details"}
           </button>

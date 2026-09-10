@@ -12,7 +12,7 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /health/live | 200 process liveness JSON |
 | GET | /health/ready | 200 when database security/schema checks pass, otherwise 503 |
 | GET | /api/auth/csrf | Public; returns `{ "token": "..." }` and secure antiforgery cookie |
-| POST | /api/auth/login | CSRF required; organizationSlug/email/password; 204 success, 400 invalid input/CSRF, 401 rejected credentials or membership, 429 rate limit |
+| POST | /api/auth/login | CSRF required; organizationSlug/email/password; 204 success, 400 invalid input/CSRF, 401 rejected credentials or membership, 429 rate limit (10/min/IP; raised to 200/min under the Development posture so the e2e suite is not throttled — Testing and Production keep 10) |
 | POST | /api/auth/logout | Auth + CSRF; 204; revokes all sessions for the current user |
 | GET | /api/session | Auth; userId, organizationId, role and capabilities |
 | GET | /api/work/ | Work.Read; filtered, sorted, paginated tenant-scoped work list (see below) |
@@ -103,24 +103,28 @@ objects — not the entity graph — each carrying its own concurrency token:
 
 `POST /api/work/` takes `title` and `propertyId` (both required) plus the optional
 `description`, `workType`, `categoryId`, `priority`, `buildingId`, `spaceId`, `residentId`,
-`dueDate`, `cost`, `internalNotes` and `residentVisibleNotes`. The item is created and published
-in one step, so it comes back in `New` status with a `createdAt`, and a `WorkCreated` timeline
-entry is written in the same transaction. An empty or unknown/foreign `propertyId` returns 400
-and 404 respectively; a domain-invariant violation (title length, negative cost) returns 400.
+`assetId`, `dueDate`, `cost`, `internalNotes` and `residentVisibleNotes`. The item is created
+and published in one step, so it comes back in `New` status with a `createdAt`, and a
+`WorkCreated` timeline entry is written in the same transaction. An empty or unknown/foreign
+`propertyId` returns 400 and 404 respectively; a domain-invariant violation (title length,
+negative cost) returns 400. An unknown/foreign `buildingId` / `spaceId` / `categoryId` /
+`residentId` / `assetId` returns 400, as does an `assetId` for an asset at a different property.
 
-`PUT /api/work/{id}` replaces the editable fields and requires the `version` read from a
-previous response. It also accepts an optional `status` and `scheduledStart`/`scheduledEnd`;
-a status change goes through the domain state machine, so moving out of `Completed`/`Cancelled`
-or back to `Draft` is rejected with 400, and scheduling without a vendor or employee is
-rejected with 400. Title, priority, status and schedule changes each append their own timeline
-entry. A stale `version` returns 409 and requires a reload.
+`PUT /api/work/{id}` replaces the editable fields (including `assetId` — `null` clears the link)
+and requires the `version` read from a previous response. It also accepts an optional `status`
+and `scheduledStart`/`scheduledEnd`; a status change goes through the domain state machine, so
+moving out of `Completed`/`Cancelled` or back to `Draft` is rejected with 400, and scheduling
+without a vendor or employee is rejected with 400. Title, priority, status, schedule and asset
+changes each append their own timeline entry (`WorkUpdated`, `PriorityChanged`, `StatusChanged`,
+`Scheduled`, `AssetLinked`). A stale `version` returns 409 and requires a reload.
 
 `GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
 `{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
-changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `VendorAssigned`,
-`EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`, `WorkNote`, `WorkReopened`,
-and the communication events `MessageQueued` / `MessageSent` / `MessageFailed`); `oldValue` /
-`newValue` are the human-readable before/after (a name, a status, an id); `changes` is a JSON
+changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `WorkUpdated`,
+`VendorAssigned`, `EmployeeAssigned`, `StatusChanged`, `PriorityChanged`, `Scheduled`,
+`AssetLinked`, `WorkNote`, `WorkReopened`, and the communication events `MessageQueued` /
+`MessageSent` / `MessageFailed`); `oldValue` / `newValue` are the human-readable before/after
+(a name, a status, an id); `changes` is a JSON
 object with the details. `residentVisible` is `false` for work-history events and `true` for a
 resident communication. Communication entries are folded in from the outbox on read — there is
 no separate write — so a `MessageQueued` entry becomes `MessageSent` in place once the
@@ -242,8 +246,12 @@ reject control characters (a resident name is a template substitution value).
 | --- | --- | --- |
 | GET | /api/assets | `Work.Read`; up to 500 tenant-scoped assets ordered by name; optional `?propertyId=` filter |
 | GET | /api/assets/{id} | `Work.Read`; one asset, or 404 including foreign-tenant IDs |
+| GET | /api/assets/{id}/history | `Work.Read`; the asset plus every work item linked to it (newest first) and the roll-ups — `{ asset, ageInYears, underWarranty, workOrderCount, totalCost, history: [{ id, title, status, priority, categoryName, vendorName, createdAt, completedAt, cost }] }`; 404 for an unknown or foreign asset |
 | POST | /api/assets | `Assets.Manage` + CSRF; `kind`, `name`, `propertyId`, `spaceId`, and the optional make/model/serial, `installedOn`/`warrantyExpiresOn`/`expectedServiceLifeYears`, `condition`, `replacementCostEstimate`, `notes`; 201, 400 for invalid text / a warranty before installation / a foreign or unknown property or space |
 | PUT | /api/assets/{id} | `Assets.Manage` + CSRF; same body; the property and space are fixed at creation; 200, 400, or 404 |
+| GET | /api/assets/repeat-repair-policy | `Work.Read`; the organization's repeat-repair thresholds — `{ repairThreshold, windowDays, matchByCategory }`; returns the defaults (`3`, `120`, `false`) until one is set |
+| PUT | /api/assets/repeat-repair-policy | `Assets.Manage` + CSRF; upserts the single per-org policy; `repairThreshold` 2–50, `windowDays` 7–3650; 200 with the saved policy, or 400 out of range |
+| GET | /api/assets/{id}/repeat-repair | `Work.Read`; assess one asset against the current policy — `{ repairThreshold, windowDays, matchByCategory, repairCount, since, totalCostInWindow, ageInYears, isRepeatRepair }`; counts published work linked to the asset with `createdAt` within the window; optional `?categoryId=` narrows the count to matching work when `matchByCategory` is on; 404 for an unknown or foreign asset |
 
 `kind` is one of `Hvac`, `WaterHeater`, `Appliance`, `Roof`, `ElectricalPanel`,
 `PlumbingFixture`, `Generator`, `Other`; `condition` is `Unknown`/`New`/`Good`/`Fair`/`Poor`/
@@ -292,6 +300,34 @@ it but ranks below any literal substring hit. Residents also match on email and 
 serial number and model, employees on email. Every query runs through the tenant query filter
 and row-level security, so results never cross an organization. The result set is capped at
 `limit` hits total across all types.
+
+## Attention queue (milestone 6)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/attention | `Work.Read`; the actionable attention queue for the tenant — `{ items: [...], criticalCount, warningCount, informationalCount }` |
+
+Each item is `{ workId, title, propertyId, propertyName, status, priority, dueDate, reason, severity, detail }`.
+One open work item can produce several items — one per rule it trips. Items are ordered by
+`severity` (Critical → Warning → Informational), then soonest `dueDate`, then work id. The three
+counts are of **distinct work items** at each severity, so a work item flagged both Critical and
+Warning is counted in each.
+
+`reason` is one of:
+
+| reason | severity | when |
+| --- | --- | --- |
+| `UnassignedEmergency` | Critical | `Critical` priority, open, with no vendor and no employee |
+| `SlaBreach` | Critical for `Critical`/`High`, else Warning | still `New` past the first-response budget (Critical 4h, High 24h, Normal 72h, Low 120h from creation) |
+| `Overdue` | Critical when the work is `Critical` priority, else Warning | `dueDate` in the past and not `Completed` |
+| `WaitingOnVendor` | Warning | `OnHold` with a vendor assigned and no activity for 7 days |
+| `WaitingOnResident` | Informational | `OnHold` with a resident (no vendor) and no activity for 7 days |
+| `RepeatRepair` | Warning | open work on an asset over the repeat-repair count in the policy window |
+| `UnitTurnAtRisk` | Critical when already past due, else Warning | a `UnitTurnTask` still `New`/`Assigned` and due within 5 days |
+
+`Completed`, `Cancelled` and `Draft` work never appears. The thresholds are fixed in this
+release (`AttentionThresholds`) — per-organization tuning is a follow-up. Every query runs
+through the tenant query filter and row-level security.
 
 ## Integrations (milestone 6)
 

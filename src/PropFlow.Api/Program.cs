@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
 using PropFlow.Application;
+using PropFlow.Application.Assets;
+using PropFlow.Application.Attention;
 using PropFlow.Application.Communications;
 using PropFlow.Application.Integrations;
 using PropFlow.Application.Search;
@@ -59,6 +61,8 @@ builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
+builder.Services.AddScoped<IRepeatRepairDetector, EfRepeatRepairDetector>();
+builder.Services.AddScoped<IAttentionQueue, EfAttentionQueue>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
 builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
@@ -112,9 +116,14 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = 429;
+    // 10/min/IP is the brute-force control for the internet-facing deployment. Under the
+    // Development posture (local runs and the CI e2e job, which logs in once per spec and
+    // retries) that ceiling is just an obstacle, so it is lifted there; "Testing" (the
+    // integration suite, which asserts the ceiling) and Production keep the strict value.
+    var loginAttemptsPerMinute = builder.Environment.IsDevelopment() ? 200 : 10;
     options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = loginAttemptsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddHostedService<RuntimeDatabaseGuard>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
@@ -166,6 +175,7 @@ app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapSearchEndpoints();
+app.MapAttentionEndpoints();
 app.MapSavedViewEndpoints();
 app.MapIntegrationEndpoints();
 app.MapAutomationEndpoints();
