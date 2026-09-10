@@ -281,6 +281,29 @@ Dispatcher behavior is configured under `Communications` (`PollInterval`, `Retry
 `MaxDeliveryAttempts`, `StaleClaimTimeout`); defaults suit a single instance with mock
 providers.
 
+## Automation rules (milestone 5)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/automation/rules | `Settings.ManageAutomationRules`; the tenant's rules, name-ordered |
+| POST | /api/automation/rules | `Settings.ManageAutomationRules` + CSRF; `{ name, trigger, conditions, actions }`; 201, or 400 on an invalid shape |
+| POST | /api/automation/rules/{id}/enabled | `Settings.ManageAutomationRules` + CSRF; `{ "enabled": bool }`; 200, or 404 |
+
+A rule is `{ trigger, conditions[], actions[] }` from a closed v1 vocabulary — `trigger` is
+`WorkCreated` or `WorkStatusChanged`; a `condition` is `WorkStatusEquals` (`status`) or
+`CategoryEquals` (`categoryId`); an `action` is `SetPriority` (`priority`) or
+`SendResidentMessage` (`templateId`). At least one action is required.
+
+**Rules execute.** After a work create commits, or an explicit status change commits (`PUT
+/api/work/{id}`, `POST /api/work/bulk/status`), the evaluator runs the tenant's enabled rules
+for that trigger, `AND`s every condition against the committed work item, and applies the
+matches: `SetPriority` is skipped when the priority already matches or the work is terminal;
+`SendResidentMessage` goes through the same path as `POST /api/work/{id}/message`, keyed so a
+retry does not double-send. Each rule is idempotent per occurrence (an `AutomationApplied`
+timeline entry fences it), runs in its own transaction, and a failing rule is logged and
+skipped without affecting the work write or other rules. Evaluation is post-commit and
+in-process — there is no durable retry queue yet.
+
 ## Global search (milestone 6)
 
 | Method | Path | Behavior |

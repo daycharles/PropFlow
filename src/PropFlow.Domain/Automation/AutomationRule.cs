@@ -64,6 +64,25 @@ public sealed class AutomationRule : TenantEntity
     public IReadOnlyList<AutomationAction> ReadActions() =>
         JsonSerializer.Deserialize<AutomationAction[]>(Actions, Json) ?? [];
 
+    /// <summary>
+    /// Whether a work item in this state satisfies every one of the rule's conditions (they are
+    /// ANDed; an empty condition list always matches). The trigger is checked by the caller.
+    /// </summary>
+    public bool Matches(WorkStatus status, Guid? categoryId)
+    {
+        foreach (var condition in ReadConditions())
+        {
+            var ok = condition.Kind switch
+            {
+                AutomationConditionKind.WorkStatusEquals => condition.Status == status,
+                AutomationConditionKind.CategoryEquals => condition.CategoryId == categoryId,
+                _ => false,
+            };
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     public void Update(string name, AutomationTrigger trigger, IReadOnlyList<AutomationCondition>? conditions,
         IReadOnlyList<AutomationAction> actions, DateTimeOffset updatedAt)
     {

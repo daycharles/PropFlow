@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using PropFlow.Application.Automation;
 using PropFlow.Application.Work;
+using PropFlow.Domain.Automation;
 using PropFlow.Domain.Communications;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
@@ -8,8 +11,24 @@ using PropFlow.Infrastructure.Communications;
 
 namespace PropFlow.Infrastructure.Persistence;
 
-public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore comms, TimeProvider clock) : IWorkOperations
+public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore comms, TimeProvider clock,
+    IAutomationEngine automation, ILogger<EfWorkOperations> logger) : IWorkOperations
 {
+    // Fire the automation evaluator for a committed work-event occurrence. The evaluator isolates
+    // each rule; this guard only stops a catastrophic evaluator failure (e.g. a lost connection
+    // loading rules) from turning a successful work write into an error.
+    private async Task RunAutomationAsync(AutomationTrigger trigger, Guid workId, Guid occurrenceId, CancellationToken ct)
+    {
+        try
+        {
+            await automation.RunAsync(trigger, workId, occurrenceId, ct);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Automation evaluation for {Trigger} on work {WorkId} did not run.", trigger, workId);
+        }
+    }
+
     // Kept for existing internal callers; API callers supply the client concurrency version.
     public Task<AssignmentOutcome> AssignVendorAsync(Guid id, Guid vendorId, Guid actorId, CancellationToken ct) =>
         AssignVendorAsync(id, vendorId, actorId, null, ct);
@@ -131,7 +150,10 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         await EnsureChildReferencesAsync(c.PropertyId, c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, c.AssetId, ct);
         var work = new WorkItem(store.OrganizationId, Guid.NewGuid(), c.Title, c.PropertyId, c.ActorId, c.WorkType);
         work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetAsset(c.AssetId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes); work.Publish(clock.GetUtcNow());
-        store.WorkItems.Add(work); store.Timeline.Add(Event(work, c.ActorId, "WorkCreated", null, work.Title)); await store.SaveChangesAsync(ct); return work;
+        var created = Event(work, c.ActorId, "WorkCreated", null, work.Title);
+        store.WorkItems.Add(work); store.Timeline.Add(created); await store.SaveChangesAsync(ct);
+        await RunAutomationAsync(AutomationTrigger.WorkCreated, work.Id, created.Id, ct);
+        return work;
     }
 
     public async Task<WorkWriteOutcome> UpdateAsync(Guid id, UpdateWorkCommand c, CancellationToken ct)
@@ -147,9 +169,12 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         if (oldTitle != work.Title) store.Timeline.Add(Event(work, c.ActorId, "WorkUpdated", oldTitle, work.Title));
         if (oldAsset != work.AssetId) store.Timeline.Add(Event(work, c.ActorId, "AssetLinked", oldAsset?.ToString(), work.AssetId?.ToString()));
         if (oldPriority != work.Priority) store.Timeline.Add(Event(work, c.ActorId, "PriorityChanged", oldPriority.ToString(), work.Priority.ToString()));
-        if (oldStatus != work.Status) store.Timeline.Add(Event(work, c.ActorId, "StatusChanged", oldStatus.ToString(), work.Status.ToString()));
+        TimelineEntry? statusChanged = null;
+        if (oldStatus != work.Status) store.Timeline.Add(statusChanged = Event(work, c.ActorId, "StatusChanged", oldStatus.ToString(), work.Status.ToString()));
         if (oldStart != work.ScheduledStart) store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
-        try { await store.SaveChangesAsync(ct); return WorkWriteOutcome.Updated; } catch (DbUpdateConcurrencyException) { return WorkWriteOutcome.Conflict; }
+        try { await store.SaveChangesAsync(ct); } catch (DbUpdateConcurrencyException) { return WorkWriteOutcome.Conflict; }
+        if (statusChanged is not null) await RunAutomationAsync(AutomationTrigger.WorkStatusChanged, id, statusChanged.Id, ct);
+        return WorkWriteOutcome.Updated;
     }
 
     public async Task<AssignmentOutcome> AssignVendorAsync(Guid id, Guid vendorId, Guid actorId, uint? version, CancellationToken ct)
@@ -242,17 +267,29 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
             if (ApplyOne(work, command, now)) changed++;
         }
 
+        // Captured before the save (ids are assigned) — the status-change occurrences to hand the
+        // automation evaluator once the batch commits.
+        var statusOccurrences = command.Action == BulkWorkAction.Status
+            ? store.ChangeTracker.Entries<TimelineEntry>()
+                .Where(e => e.State == EntityState.Added && e.Entity.EventType == "StatusChanged" && e.Entity.WorkId is not null)
+                .Select(e => (WorkId: e.Entity.WorkId!.Value, EntryId: e.Entity.Id))
+                .ToList()
+            : [];
+
         try
         {
             await store.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-            return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total);
         }
         catch (DbUpdateConcurrencyException)
         {
             await transaction.RollbackAsync(ct);
             return new(AssignmentOutcome.Conflict, 0, 0, total);
         }
+
+        foreach (var (workId, entryId) in statusOccurrences)
+            await RunAutomationAsync(AutomationTrigger.WorkStatusChanged, workId, entryId, ct);
+        return new(changed > 0 ? AssignmentOutcome.Updated : AssignmentOutcome.Unchanged, changed, total - changed, total);
     }
 
     // Applies one already-vetted action to one work item and records its timeline entry.

@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using PropFlow.Application;
+using PropFlow.Application.Automation;
+using PropFlow.Domain.Automation;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
@@ -153,7 +156,7 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         await using (var store = s.Store(s.OrganizationA))
         await using (var comms = s.Comms(s.OrganizationA))
         {
-            var operations = new EfWorkOperations(store, comms, TimeProvider.System);
+            var operations = new EfWorkOperations(store, comms, TimeProvider.System, new NoAutomation(), NullLogger<EfWorkOperations>.Instance);
             await Assert.ThrowsAsync<DbUpdateException>(() => operations.AssignVendorAsync(s.WorkA, s.VendorA, s.AdminB, default));
         }
         await using var verify = s.Store(s.OrganizationA);
@@ -209,5 +212,11 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         await using var runtime = new NpgsqlConnection(fixture.RuntimeConnection);
         await runtime.OpenAsync();
         Assert.True(await DatabaseSafety.HasSafeRuntimeRoleAsync(runtime, default));
+    }
+
+    private sealed class NoAutomation : IAutomationEngine
+    {
+        public Task<AutomationRunSummary> RunAsync(AutomationTrigger trigger, Guid workId, Guid occurrenceId, CancellationToken cancellationToken) =>
+            Task.FromResult(AutomationRunSummary.Empty);
     }
 }
