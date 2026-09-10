@@ -12,8 +12,10 @@ Umbrella solution `PropFlow.slnx` — 8 projects: 4 `src`, 3 `tests`, 1 `tools`.
 `10.0.300` with `rollForward: latestPatch` (`global.json`); this box has 10.0.303, which the
 band accepts.
 
-Milestones **M3** (first usable vertical slice) and **M4** (communications/outbox) are in flight
-at the same time. `docs/milestones.md` scopes them; `docs/backlog.md` carries the tasks.
+**M3** (first usable vertical slice) is complete and on `main`. **M4** (communications/outbox) is
+in flight, and **M6** (assets, search, integrations) was started ahead of **M5**, which has not
+begun — so milestone number is not milestone order here. `docs/milestones.md` holds the
+per-milestone status; `docs/backlog.md` carries the tasks.
 
 ## Build / test / run
 
@@ -118,28 +120,32 @@ baseline and `.claude/settings.local.json` stays gitignored.
 
 | Document | Status |
 |---|---|
-| `docs/architecture.md` | Normative for cross-cutting design and persistence — but see the stale rows below |
-| `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber** (`backlog.md:17`) |
-| `docs/api.md` | The HTTP contract for M3 endpoints |
+| `docs/architecture.md` | Normative for cross-cutting design and persistence |
+| `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
+| `docs/api.md` | The HTTP contract for every endpoint that exists — M3, M4 and M6 |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
+| `docs/milestones.md` | Per-milestone status: what shipped, what is in flight, what has not begun. Reconciled to GitHub 2026-09-10 |
 
-Known stale, verified 2026-09-09 — fix them if your change touches them:
+Known stale, verified 2026-09-10 — fix them if your change touches them:
 
-- `README.md:31` still calls `apps/web` a "reserved Next.js boundary; no runnable frontend yet."
-  It is a running Next 16 app. `README.md:21` also describes CI as foundation checks plus both
-  test suites, omitting the `web` and `e2e` jobs.
-- `docs/architecture.md:5,10` still describe the frontend as "planned for milestone 3".
-- `docs/architecture.md:29` under-states the role→capability map; `Capabilities.cs:17-26` is the
-  authority.
+- The `README.md`, `docs/architecture.md` and `docs/api.md` rows that used to sit here were fixed
+  in the 2026-09-10 milestone-doc reconcile. `Capabilities.cs` remains the authority for the
+  role→capability map — restate it, never paraphrase from memory.
+- `src/PropFlow.Application/Capabilities.cs:26` comments that Technician/Vendor scoping is
+  "milestone 3". It is milestone 5 (PF-5.01, PF-5.02), which has not started. Code comment, not
+  prose — fix it in the change that implements the scoping.
 - `DatabaseProvisioner.MigrateAsync` migrates **four** contexts (identity, operations,
   communications, integrations) — keep the `PropFlow.Admin` migrate message and any prose count
   in step when a fifth is added.
 
 Counts in prose rot. Re-measure them; do not propagate them.
 `docs/backlog.md` is the task source. GitHub milestones `M3`–`M7`, epic issues `#1`–`#5`,
-task issues `#6`–`#73`. Reference the `PF-x.yy` id in branch names, commits, and PRs.
+task issues `#6`–`#73`. **`PF-3.27` is the one exception — it has no issue**, because it was
+written after the M3 issues were cut (`baf4498`, PR #98); do not open one retroactively and do not
+assume every `PF-x.yy` id resolves to an issue. Reference the `PF-x.yy` id in branch names,
+commits, and PRs.
 
 Keep the tracker in step with git, and **assign the task issue to the human whose agent it is**
 so the board shows whose agent did what — on the macOS box that is `mday440` (Michael Day), not

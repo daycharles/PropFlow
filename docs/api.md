@@ -1,4 +1,9 @@
-# Milestone 3 API
+# PropFlow HTTP API
+
+The contract for every endpoint that exists today: the milestone-3 slice (auth, session, work,
+assignment, bulk vendor, reference data, saved views), the milestone-4 communications surfaces
+(residents, templates, the other bulk work actions) and the milestone-6 API-only surfaces (assets,
+global search, integrations). Section headings name the milestone each group came from.
 
 Use HTTPS and retain cookies. API responses are JSON except successful 204s and the minimal readiness endpoint. API session/data responses use Cache-Control: no-store. Authentication failures return 401, authorization failures return 403; no HTML login redirects are used.
 

@@ -2,11 +2,11 @@
 
 A modular property operations platform for work orders, bulk actions, resident communication, and operational history. It complements property-management systems through integration adapters.
 
-## Current milestone
+## Where the project stands
 
-Milestone 2 implements tenant-aware Identity login, secure cookies and CSRF protection, organization membership and capability checks, PostgreSQL persistence/migrations, database readiness, and a minimal work/vendor-assignment API with an append-only timeline.
+Milestones 1 and 2 (foundation; tenant-aware Identity login, secure cookies and CSRF, organization membership and capability checks, PostgreSQL persistence/migrations, database readiness) are implemented. **Milestone 3 — the first usable vertical slice — is complete and on `main`. Milestone 4 is in flight. Milestone 6 was started ahead of milestone 5, which has not begun.** [docs/milestones.md](docs/milestones.md) carries the per-milestone status and [docs/backlog.md](docs/backlog.md) the task-level detail.
 
-Milestone 3 adds the first usable vertical slice: the property hierarchy, expanded work/vendor/employee entities, a generalized timeline, work create/update, a filtered and paginated work list with client-facing concurrency tokens, bulk vendor assignment, saved views, demo seed data, and a running Next.js app in `apps/web` for login → work list → multi-select → assign vendor → timeline. Milestone 4 (communications and the transactional outbox) is in flight alongside it. There are no live resident messages or production PMS integrations.
+Milestone 3 delivered the property hierarchy, expanded work/vendor/employee entities, a generalized timeline, work create/update, a filtered and paginated work list with client-facing concurrency tokens, bulk vendor assignment, saved views, demo seed data, and a running Next.js app in `apps/web` for login → work list → multi-select → assign vendor → timeline. Milestone 4 has landed the resident/occupancy domain with per-channel consent, mock SMS/email senders, the transactional outbox with idempotent at-most-once dispatch, and the extended bulk work actions (schedule, status, priority, note, reopen). Milestone 6 has landed the `Asset` domain, a `pg_trgm` fuzzy global search API and the mocked integration adapter abstraction — **all three are API and domain surfaces only; none has a UI yet.** There are no live resident messages or production PMS integrations.
 
 ## Get started
 

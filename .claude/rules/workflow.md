@@ -136,9 +136,9 @@ accumulated this way; do not add to it.
 
 ## Shared merge points
 
-M3 and M4 are in flight simultaneously. Keep a change inside its module's namespace. These
-three files are touched by both tracks — treat edits as **append-only** and **rebase** rather
-than resolving a conflict destructively:
+M4 and M6 are in flight simultaneously (M3 is complete and on `main`). Keep a change inside its
+module's namespace. These three files are touched by every track — treat edits as **append-only**
+and **rebase** rather than resolving a conflict destructively:
 
 - `src/PropFlow.Api/Program.cs` — DI registrations and the `Map<Area>Endpoints` list
   (`:116-121`)

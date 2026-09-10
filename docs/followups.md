@@ -6,8 +6,7 @@ close an item here when the change that resolves it merges. The authorities rema
 [`docs/backlog.md`](backlog.md), and [`docs/milestones.md`](milestones.md); this file only
 aggregates their open threads plus the tooling/process gaps.
 
-Owner `daycdev` = the M3 vertical-slice work (currently pushed directly to `main`, on an
-unmerged fork). "unassigned" = no owner yet.
+Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 
 ---
 
@@ -26,6 +25,23 @@ M3 is complete (all `#6`–`#31` closed, promoted to `main` in PR #95 / #104). P
 | PF-4.10 (#41) — full Tidewater demo seed (~3 properties, ~80 spaces, ~70 residents, 6 vendors, ~100 work items, ~60 assets, ≥18 pest-control) | backlog.md M4 | unassigned | All the domain exists (residents/occupancy/assets/hierarchy). Standalone; unblocks PF-4.11. `infra` / the `PropFlow.Admin` seed |
 | PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Needs PF-4.08 + PF-4.10 |
 | PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Core outbox/consent tests exist; finish once PF-4.06 emits real communication events |
+## M4 work unblocked by M3
+
+**M3 is complete.** All 26 task issues (`#6`–`#31`) are closed and the slice was promoted to `main`
+in `b31b864`; PF-3.27 (`baf4498`, PR #98) shipped after the issues were cut. Nothing below is
+waiting on the milestone any more — the rows that remain are held up by a specific dependency, not
+by M3 as a whole.
+
+`develop` and `main` are level at `aeee32d` — PR #104 promoted PF-6.10, PF-3.27, PF-4.07 and the
+2026-09-10 audit follow-ups (A-1..A-7). Nothing is flag-gated and nothing is held back on a feature
+branch, so `main` is the whole truth as of this writing.
+
+| Item | Source | Owner | Blocked on |
+| --- | --- | --- | --- |
+| PF-4.06 — communication records + delivery status as timeline entries with explicit visibility | backlog.md M4; audit-communications C11 | unassigned | **The one real blocker in M4.** `TimelineEntry` is still half-generalized — legacy `PreviousVendorId`/`VendorId` columns remain, `From(VendorAssigned)` still writes them, `Create(...)` is still dead (`src/PropFlow.Domain/Timeline/TimelineEntry.cs:44`). Finish PF-3.10 (daycdev tech debt below) first |
+| PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | Nothing structural. `IOutbox.EnqueueAsync` exists but has no production caller — only tests. Needs work events to start producing messages, plus idempotent real providers |
+| PF-4.08 — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | **Buildable now.** PF-4.07 is closed, the M3 web work list and bulk-vendor flow are on `main`. Only the resident-message half needs PF-4.03's template-to-resident wiring |
+| PF-4.09 — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | **Buildable now** — nothing blocks it. A responsiveness pass over the three existing `apps/web` routes |
 
 ---
 
