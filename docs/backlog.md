@@ -159,7 +159,7 @@ entities, and the integration abstraction exists (mocked).
 | PF-6.03 | ✅ Asset detail page (`/assets/[id]`) with complete maintenance history. `GET /api/assets/{id}/history` returns the asset + every linked work item newest-first + roll-ups (`workOrderCount`, `totalCost`, `ageInYears`, `underWarranty`). The page shows the asset record, the roll-ups, and a history table linking each work item; reached from the work detail's "View asset maintenance history →" link. | web | M | PF-6.02 |
 | PF-6.04 | ✅ Configurable repeat-repair detection. Per-org `RepeatRepairPolicy` (threshold default 3, window default 120 days, category-similarity option), forced RLS, upserted via `GET`/`PUT /api/assets/repeat-repair-policy`. `IRepeatRepairDetector` counts published work linked to an asset within the window (narrowed to a matching category when the option is on); `GET /api/assets/{id}/repeat-repair` returns count, total cost in window and the `isRepeatRepair` flag. | application | M | PF-6.02 |
 | PF-6.05 | ✅ "Repeat Repair Warning" surface. `RepeatRepairWarning` component calls `GET /api/assets/{id}/repeat-repair` and, only when `isRepeatRepair`, shows repair count, total repair cost in the window and asset age. Full-width banner on the asset detail page; compact inline variant beside the work detail's asset picker (passes the work's `categoryId`). `ageInYears` added to the assessment response. | web | M | PF-6.04 |
-| PF-6.06 | Attention queue backend: rules for unassigned emergencies, overdue work, SLA breach, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk | application | L | PF-6.04 |
+| PF-6.06 | ✅ Attention queue backend. `AttentionRules` (pure domain) evaluates seven rules — unassigned emergency, first-response SLA breach, overdue, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk — over each open work item. `IAttentionQueue` / `EfAttentionQueue` builds the tenant-scoped queue in three queries; `GET /api/attention` returns the findings (most urgent first) with per-severity distinct-work counts for PF-6.07's cards. Thresholds fixed in `AttentionThresholds` (not yet org-configurable). | application | L | PF-6.04 |
 | PF-6.07 | "Needs Your Attention" home screen: Critical / Warning / Informational cards, each click-through to a filtered work view | web | L | PF-6.06 |
 | PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
 | PF-6.09 | Global search UI (keyboard-first) in web | web | M | PF-6.08 |
@@ -189,10 +189,13 @@ earlier milestones when a feature forces the issue.
 
 ## Open questions / decisions needed
 
-- **SLA model** (referenced by PF-6.06): is SLA a per-priority duration, a per-category policy,
-  or configurable per organization? Needed before the attention queue.
-- **Unit-turn workflow** (PF-6.06 "unit turn at risk"): is a unit turn a work type, a distinct
-  entity with checklist steps, or out of scope until a later milestone?
+- **SLA model** — *resolved in PF-6.06*: the attention queue uses a per-priority first-response
+  budget measured from creation while the work is still `New` (Critical 4h, High 24h, Normal 72h,
+  Low 120h), fixed in `AttentionThresholds`. Per-organization / per-category tuning is a future
+  task if the demand appears.
+- **Unit-turn workflow** — *resolved in PF-6.06*: a unit turn is the existing
+  `WorkType.UnitTurnTask`, not a distinct entity. "At risk" = a `UnitTurnTask` still
+  `New`/`Assigned` and due within 5 days. Checklist-style turn steps remain out of scope.
 - **Saved views scope** (PF-3.17): user-private only, or shareable/organization-default views?
 - **Portfolio depth** (PF-3.05): single portfolio layer, or arbitrary nesting for enterprise
   hierarchies?
