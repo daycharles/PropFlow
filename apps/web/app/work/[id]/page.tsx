@@ -289,6 +289,11 @@ function Detail({ session, id }: { session: Session; id: string }) {
               ) : null}
             </select>
           </label>
+          {work.assetId ? (
+            <Link className="hint" href={`/assets/${work.assetId}`}>
+              View asset maintenance history →
+            </Link>
+          ) : null}
           <button disabled={saving || !hasCapability(session, "Work.Update")}>
             {saving ? "Saving…" : "Save details"}
           </button>

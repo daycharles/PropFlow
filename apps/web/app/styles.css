@@ -374,6 +374,20 @@ td small {
 .timeline h2 {
   margin: 0;
 }
+.key-values {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+.key-values dt {
+  color: var(--secondary);
+  font-weight: 700;
+}
+.key-values dd {
+  margin: 0;
+}
 .notes {
   grid-column: 1 / -1;
 }

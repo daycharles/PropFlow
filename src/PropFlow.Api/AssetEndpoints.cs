@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain.Assets;
+using PropFlow.Domain.Work;
 using PropFlow.Infrastructure.Persistence;
 
 namespace PropFlow.Api;
@@ -21,6 +22,30 @@ public static class AssetEndpoints
         group.MapGet("/{id:guid}", async (Guid id, OperationsStore store, CancellationToken ct) =>
             await store.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct) is { } asset
                 ? Results.Ok(asset) : Results.NotFound());
+
+        // The maintenance history: every work item linked to this asset, newest first, plus the
+        // roll-ups PF-6.05's repeat-repair warning wants (count, total cost, age, warranty).
+        group.MapGet("/{id:guid}/history", async (Guid id, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
+        {
+            var asset = await store.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (asset is null) return Results.NotFound();
+
+            var history = await (
+                from w in store.WorkItems.AsNoTracking().Where(x => x.AssetId == id)
+                join c in store.Categories on w.CategoryId equals (Guid?)c.Id into categories
+                from c in categories.DefaultIfEmpty()
+                join v in store.Vendors on w.VendorId equals (Guid?)v.Id into vendors
+                from v in vendors.DefaultIfEmpty()
+                orderby w.CreatedAt descending, w.Id
+                select new AssetWorkHistoryItem(w.Id, w.Title, w.Status, w.Priority,
+                    c == null ? null : c.Name, v == null ? null : v.Name, w.CreatedAt, w.CompletedAt, w.Cost)
+            ).ToListAsync(ct);
+
+            var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.Date);
+            return Results.Ok(new AssetHistoryResponse(
+                asset, asset.AgeInYears(today), asset.IsUnderWarranty(today),
+                history.Count, history.Sum(x => x.Cost ?? 0m), history));
+        });
 
         group.MapPost("/", async (AssetRequest request, OperationsStore store, ITenantContext tenant, CancellationToken ct) =>
         {
@@ -76,6 +101,11 @@ public static class AssetEndpoints
         asset.SetNotes(request.Notes);
     }
 }
+
+public sealed record AssetWorkHistoryItem(Guid Id, string Title, WorkStatus Status, WorkPriority Priority,
+    string? CategoryName, string? VendorName, DateTimeOffset CreatedAt, DateTimeOffset? CompletedAt, decimal? Cost);
+public sealed record AssetHistoryResponse(Asset Asset, int? AgeInYears, bool UnderWarranty,
+    int WorkOrderCount, decimal TotalCost, IReadOnlyList<AssetWorkHistoryItem> History);
 
 // Tenant comes from the verified session.
 public sealed record AssetRequest(
