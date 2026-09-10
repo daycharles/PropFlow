@@ -424,6 +424,35 @@ public sealed class AutomationEngineTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task A_long_note_is_truncated_into_the_message_rather_than_failing_the_rule()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        // Body is the note alone; an un-truncated 2500-char note would push the rendered body past
+        // the 2000-char message limit and fail the render — and with it the whole rule.
+        var template = await SeedSmsTemplateAsync(s, s.OrganizationA, "{{ note.text }}");
+        await SeedRuleAsync(s, s.OrganizationA, AutomationTrigger.WorkNoteAdded, [],
+            [new(AutomationActionKind.SendResidentMessage, TemplateId: template)]);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var work = await admin.WorkItems.SingleAsync(x => x.Id == s.WorkA);
+            work.SetLocation(s.PropertyA, null, s.SpaceA, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            await admin.SaveChangesAsync();
+        }
+        var occurrence = await AddNoteAsync(s, s.OrganizationA, s.AdminA, s.WorkA, new string('x', 2500), residentVisible: true);
+
+        await using var store = s.Store(s.OrganizationA);
+        await using var comms = s.Comms(s.OrganizationA);
+        var summary = await Engine(store, comms).RunAsync(AutomationTrigger.WorkNoteAdded, s.WorkA, occurrence, default);
+
+        Assert.Equal(new AutomationRunSummary(1, 1, 0), summary);
+        await using var verifyComms = s.CommsAsAdmin(s.OrganizationA);
+        var message = await verifyComms.OutboxMessages.SingleAsync(x => x.WorkId == s.WorkA);
+        Assert.True(message.Body.Length <= 2000);
+        Assert.EndsWith("…", message.Body);
+    }
+
+    [Fact]
     public async Task Note_rules_are_tenant_scoped()
     {
         await using var s = await fixture.CreateScenarioAsync();
