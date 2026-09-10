@@ -93,7 +93,9 @@ test("bulk internal note from the toolbar on a phone viewport", async ({ page })
 
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Action").selectOption("note");
-  await dialog.getByLabel("Note").fill(`Sprayed on ${runId}`);
+  // getByLabel("Note") also matches the Action <select> (its "Add a note" option text), so scope
+  // to the textbox role.
+  await dialog.getByRole("textbox", { name: "Note" }).fill(`Sprayed on ${runId}`);
   await dialog.getByRole("button", { name: "Continue" }).click();
   await dialog.getByRole("button", { name: "Confirm add a note" }).click();
 
