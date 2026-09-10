@@ -58,6 +58,14 @@ test("the attention screen surfaces a critical item and filters by card", async 
   await expect(page.getByRole("heading", { name: /Critical items/ })).toBeVisible();
   await expect(page.locator(".attention-row", { hasText: title })).toBeVisible();
 
+  // D3 (2026-09-10): the card number and the filtered list number are the same number — both
+  // count distinct work items with a Critical finding.
+  const criticalCount = (await criticalCard.locator(".attention-count").innerText()).trim();
+  await expect(
+    page.getByRole("heading", { name: `Critical items (${criticalCount})` }),
+  ).toBeVisible();
+  await expect(page.locator(".attention-row")).toHaveCount(Number(criticalCount));
+
   // And through to the work order itself.
   await row.getByRole("link").click();
   await expect(page).toHaveURL(new RegExp(`/work/${workId}$`));
