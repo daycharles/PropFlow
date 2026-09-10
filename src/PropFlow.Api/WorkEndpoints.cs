@@ -53,6 +53,9 @@ public static class WorkEndpoints
             var prior = work.Status;
             try { work.ChangeStatus(WorkStatus.OnTheWay, now); }
             catch (InvalidOperationException e) { return Results.Problem(statusCode: 400, title: e.Message); }
+            // NOTE: this transition does not run the automation evaluator — a WorkStatusChanged
+            // rule will not fire for "On The Way". Tracked in docs/followups.md; the convention
+            // template below is the only notification here today.
             operations.Timeline.Add(TimelineEntry.Record(work.OrganizationId, Actor(user), now, "StatusChanged", "WorkItem", id,
                 prior.ToString(), WorkStatus.OnTheWay.ToString(), id, System.Text.Json.JsonSerializer.Serialize(new { oldValue = prior.ToString(), newValue = "OnTheWay" })));
             await operations.SaveChangesAsync(ct);

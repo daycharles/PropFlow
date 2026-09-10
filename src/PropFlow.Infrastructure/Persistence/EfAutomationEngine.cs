@@ -40,7 +40,7 @@ public sealed class EfAutomationEngine(
             var note = await store.Timeline.AsNoTracking()
                 .SingleOrDefaultAsync(t => t.Id == occurrenceId && t.EventType == "WorkNote", cancellationToken);
             if (note is null || !note.ResidentVisible) return AutomationRunSummary.Empty;
-            noteText = note.NewValue ?? "";
+            noteText = Truncate(note.NewValue ?? "", NoteTextRenderLimit);
         }
 
         var rules = await store.AutomationRules.AsNoTracking()
@@ -133,6 +133,15 @@ public sealed class EfAutomationEngine(
         }
         return true;
     }
+
+    // A note can be up to 2000 characters, the same as a rendered message body. Feeding the whole
+    // note into {{ note.text }} could push a template's rendered body past that limit and fail the
+    // render — which fails the whole rule (silently, but logged). Cap the substitution so a long
+    // note degrades to a truncated notification rather than no notification.
+    private const int NoteTextRenderLimit = 1000;
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)].TrimEnd() + "…";
 
     private static Guid Deterministic(Guid ruleId, Guid occurrenceId)
     {
