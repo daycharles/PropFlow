@@ -284,6 +284,7 @@ td small {
   margin-bottom: 0;
 }
 .bulk-toolbar {
+  flex-wrap: wrap;
   margin: 14px 0;
   padding: 12px;
   border: 1px solid #ead4c8;
