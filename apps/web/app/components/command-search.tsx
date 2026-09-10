@@ -184,7 +184,8 @@ export function CommandSearch() {
           type="text"
           role="combobox"
           aria-expanded={hits.length > 0}
-          aria-controls="command-results"
+          // Only reference the listbox while it is actually rendered (below, `hits.length > 0`).
+          aria-controls={hits.length ? "command-results" : undefined}
           aria-activedescendant={hits.length ? `command-result-${active}` : undefined}
           placeholder="Search work, assets, people, places…"
           value={term}
