@@ -39,29 +39,34 @@ partial win. Citations verified 2026-09-09; `docs/architecture.md:33-41` is the 
    is created `NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB` (`:45-47`) and gets only the
    verbs the milestone needs. No blanket `GRANT ALL`.
 
-`DatabaseReadiness` counts the tables in `operations` and `communications` and fails the
-readiness probe if any is missing `relrowsecurity AND relforcerowsecurity`
-(`DatabaseHealth.cs:31-38`) — so a table added without step 4 breaks `/health/ready`, and the
+`DatabaseReadiness` counts the tables in `operations`, `communications` and `integrations` and
+fails the readiness probe if any is missing `relrowsecurity AND relforcerowsecurity`
+(`DatabaseHealth.cs`) — so a table added without step 4 breaks `/health/ready`, and the
 hard-coded minimum counts there need bumping with the table.
 
-## Three DbContexts, three schemas, three histories
+## Four DbContexts, four schemas, four histories
 
 | Context | Schema | History table | Migrations folder |
 |---|---|---|---|
 | `IdentityStore` | `identity` | `__IdentityMigrations` | `Persistence/Migrations/Identity/` |
 | `OperationsStore` | `operations` | `__OperationsMigrations` | `Persistence/Migrations/Operations/` |
 | `CommunicationsStore` | `communications` | `__CommunicationsMigrations` | `Persistence/Migrations/Communications/` |
+| `IntegrationStore` | `integrations` | `__IntegrationsMigrations` | `Persistence/Migrations/Integrations/` |
 
-(`OperationsStore.cs:31`, `CommunicationsStore.cs:13,24`. `CLAUDE.md` and
-`docs/architecture.md` previously said two — there are three.)
+(`IntegrationStore.cs`, added by PF-6.10. `CLAUDE.md` and `docs/architecture.md` at various
+points said two or three — there are four.)
 
 A new module gets its own context, schema and history rather than joining an existing one, so
-the migration histories never interleave. Three files must stay in step when that happens, and
-missing one is the classic failure:
+the migration histories never interleave. Several files must stay in step when that happens,
+and missing one is the classic failure:
 
-- `DatabaseProvisioner.cs:14-19` — the migrate list, and `:22,25,30` — the store factories.
-- `src/PropFlow.Api/Program.cs:25-30` — the API's `AddDbContext` + `MigrationsHistoryTable` registrations.
-- `DesignTimeFactories.cs:9-25` — the `IDesignTimeDbContextFactory` `dotnet ef` needs.
+- `DatabaseProvisioner.cs` — the `MigrateAsync` list, the `Create<X>Store` factories, **and**
+  the `GRANT` block (`USAGE ON SCHEMA …` plus per-table verbs — least privilege, no `GRANT ALL`).
+- `src/PropFlow.Api/Program.cs` — the API's `AddDbContext` + `MigrationsHistoryTable` registrations.
+- `DesignTimeFactories.cs` — the `IDesignTimeDbContextFactory` `dotnet ef` needs.
+- `src/PropFlow.Api/DatabaseHealth.cs` — the per-schema table count in `DatabaseReadiness`.
+- `tests/PropFlow.IntegrationTests/DatabaseFixture.cs` — a `Store`-style accessor for the new
+  context so isolation tests can reach it on the restricted role.
 
 ## Migrations
 

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Design;
 using PropFlow.Application;
 using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Identity;
+using PropFlow.Infrastructure.Integrations;
 
 namespace PropFlow.Infrastructure.Persistence;
 
@@ -21,6 +22,12 @@ public sealed class CommunicationsDesignFactory : IDesignTimeDbContextFactory<Co
 {
     public CommunicationsStore CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<CommunicationsStore>()
         .UseNpgsql(DesignConnection.Value, options => options.MigrationsHistoryTable("__CommunicationsMigrations", "communications")).Options,
+        new FixedTenantContext(Guid.Parse("00000000-0000-0000-0000-000000000001")));
+}
+public sealed class IntegrationsDesignFactory : IDesignTimeDbContextFactory<IntegrationStore>
+{
+    public IntegrationStore CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<IntegrationStore>()
+        .UseNpgsql(DesignConnection.Value, options => options.MigrationsHistoryTable("__IntegrationsMigrations", "integrations")).Options,
         new FixedTenantContext(Guid.Parse("00000000-0000-0000-0000-000000000001")));
 }
 internal static class DesignConnection

@@ -152,7 +152,7 @@ entities, and the integration abstraction exists (mocked).
 | PF-6.07 | "Needs Your Attention" home screen: Critical / Warning / Informational cards, each click-through to a filtered work view | web | L | PF-6.06 |
 | PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
 | PF-6.09 | Global search UI (keyboard-first) in web | web | M | PF-6.08 |
-| PF-6.10 | Integration adapter abstraction: canonical Property/Space/Person-Occupancy/Work/Asset objects, external ID + source system + last sync + sync status tracking; one mock adapter | application | L | PF-6.01 |
+| PF-6.10 | ✅ Integration adapter abstraction: `IIntegrationAdapter` + canonical Property/Space/Occupancy/WorkOrder/Asset records, `MockIntegrationAdapter`, `integrations` schema (Connections + RecordLinks) with forced RLS, external-id / source-system / last-sync / per-record sync-state tracking, `/api/integrations` (behind `Integrations.Manage`). Reconciling external records into the domain tables is deferred — see `docs/followups.md`. | application | L | PF-6.01 |
 | PF-6.11 | Integration Health screen foundation: connected system, status, last successful sync, failure count, unresolved conflicts | web | M | PF-6.10 |
 | PF-6.12 | Keep unusable reports/integrations out of main navigation until functional | web | S | PF-6.11 |
 | PF-6.13 | e2e: repeat HVAC repair demo workflow in CI | tests | M | PF-6.05 |

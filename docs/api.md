@@ -223,3 +223,33 @@ but ranks below any literal substring hit. Residents also match on email and pho
 serial number and model, employees on email. Every query runs through the tenant query filter
 and row-level security, so results never cross an organization. The result set is capped at
 `limit` hits total across all types.
+
+## Integrations (milestone 6)
+
+Adapters pull records from external property-management systems and PropFlow tracks what each
+one has seen. Milestone 6 ships the abstraction and one mock adapter; it records the external
+side only — reconciling those records into Properties / Spaces / Work / Assets is a later task.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/integrations/sources | `Integrations.Manage`; the adapters this deployment knows (`{ sourceSystem, displayName }`) |
+| GET | /api/integrations | `Integrations.Manage`; every connection with its health snapshot |
+| GET | /api/integrations/{id} | `Integrations.Manage`; one connection's health, or 404 |
+| GET | /api/integrations/{id}/records | `Integrations.Manage`; the external records the connection is tracking, newest sighting first, or 404 |
+| POST | /api/integrations | `Integrations.Manage` + CSRF; `{ sourceSystem, displayName }`; 201, 400 for an unknown source system or invalid text, 409 if a connection to that source already exists |
+| POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
+| POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |
+| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull; 200 with a sync report, 404, or 409 if the connection is disabled |
+
+A health snapshot is `{ id, sourceSystem, displayName, isEnabled, lastAttemptedAt,
+lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords }`. A sync report
+is `{ outcome, seen, added, updated, failed, error }` where `outcome` is `Completed` / `Failed`
+/ `NotFound` / `Disabled`. `added` + `updated` are relative to what the connection had already
+seen, keyed by a content hash, so re-syncing an unchanged source reports zeros. `failed` is
+always 0 until reconciliation lands. A tracked record is `{ kind, externalId, contentHash,
+syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy` / `WorkOrder`
+/ `Asset` and `syncState` is `Pending` / `Synced` / `Failed`.
+
+`Integrations.Manage` is granted to Organization Admin and Property Manager only. The
+Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
+its records never cross an organization.
