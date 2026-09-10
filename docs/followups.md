@@ -17,9 +17,10 @@ in `b31b864`; PF-3.27 (`baf4498`, PR #98) shipped after the issues were cut. Not
 waiting on the milestone any more — the rows that remain are held up by a specific dependency, not
 by M3 as a whole.
 
-`develop` and `main` are level at `aeee32d` — PR #104 promoted PF-6.10, PF-3.27, PF-4.07 and the
-2026-09-10 audit follow-ups (A-1..A-7). Nothing is flag-gated and nothing is held back on a feature
-branch, so `main` is the whole truth as of this writing.
+`develop` and `main` are level: PR #104 promoted PF-6.10, PF-3.27, PF-4.07 and the 2026-09-10 audit
+follow-ups (A-1..A-7), and PR #105 the milestone-doc reconcile. Nothing is flag-gated and nothing is
+held back on a feature branch, so `main` is the whole truth. Re-check with
+`git rev-list --left-right --count origin/main...origin/develop` rather than trusting this line.
 
 | Item | Source | Owner | Blocked on |
 | --- | --- | --- | --- |
