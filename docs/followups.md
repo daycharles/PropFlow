@@ -13,7 +13,8 @@ Owner `daycdev` = the M3 vertical-slice work. "unassigned" = no owner yet.
 ## M4 — what's left
 
 M3 is complete (all `#6`–`#31` closed, promoted to `main`); PF-3.27 shipped after the issues
-were cut and so has none. **PF-4.01–4.07 are done** (PF-4.03 + PF-4.06 landed in PR #108).
+were cut and so has none. **PF-4.01–4.07 and PF-4.10 are done** (PF-4.03 + PF-4.06 landed in
+PR #108; PF-4.10 — the deterministic `TidewaterSeed` — in PR #114).
 
 `develop` and `main` are level, nothing is flag-gated and nothing is held back on a feature branch,
 so `main` is the whole truth. Re-check with
@@ -26,7 +27,6 @@ What remains in M4:
 | PF-4.06 (atomicity half) — enqueue the outbox row in the same transaction as the triggering Operations change | audit-communications C11 (accepted) | unassigned | `POST /api/work/{id}/message` enqueues atomically *within that call*, but there is still no path that enqueues from a **work status/schedule change**. That (and idempotent real providers) is where C11 bites — needs the M5 event wiring (PF-5.03) |
 | PF-4.08 (#39) — web "assign & notify" flow (vendor + schedule window + resident message + confirm + summary) | backlog.md M4 | unassigned | Buildable: PF-4.07 ✓, PF-4.03 ✓, M3 web bulk-vendor flow on `main`. Substantial front-end feature |
 | PF-4.09 (#40) — mobile-responsive Work list and detail, large touch targets | backlog.md M4 | unassigned | Buildable now — a responsiveness pass over the M3 `apps/web` work list and `work/[id]` detail |
-| PF-4.10 (#41) — full Tidewater demo seed (~3 properties, ~80 spaces, ~70 residents, 6 vendors, ~100 work items, ~60 assets, ≥18 pest-control) | backlog.md M4 | unassigned | All the domain exists (residents/occupancy/assets/hierarchy). Standalone; unblocks PF-4.11. `infra` / the `PropFlow.Admin` seed |
 | PF-4.11 (#42) — e2e: bulk pest-control assignment + notify demo workflow in CI | backlog.md M4 | unassigned | Needs PF-4.08 + PF-4.10 |
 | PF-4.12 (#43) — tests: outbox idempotency, template rendering, consent respected | backlog.md M4 | mday440 | Outbox idempotency + rendering + consent are covered (`CommunicationsTests`, `ResidentMessageTests`, `TemplateRendererTests`). Left: an explicit "no duplicate send on retry after a transient failure" scenario end-to-end |
 
@@ -132,3 +132,4 @@ Kept so the same gap is not re-filed. Each row names the evidence checked when i
 | Bulk endpoints: null `items` entry → 500, undefined enum accepted, note skipped concurrency, schedule no-op noise (audit 2nd pass B-1..B-5) | 2026-09-10, PF-4.07 review | `ValidBatch` rejects null/empty-guid entries; `Enum.IsDefined` guards on `bulk/status`, `bulk/priority`, and `POST`/`PUT /api/work`; `BulkApplyAsync` does an explicit up-front `xmin` check for every item; `ApplyOne` skips a true schedule no-op. Tests in `BulkWorkActionsTests` |
 | `TimelineEntry` generalization was incomplete (PF-3.10 tech debt) | 2026-09-10, PF-3.10 finish | `TimelineEntry` now has one shape — `Record` + typed `From(VendorAssigned/EmployeeAssigned/WorkReopened)` factories, all populating `EventType`/`OldValue`/`NewValue`/`Changes`. Dead `Create()` removed; legacy `PreviousVendorId`/`VendorId` columns dropped (`20260910122538_TimelineDropLegacyVendorColumns`). Unblocks PF-4.06 |
 | Resident-message send defeated outbox de-dup; `queued` was always true (audit 3rd pass C-1/C-2) | 2026-09-10, #108 review | Idempotency key is now `work-message:{workId}:{templateId}:{channel}:{hour}` and the 202 body reports the real `EnqueueAsync` result. `A_double_submit_of_the_same_template_is_deduped` + `A_control_character_reaching_a_rendered_email_subject_is_a_400` (`ResidentMessageTests`) |
+| `seed-demo` seeds only a 12-item toy dataset — no realistic demo data (PF-4.10) | 2026-09-10, PF-4.10 | `tools/PropFlow.Admin/TidewaterSeed.cs` — deterministic generator: 3 properties, 10 buildings, ~80 spaces, ~70 residents with mixed consent, 6 vendors, 5 employees, 6 categories, ~70 assets, 100 work items across every status/priority with ~20 pest-control and a third of open items overdue. Verified end-to-end against a real PostgreSQL 17 + the booted API. The isolation tenant keeps the 12-item seed |
