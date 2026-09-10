@@ -19,8 +19,8 @@ public static class IntegrationEndpoints
         group.MapGet("/{id:guid}", async (Guid id, IIntegrationOperations operations, CancellationToken ct) =>
             await operations.GetAsync(id, ct) is { } health ? Results.Ok(health) : Results.NotFound());
 
-        group.MapGet("/{id:guid}/records", async (Guid id, IIntegrationOperations operations, CancellationToken ct) =>
-            await operations.RecordsAsync(id, ct) is { } records ? Results.Ok(records) : Results.NotFound());
+        group.MapGet("/{id:guid}/records", async (Guid id, int? page, int? pageSize, IIntegrationOperations operations, CancellationToken ct) =>
+            await operations.RecordsAsync(id, page ?? 1, pageSize ?? 50, ct) is { } records ? Results.Ok(records) : Results.NotFound());
 
         group.MapPost("/", async (CreateConnectionRequest request, IIntegrationOperations operations, CancellationToken ct) =>
         {

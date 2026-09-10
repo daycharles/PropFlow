@@ -52,20 +52,25 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         return IntegrationWriteOutcome.Updated;
     }
 
-    // A real source system can have far more records than a single response should carry. Cap
-    // it; the caller (and PF-6.11) pages or filters when the full set is needed.
-    private const int MaxRecordsReturned = 500;
+    // A real source system can have far more records than one response should carry, so the
+    // detail view pages through them.
+    public const int MaxPageSize = 200;
 
-    public async Task<IReadOnlyList<ExternalRecordLink>?> RecordsAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<RecordsPage?> RecordsAsync(Guid id, int page, int pageSize, CancellationToken cancellationToken)
     {
         if (!await store.Connections.AnyAsync(c => c.Id == id, cancellationToken)) return null;
-        return await store.RecordLinks.AsNoTracking()
-            .Where(r => r.ConnectionId == id)
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var rows = store.RecordLinks.AsNoTracking().Where(r => r.ConnectionId == id);
+        var total = await rows.CountAsync(cancellationToken);
+        var items = await rows
             .OrderByDescending(r => r.LastSeenAt)
             .ThenBy(r => r.Kind)
             .ThenBy(r => r.ExternalId)
-            .Take(MaxRecordsReturned)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
+        return new RecordsPage(items, total, page, pageSize);
     }
 
     public async Task<SyncReport> SyncAsync(Guid id, CancellationToken cancellationToken)

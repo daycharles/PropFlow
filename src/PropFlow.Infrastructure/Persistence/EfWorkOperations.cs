@@ -71,6 +71,7 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     public async Task<WorkItem> CreateAsync(CreateWorkCommand c, CancellationToken ct)
     {
         if (!await store.Properties.AnyAsync(x => x.Id == c.PropertyId, ct)) throw new KeyNotFoundException("Property not found.");
+        await EnsureChildReferencesAsync(c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, ct);
         var work = new WorkItem(store.OrganizationId, Guid.NewGuid(), c.Title, c.PropertyId, c.ActorId, c.WorkType);
         work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes); work.Publish(clock.GetUtcNow());
         store.WorkItems.Add(work); store.Timeline.Add(Event(work, c.ActorId, "WorkCreated", null, work.Title)); await store.SaveChangesAsync(ct); return work;
@@ -79,6 +80,8 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     public async Task<WorkWriteOutcome> UpdateAsync(Guid id, UpdateWorkCommand c, CancellationToken ct)
     {
         var work = await store.WorkItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (work is null) return WorkWriteOutcome.NotFound;
+        if (!await store.Properties.AnyAsync(x => x.Id == c.PropertyId, ct)) throw new KeyNotFoundException("Property not found.");
+        await EnsureChildReferencesAsync(c.BuildingId, c.SpaceId, c.CategoryId, c.ResidentId, ct);
         store.Entry(work).Property("Version").OriginalValue = c.Version;
         var now = clock.GetUtcNow(); var oldTitle = work.Title; var oldPriority = work.Priority; var oldStatus = work.Status; var oldStart = work.ScheduledStart;
         work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes);
@@ -212,4 +215,15 @@ public sealed class EfWorkOperations(OperationsStore store, TimeProvider clock) 
     }
 
     private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue, DateTimeOffset? at = null) => TimelineEntry.Record(work.OrganizationId, actor, at ?? clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));
+
+    // The optional location/category refs on a work item carry no FK (they are nullable and
+    // cross several tables), so a create/update could otherwise stash a dangling or foreign id.
+    // Each lookup runs through the tenant query filter, so a foreign id reads as "not found".
+    private async Task EnsureChildReferencesAsync(Guid? buildingId, Guid? spaceId, Guid? categoryId, Guid? residentId, CancellationToken ct)
+    {
+        if (buildingId is { } b && !await store.Buildings.AnyAsync(x => x.Id == b, ct)) throw new ArgumentException("Unknown building.", nameof(buildingId));
+        if (spaceId is { } s && !await store.Spaces.AnyAsync(x => x.Id == s, ct)) throw new ArgumentException("Unknown space.", nameof(spaceId));
+        if (categoryId is { } cat && !await store.Categories.AnyAsync(x => x.Id == cat, ct)) throw new ArgumentException("Unknown category.", nameof(categoryId));
+        if (residentId is { } r && !await store.Residents.AnyAsync(x => x.Id == r, ct)) throw new ArgumentException("Unknown resident.", nameof(residentId));
+    }
 }

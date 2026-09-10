@@ -28,10 +28,10 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/saved-views/ | Work.Read + CSRF; creates a saved view for the caller; 201, or 400 on invalid name/JSON |
 | PUT | /api/saved-views/{id} | Work.Read + CSRF; replaces name/filters/columns/default; 200, 400, or 404 |
 | DELETE | /api/saved-views/{id} | Work.Read + CSRF; 204 or 404 |
-| GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup |
+| GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup; optional `?q=` name filter; flat array capped at 500 |
 | GET | /api/vendors/{id} | Work.Read; vendor lookup, or 404 |
-| GET | /api/employees/ | Work.Read; tenant-scoped employee lookup |
-| GET | /api/properties/ | Work.Read; tenant-scoped property lookup |
+| GET | /api/employees/ | Work.Read; tenant-scoped employee lookup; optional `?q=` name filter; capped at 500 |
+| GET | /api/properties/ | Work.Read; tenant-scoped property lookup; optional `?q=` name filter; capped at 500 |
 | GET | /api/properties/{id} | Work.Read; property with its buildings and spaces, or 404 |
 | GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name |
 | POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category |
@@ -249,9 +249,11 @@ Each hit is `{ "type", "id", "label", "sublabel", "score" }`. `type` is one of `
 is a secondary identifier where one exists (a resident's email or phone, an asset's serial
 number, an employee's email) and is otherwise `null`.
 
-Matching is case-insensitive. A substring match (backed by `pg_trgm` GIN indexes) always
-outranks a trigram-similarity-only match, so a query that is a typo of a name still finds it
-but ranks below any literal substring hit. Residents also match on email and phone, assets on
+Matching is case-insensitive and index-backed: both the substring match and the
+word-similarity (typo) match ride the `gin_trgm_ops` indexes — the similarity floor is 0.25,
+applied per search via a transaction-local `pg_trgm.word_similarity_threshold`. A substring
+match always outranks a similarity-only match, so a query that is a typo of a name still finds
+it but ranks below any literal substring hit. Residents also match on email and phone, assets on
 serial number and model, employees on email. Every query runs through the tenant query filter
 and row-level security, so results never cross an organization. The result set is capped at
 `limit` hits total across all types.
@@ -267,7 +269,7 @@ side only — reconciling those records into Properties / Spaces / Work / Assets
 | GET | /api/integrations/sources | `Integrations.Manage`; the adapters this deployment knows (`{ sourceSystem, displayName }`) |
 | GET | /api/integrations | `Integrations.Manage`; every connection with its health snapshot |
 | GET | /api/integrations/{id} | `Integrations.Manage`; one connection's health, or 404 |
-| GET | /api/integrations/{id}/records | `Integrations.Manage`; the external records the connection is tracking, newest sighting first, or 404 |
+| GET | /api/integrations/{id}/records | `Integrations.Manage`; a page of the external records the connection tracks, newest sighting first; `?page=` / `?pageSize=` (1–200, default 50); `{ items, totalCount, page, pageSize }`, or 404 |
 | POST | /api/integrations | `Integrations.Manage` + CSRF; `{ sourceSystem, displayName }`; 201, 400 for an unknown source system or invalid text, 409 if a connection to that source already exists |
 | POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
 | POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |

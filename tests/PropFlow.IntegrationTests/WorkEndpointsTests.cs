@@ -284,6 +284,43 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Creating_or_updating_work_rejects_a_child_reference_outside_the_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        Guid categoryId = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Categories.Add(new WorkCategory(s.OrganizationA, categoryId, "Pests", 1));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        // A category id that belongs to no one -> 400, nothing created.
+        var bad = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, categoryId = Guid.NewGuid()
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        // Org B's space id -> also 400 (tenant filter makes it read as unknown).
+        var foreign = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, spaceId = s.SpaceB
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
+
+        // A real category from this tenant -> created.
+        var ok = await s.Client.PostAsJsonAsync("/api/work/", new
+        {
+            title = "Roach treatment", propertyId = s.PropertyA, categoryId
+        });
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(1, await verify.WorkItems.CountAsync(x => x.Title == "Roach treatment"));
+    }
+
+    [Fact]
     public async Task Updating_terminal_work_returns_400_and_cannot_reopen_it()
     {
         await using var s = await fixture.CreateScenarioAsync();
