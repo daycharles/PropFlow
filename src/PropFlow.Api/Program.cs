@@ -8,10 +8,12 @@ using Microsoft.EntityFrameworkCore;
 using PropFlow.Api;
 using PropFlow.Application;
 using PropFlow.Application.Communications;
+using PropFlow.Application.Integrations;
 using PropFlow.Application.Search;
 using PropFlow.Application.Work;
 using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Identity;
+using PropFlow.Infrastructure.Integrations;
 using PropFlow.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,11 +53,16 @@ builder.Services.AddDbContext<OperationsStore>(options => options.UseNpgsql(conn
     postgres => postgres.MigrationsHistoryTable("__OperationsMigrations", "operations")));
 builder.Services.AddDbContext<CommunicationsStore>(options => options.UseNpgsql(connection,
     postgres => postgres.MigrationsHistoryTable("__CommunicationsMigrations", "communications")));
+builder.Services.AddDbContext<IntegrationStore>(options => options.UseNpgsql(connection,
+    postgres => postgres.MigrationsHistoryTable("__IntegrationsMigrations", "integrations")));
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
+builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
+builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
+builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
 builder.Services.AddSingleton<IMessageSender, MockSmsSender>();
 builder.Services.AddSingleton<IMessageSender, MockEmailSender>();
@@ -159,6 +166,7 @@ app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapSearchEndpoints();
 app.MapSavedViewEndpoints();
+app.MapIntegrationEndpoints();
 app.Run();
 
 public partial class Program { }
