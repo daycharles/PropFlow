@@ -20,6 +20,7 @@ type ScheduleOutcome =
 
 type NotifyOutcome =
   | { kind: "skipped" }
+  | { kind: "blocked" }
   | {
       kind: "done";
       queued: number;
@@ -151,7 +152,12 @@ export function AssignNotifyFlow({
     }
 
     let notifyOutcome: NotifyOutcome = { kind: "skipped" };
-    if (notify && templateId) {
+    // If a window was requested but scheduling failed, don't send "visit scheduled" messages
+    // that would render an empty schedule — the summary calls this out.
+    const scheduleBlockedNotify = Boolean(start) && schedule.kind === "failed";
+    if (notify && templateId && scheduleBlockedNotify) {
+      notifyOutcome = { kind: "blocked" };
+    } else if (notify && templateId) {
       setProgress("Notifying residents…");
       const results = await Promise.allSettled(
         ids.map((id) => api.work.sendMessage(id, templateId)),
@@ -195,9 +201,16 @@ export function AssignNotifyFlow({
         {step === "form" && (
           <>
             <h2 id="assign-notify-title">Assign &amp; notify</h2>
-            <p>
-              {count} {noun} selected.
-            </p>
+            {count === 0 ? (
+              <p className="message" role="alert">
+                None of the selected work is in the current list. Clear the filters or refresh, then
+                try again.
+              </p>
+            ) : (
+              <p>
+                {count} {noun} selected.
+              </p>
+            )}
             <label>
               Vendor
               <select value={vendorId} onChange={(event) => setVendorId(event.target.value)}>
@@ -362,6 +375,11 @@ export function AssignNotifyFlow({
               {outcome.notify.kind === "done" && (
                 <li className={outcome.notify.failed > 0 ? "message" : "success"}>
                   {describeNotify(outcome.notify)}
+                </li>
+              )}
+              {outcome.notify.kind === "blocked" && (
+                <li className="message">
+                  Residents were not messaged because scheduling did not complete.
                 </li>
               )}
             </ul>

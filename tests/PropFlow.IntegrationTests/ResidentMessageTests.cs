@@ -161,6 +161,37 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task A_scheduled_visit_renders_in_the_property_time_zone()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+
+        // 14:00 UTC on 2026-07-01 is 10:00 in America/New_York (EDT), the PropertyA zone.
+        var start = new DateTimeOffset(2026, 7, 1, 14, 0, 0, TimeSpan.Zero);
+        var workId = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, workId, "Quarterly pest treatment", s.PropertyA, s.AdminA);
+            work.SetLocation(s.PropertyA, null, null, s.ResidentA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.AssignVendor(s.VendorA);
+            work.Schedule(start, start.AddHours(2));
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+        var templateId = await SeedSmsTemplateAsync(s, "Your visit is at {{ schedule.start }}.");
+
+        Assert.Equal(HttpStatusCode.Accepted,
+            (await s.Client.PostAsJsonAsync($"/api/work/{workId}/message", new { templateId })).StatusCode);
+
+        var expected = TimeZoneInfo.ConvertTime(start, TimeZoneInfo.FindSystemTimeZoneById("America/New_York")).ToString("f");
+        await using var comms = s.Comms(s.OrganizationA);
+        var message = await comms.OutboxMessages.SingleAsync(x => x.WorkId == workId);
+        Assert.Equal($"Your visit is at {expected}.", message.Body);
+        Assert.Contains("10:00", message.Body);
+    }
+
+    [Fact]
     public async Task A_template_placeholder_with_no_value_is_a_400()
     {
         await using var s = await fixture.CreateScenarioAsync();
