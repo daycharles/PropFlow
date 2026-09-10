@@ -283,6 +283,56 @@ public sealed class WorkEndpointsTests(DatabaseFixture fixture)
         Assert.Equal(WorkStatus.Completed, stored.Status);
     }
 
+    [Fact]
+    public async Task Updating_terminal_work_returns_400_and_cannot_reopen_it()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var completed = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var work = new WorkItem(s.OrganizationA, completed, "Finished repair", s.PropertyA, s.AdminA);
+            work.Publish(DateTimeOffset.UtcNow);
+            work.AssignVendor(s.VendorA);
+            work.ChangeStatus(WorkStatus.Completed, DateTimeOffset.UtcNow);
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+        var version = await VersionAsync(s, completed);
+
+        var response = await s.Client.PutAsJsonAsync($"/api/work/{completed}", new
+        {
+            title = "Finished repair", description = (string?)null, categoryId = (Guid?)null,
+            priority = "Normal", propertyId = s.PropertyA, buildingId = (Guid?)null, spaceId = (Guid?)null,
+            residentId = (Guid?)null, dueDate = (string?)null, cost = (decimal?)null,
+            internalNotes = (string?)null, residentVisibleNotes = (string?)null, status = (string?)null,
+            scheduledStart = DateTimeOffset.UtcNow.AddDays(1), scheduledEnd = (DateTimeOffset?)null, version
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await using var verify = s.Store(s.OrganizationA);
+        Assert.Equal(WorkStatus.Completed, (await verify.WorkItems.SingleAsync(x => x.Id == completed)).Status);
+    }
+
+    [Fact]
+    public async Task Work_list_search_treats_like_metacharacters_literally()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            var propertyId = AddProperty(store, s.OrganizationA);
+            store.WorkItems.Add(new WorkItem(s.OrganizationA, Guid.NewGuid(), "Unit a_b inspection", propertyId, s.AdminA));
+            store.WorkItems.Add(new WorkItem(s.OrganizationA, Guid.NewGuid(), "Unit axb inspection", propertyId, s.AdminA));
+            await store.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+
+        var result = await s.Client.GetFromJsonAsync<JsonElement>("/api/work/?search=a_b");
+        var titles = result.GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("title").GetString()).ToList();
+        Assert.Equal(["Unit a_b inspection"], titles);
+    }
+
     private static async Task<uint> VersionAsync(Scenario s, Guid workId)
     {
         var json = await s.Client.GetFromJsonAsync<JsonElement>($"/api/work/{workId}");

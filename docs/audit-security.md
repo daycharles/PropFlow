@@ -1,5 +1,8 @@
 # Security audit
 
+> Followed up by [`audit-2026-09-10.md`](audit-2026-09-10.md) (M3 slice + M6 + Integrations).
+> That pass fixed A-1..A-4, marked **M-3 resolved** (lockfile + CI), and left **M-1 open**.
+
 Full security audit of the codebase, 2026-09-09 (commit `a02bff7`). No Critical or High
 findings; no working cross-tenant data path. Tenant isolation (forced RLS + tenant policy +
 org FK + EF query filter + write guard on all 11 business tables, verified by the integration
@@ -31,10 +34,11 @@ ring) and optional `DataProtection:CertificatePath` / `DataProtection:Certificat
 or `Staging` without a key path**. `Development`/`Testing` keep the ephemeral default; local
 runs now set `ASPNETCORE_ENVIRONMENT=Development`. Covered by `DataProtectionStartupTests`.
 
-### M-3 — `apps/web` has no lockfile and is outside CI (Medium) — open
+### M-3 — `apps/web` has no lockfile and is outside CI (Medium) — resolved
 
-No `package-lock.json`; CI never runs `npm ci` / `npm audit` / `next build`. Non-reproducible
-frontend, no vulnerability scanning on browser-delivered code. Owned by the M3 web work.
+**Resolution (M3 slice):** `apps/web/package-lock.json` is committed; CI runs `npm ci`,
+`npm run format`, `npm run lint`, `npm run build` (`web` job) and a Playwright `e2e` job.
+`npm audit` is still not wired — a small follow-up.
 
 ### L-3 — No control-character guard on outbound message fields (Low now, High with real providers) — resolved
 

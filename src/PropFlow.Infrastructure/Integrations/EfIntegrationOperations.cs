@@ -52,6 +52,10 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         return IntegrationWriteOutcome.Updated;
     }
 
+    // A real source system can have far more records than a single response should carry. Cap
+    // it; the caller (and PF-6.11) pages or filters when the full set is needed.
+    private const int MaxRecordsReturned = 500;
+
     public async Task<IReadOnlyList<ExternalRecordLink>?> RecordsAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!await store.Connections.AnyAsync(c => c.Id == id, cancellationToken)) return null;
@@ -60,6 +64,7 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
             .OrderByDescending(r => r.LastSeenAt)
             .ThenBy(r => r.Kind)
             .ThenBy(r => r.ExternalId)
+            .Take(MaxRecordsReturned)
             .ToListAsync(cancellationToken);
     }
 

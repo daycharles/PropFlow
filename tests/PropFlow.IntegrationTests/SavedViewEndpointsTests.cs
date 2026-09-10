@@ -57,4 +57,18 @@ public sealed class SavedViewEndpointsTests(DatabaseFixture fixture)
         var views = await scenario.Client.GetFromJsonAsync<JsonElement[]>("/api/saved-views/");
         Assert.Equal("Second", Assert.Single(views!, x => x.GetProperty("isDefault").GetBoolean()).GetProperty("name").GetString());
     }
+
+    [Fact]
+    public async Task An_oversized_view_definition_is_rejected()
+    {
+        await using var scenario = await fixture.CreateScenarioAsync();
+        await scenario.LoginAsync();
+
+        var huge = new string('x', 9000);
+        var response = await scenario.Client.PostAsJsonAsync("/api/saved-views/", new
+        {
+            name = "Big", filters = new { note = huge }, columns = new[] { "title" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }
