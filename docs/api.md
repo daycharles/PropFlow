@@ -249,6 +249,9 @@ reject control characters (a resident name is a template substitution value).
 | GET | /api/assets/{id}/history | `Work.Read`; the asset plus every work item linked to it (newest first) and the roll-ups — `{ asset, ageInYears, underWarranty, workOrderCount, totalCost, history: [{ id, title, status, priority, categoryName, vendorName, createdAt, completedAt, cost }] }`; 404 for an unknown or foreign asset |
 | POST | /api/assets | `Assets.Manage` + CSRF; `kind`, `name`, `propertyId`, `spaceId`, and the optional make/model/serial, `installedOn`/`warrantyExpiresOn`/`expectedServiceLifeYears`, `condition`, `replacementCostEstimate`, `notes`; 201, 400 for invalid text / a warranty before installation / a foreign or unknown property or space |
 | PUT | /api/assets/{id} | `Assets.Manage` + CSRF; same body; the property and space are fixed at creation; 200, 400, or 404 |
+| GET | /api/assets/repeat-repair-policy | `Work.Read`; the organization's repeat-repair thresholds — `{ repairThreshold, windowDays, matchByCategory }`; returns the defaults (`3`, `120`, `false`) until one is set |
+| PUT | /api/assets/repeat-repair-policy | `Assets.Manage` + CSRF; upserts the single per-org policy; `repairThreshold` 2–50, `windowDays` 7–3650; 200 with the saved policy, or 400 out of range |
+| GET | /api/assets/{id}/repeat-repair | `Work.Read`; assess one asset against the current policy — `{ repairThreshold, windowDays, matchByCategory, repairCount, since, totalCostInWindow, isRepeatRepair }`; counts published work linked to the asset with `createdAt` within the window; optional `?categoryId=` narrows the count to matching work when `matchByCategory` is on; 404 for an unknown or foreign asset |
 
 `kind` is one of `Hvac`, `WaterHeater`, `Appliance`, `Roof`, `ElectricalPanel`,
 `PlumbingFixture`, `Generator`, `Other`; `condition` is `Unknown`/`New`/`Good`/`Fair`/`Poor`/

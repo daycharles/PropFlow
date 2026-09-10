@@ -27,6 +27,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
+    public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
@@ -124,6 +125,12 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.Conditions).HasColumnType("jsonb").IsRequired();
             entity.Property(x => x.Actions).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.IsEnabled, x.Trigger });
+        });
+        model.Entity<RepeatRepairPolicy>(entity =>
+        {
+            entity.ToTable("RepeatRepairPolicies");
+            // One policy per organization — the upsert in EfRepeatRepairDetector relies on it.
+            entity.HasIndex(x => x.OrganizationId).IsUnique();
         });
         model.Entity<TimelineEntry>(entity =>
         {
