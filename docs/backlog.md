@@ -2,11 +2,11 @@
 
 Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md](milestones.md)).
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
-implemented. **Milestone 3 is complete** — all 26 task issues closed and promoted to `main` in
-`b31b864` — see the M3 **Progress** note for what was carried forward rather than closed.
-**Milestone 4 is all but complete** — 11 of 12 tasks closed; only PF-4.06's atomicity half is
-carried forward (it waits on the M5 event wiring). **Milestones 5 and 6 are in flight in
-parallel.** This document is the source for GitHub milestones and issues.
+implemented. **Milestones 3, 4, 5 and 6 are complete and on `main`** — every task issue
+`#6`–`#67` is closed (PF-4.06's atomicity half is carried forward as a follow-up, not an open
+issue). Milestone 6 was built in parallel with milestone 5, so milestone number is not
+milestone order. **Milestone 7 (deployment and platform hardening) is the remaining track.**
+This document is the source for GitHub milestones and issues.
 
 Counts here drift; re-measure with `gh issue list --state all` rather than propagating them.
 
@@ -90,20 +90,19 @@ generalization, was closed by PF-3.10 in `c362bfd` (PR #107).
 assign a vendor, schedule a window, notify residents, confirm — completes as one fast operation
 with a success summary, durable communication dispatch, and a full seeded demo dataset.
 
-**Progress:** 7 of 12 tasks closed — PF-4.01, PF-4.02, PF-4.03, PF-4.04, PF-4.05, PF-4.06 and
-PF-4.07 (issues `#32`–`#38`). That is the resident/occupancy domain with per-channel consent, the
-`communications`-schema context with mock SMS/email senders, the transactional outbox and its
-at-most-once dispatcher, resident message templates rendered and queued through
-`POST /api/work/{id}/message`, communication records folded into the work timeline, and the
-extended bulk work actions. See [milestones.md](milestones.md) for what each one delivered.
+**Progress:** all 12 task issues (`#32`–`#43`) are closed and on `main`. That is the
+resident/occupancy domain with per-channel consent, the `communications`-schema context with mock
+SMS/email senders, the transactional outbox and its at-most-once dispatcher, resident message
+templates rendered and queued through `POST /api/work/{id}/message` and folded into the work
+timeline, the extended bulk work actions, the web assign &amp; notify flow, the mobile pass, the
+Tidewater demo seed, and the demo e2e + outbox/rendering/consent tests. See
+[milestones.md](milestones.md) for what each one delivered.
 
 Carry-forward and caveats the ✅ column cannot express: `add tag` is carved out of PF-4.07 pending
 the tag-vocabulary decision below; and PF-4.06 closed on its **read-side** half only — outbox rows
 carry `WorkId`/`ResidentVisible` and `GET /api/work/{id}/timeline` merges them in, but the
 audit-communications C11 atomicity half (enqueue inside the transaction of the *work event* that
-triggers it) is still deferred to the M5 event wiring. PF-4.10 landed the Tidewater demo seed and
-PF-4.08 the web assign &amp; notify flow, PF-4.09 the mobile pass, PF-4.11 the demo e2e and PF-4.12
-the outbox/rendering/consent tests. Every M4 task is done bar PF-4.06's atomicity half.
+triggers it) is tracked in [followups.md](followups.md).
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
@@ -131,17 +130,18 @@ workflows.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-5.01 | Property- and assignment-level authorization scope model (regional / technician / vendor); define before field access ships | application | L | PF-3.04 |
-| PF-5.02 | Grant `Technician` and `Vendor` capabilities scoped to assigned work / assigned property | application | M | PF-5.01 |
-| PF-5.03 | Technician "On The Way" status workflow: status transition, timeline event, triggers resident communication | application | M | PF-4.06, PF-5.02 |
-| PF-5.04 | Automation rules engine: persisted WHEN/IF/THEN rules over domain events, a predefined action set, evaluation on dispatch | application | XL (split) | PF-4.06 |
-| PF-5.05 | Automation rules admin UI (list, create, enable/disable) — predefined triggers/conditions/actions only | web | L | PF-5.04 |
-| PF-5.06 | Notes with explicit visibility (internal vs resident-visible) across API and web, consistently enforced | api | M | PF-3.19 |
-| PF-5.07 | Communication status (queued / sent / delivered / failed) shown inline in the work timeline | web | S | PF-4.06 |
-| PF-5.08 | Remaining authorized bulk actions from the handoff (send resident message, assign employee) wired to the bulk toolbar | api | M | PF-4.07 |
-| PF-5.09 | Technician mobile view: my assigned work, status changes, add note/photo | web | L | PF-5.02, PF-4.09 |
-| PF-5.10 | e2e: technician On The Way demo workflow in CI | tests | M | PF-5.03, PF-5.09 |
-| PF-5.11 | Tests: scope model denies cross-property/cross-assignment access for technician + vendor | tests | M | PF-5.01 |
+| PF-5.01 | ✅ Property- and assignment-level authorization scope model (regional / technician / vendor); define before field access ships | application | L | PF-3.04 |
+| PF-5.02 | ✅ Grant `Technician` and `Vendor` capabilities scoped to assigned work / assigned property | application | M | PF-5.01 |
+| PF-5.03 | ✅ Technician "On The Way" status workflow: status transition, timeline event, triggers resident communication | application | M | PF-4.06, PF-5.02 |
+| PF-5.04 | ✅ Automation rules engine: persisted WHEN/IF/THEN rules over domain events, a predefined action set, evaluation on dispatch | application | XL (split) | PF-4.06 |
+| PF-5.05 | ✅ Automation rules admin UI (list, create, enable/disable) — predefined triggers/conditions/actions only | web | L | PF-5.04 |
+| PF-5.06 | ✅ Notes with explicit visibility (internal vs resident-visible) across API and web, consistently enforced | api | M | PF-3.19 |
+| PF-5.07 | ✅ Communication status (queued / sent / delivered / failed) shown inline in the work timeline | web | S | PF-4.06 |
+| PF-5.08 | ✅ Remaining authorized bulk actions from the handoff (send resident message, assign employee) wired to the bulk toolbar | api | M | PF-4.07 |
+| PF-5.09 | ✅ Technician mobile view: my assigned work, status changes, add note/photo | web | L | PF-5.02, PF-4.09 |
+| PF-5.10 | ✅ e2e: technician On The Way demo workflow in CI | tests | M | PF-5.03, PF-5.09 |
+| PF-5.11 | ✅ Tests: scope model denies cross-property/cross-assignment access for technician + vendor | tests | M | PF-5.01 |
+| PF-5.12 | ✅ Expose the remaining authorized bulk actions on the work-list toolbar — a "Bulk edit…" flow (gated by `Work.Update`) that applies status, priority, schedule, resident/internal note or reopen to the selected batch via the existing bounded, all-or-nothing `/api/work/bulk/*` endpoints. Shows changed / unchanged / total on success and treats any rollback (409 / not-assignable) as a failure with nothing changed. `e2e/bulk-edit.spec.ts` covers status (desktop) and note (phone viewport). | web | M | PF-4.07, PF-5.08 |
 
 ---
 
@@ -159,8 +159,8 @@ entities, and the integration abstraction exists (mocked).
 | PF-6.03 | ✅ Asset detail page (`/assets/[id]`) with complete maintenance history. `GET /api/assets/{id}/history` returns the asset + every linked work item newest-first + roll-ups (`workOrderCount`, `totalCost`, `ageInYears`, `underWarranty`). The page shows the asset record, the roll-ups, and a history table linking each work item; reached from the work detail's "View asset maintenance history →" link. | web | M | PF-6.02 |
 | PF-6.04 | ✅ Configurable repeat-repair detection. Per-org `RepeatRepairPolicy` (threshold default 3, window default 120 days, category-similarity option), forced RLS, upserted via `GET`/`PUT /api/assets/repeat-repair-policy`. `IRepeatRepairDetector` counts published work linked to an asset within the window (narrowed to a matching category when the option is on); `GET /api/assets/{id}/repeat-repair` returns count, total cost in window and the `isRepeatRepair` flag. | application | M | PF-6.02 |
 | PF-6.05 | ✅ "Repeat Repair Warning" surface. `RepeatRepairWarning` component calls `GET /api/assets/{id}/repeat-repair` and, only when `isRepeatRepair`, shows repair count, total repair cost in the window and asset age. Full-width banner on the asset detail page; compact inline variant beside the work detail's asset picker (passes the work's `categoryId`). `ageInYears` added to the assessment response. | web | M | PF-6.04 |
-| PF-6.06 | ✅ Attention queue backend. `AttentionRules` (pure domain) evaluates seven rules — unassigned emergency, first-response SLA breach, overdue, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk — over each open work item. `IAttentionQueue` / `EfAttentionQueue` builds the tenant-scoped queue in three queries; `GET /api/attention` returns the findings (most urgent first) with per-severity distinct-work counts for PF-6.07's cards. Thresholds fixed in `AttentionThresholds` (not yet org-configurable). | application | L | PF-6.04 |
-| PF-6.07 | ✅ "Needs your attention" screen (`/attention`, in primary nav). Reads `GET /api/attention`; three severity cards (Critical / Warning / Informational) show the distinct-work counts and each toggles a filter on the item list below. Every item shows its reason, detail, property, priority, status and due date, and links to `/work/{id}`. | web | L | PF-6.06 |
+| PF-6.06 | ✅ Attention queue backend. `AttentionRules` (pure domain) evaluates seven rules — unassigned emergency, first-response SLA breach, overdue, waiting-on-vendor, waiting-on-resident, repeat repair, unit-turn-at-risk — over each open work item. `IAttentionQueue` / `EfAttentionQueue` builds the tenant-scoped queue in three queries; `GET /api/attention` returns one item per work item (most urgent first), each carrying every finding it tripped, with per-severity distinct-work counts for PF-6.07's cards — `AttentionQueueBuilder` derives those counts from the same rows and the same `HasSeverity` predicate the cards filter on, so a card cannot disagree with the list. Thresholds fixed in `AttentionThresholds` (not yet org-configurable). | application | L | PF-6.04 |
+| PF-6.07 | ✅ "Needs your attention" screen (`/attention`, in primary nav). Reads `GET /api/attention`; three severity cards (Critical / Warning / Informational) show the distinct-work counts and each toggles a filter on the item list below. Every item shows each reason it tripped with that reason's detail, plus property, priority, status and due date, and links to `/work/{id}`. | web | L | PF-6.06 |
 | PF-6.08 | ✅ Fuzzy global search across properties, buildings, spaces, residents, vendors, employees, categories, work orders, assets. `GET /api/search` behind `Work.Read`; `pg_trgm` substring + `word_similarity` ranking, GIN trigram indexes, tenant-scoped. UI is PF-6.09. | api | L | PF-6.01 |
 | PF-6.09 | ✅ Keyboard-first global search. `CommandSearch` palette mounted in the app shell — opens on `Cmd`/`Ctrl+K` anywhere (or `/` outside a field, or the header "Search" button), debounced calls to `GET /api/search`, `↑`/`↓` to move, `Enter` to open, `Esc` to close. Work → `/work/{id}`, Asset → `/assets/{id}`, Property/Space/Category → the work list filtered by that id (the list now seeds its query from the URL), other types → a work-list text search. | web | M | PF-6.08 |
 | PF-6.10 | ✅ Integration adapter abstraction: `IIntegrationAdapter` + canonical Property/Space/Occupancy/WorkOrder/Asset records, `MockIntegrationAdapter`, `integrations` schema (Connections + RecordLinks) with forced RLS, external-id / source-system / last-sync / per-record sync-state tracking, `/api/integrations` (behind `Integrations.Manage`). Reconciling external records into the domain tables is deferred — see `docs/followups.md`. | application | L | PF-6.01 |

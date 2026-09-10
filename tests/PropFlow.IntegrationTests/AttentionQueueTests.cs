@@ -18,6 +18,9 @@ public sealed class AttentionQueueTests(DatabaseFixture fixture)
         return work;
     }
 
+    private static IEnumerable<string> Reasons(JsonElement item) =>
+        item.GetProperty("findings").EnumerateArray().Select(f => f.GetProperty("reason").GetString()!);
+
     [Fact]
     public async Task The_queue_flags_open_work_grouped_by_severity_most_urgent_first()
     {
@@ -63,7 +66,7 @@ public sealed class AttentionQueueTests(DatabaseFixture fixture)
         Assert.Equal("Critical", items[1].GetProperty("severity").GetString());
         Assert.Equal("Warning", items[2].GetProperty("severity").GetString());
 
-        var reasons = items.Select(i => i.GetProperty("reason").GetString()).ToArray();
+        var reasons = items.SelectMany(Reasons).ToArray();
         Assert.Contains("UnassignedEmergency", reasons);
         Assert.Contains("SlaBreach", reasons);
         Assert.Contains("Overdue", reasons);
@@ -72,8 +75,10 @@ public sealed class AttentionQueueTests(DatabaseFixture fixture)
         foreach (var item in items)
         {
             Assert.NotEqual(Guid.Empty, item.GetProperty("workId").GetGuid());
-            Assert.False(string.IsNullOrWhiteSpace(item.GetProperty("detail").GetString()));
             Assert.Equal("Harbor Point Apartments", item.GetProperty("propertyName").GetString());
+            var findings = item.GetProperty("findings").EnumerateArray().ToArray();
+            Assert.NotEmpty(findings);
+            Assert.All(findings, f => Assert.False(string.IsNullOrWhiteSpace(f.GetProperty("detail").GetString())));
         }
     }
 
@@ -142,7 +147,67 @@ public sealed class AttentionQueueTests(DatabaseFixture fixture)
         var queue = await s.Client.GetFromJsonAsync<JsonElement>("/api/attention");
         Assert.Contains(
             queue.GetProperty("items").EnumerateArray(),
-            i => i.GetProperty("reason").GetString() == "RepeatRepair");
+            i => Reasons(i).Contains("RepeatRepair"));
+    }
+
+    /// <summary>
+    /// D3 (2026-09-10): the /attention Critical card read 6 while the filtered list read 8,
+    /// because the counts were of distinct work items and the rows were one per tripped rule.
+    /// The queue now carries one row per work item, and each count is exactly the number of rows
+    /// the matching severity card filters to.
+    /// </summary>
+    [Fact]
+    public async Task Each_severity_count_equals_the_rows_that_severity_filter_shows()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            // Critical, unassigned, still New for three days and past due: three Critical rules
+            // on ONE work item — the shape that made the card and the list disagree.
+            var emergency = Published(s.OrganizationA, "Gas odor investigation", s.PropertyA, s.AdminA,
+                now.AddDays(-3), WorkPriority.Critical);
+            emergency.SetDueDate(now.AddDays(-1));
+            store.WorkItems.Add(emergency);
+
+            // One Warning-only work item.
+            var overdue = Published(s.OrganizationA, "Repaint hallway", s.PropertyA, s.AdminA, now.AddDays(-10));
+            overdue.SetDueDate(now.AddDays(-2));
+            overdue.ChangeStatus(WorkStatus.InProgress, now.AddDays(-4));
+            store.WorkItems.Add(overdue);
+
+            // One Informational-only work item: on hold pending the resident, untouched for ten days.
+            var waiting = Published(s.OrganizationA, "Resident to confirm access", s.PropertyA, s.AdminA, now.AddDays(-20));
+            waiting.SetLocation(s.PropertyA, null, null, s.ResidentA);
+            waiting.ChangeStatus(WorkStatus.OnHold, now.AddDays(-10));
+            store.WorkItems.Add(waiting);
+
+            await store.SaveChangesAsync();
+        }
+
+        var queue = await s.Client.GetFromJsonAsync<JsonElement>("/api/attention");
+        var items = queue.GetProperty("items").EnumerateArray().ToArray();
+
+        int ShownUnder(string severity) => items.Count(i =>
+            i.GetProperty("findings").EnumerateArray()
+                .Any(f => f.GetProperty("severity").GetString() == severity));
+
+        Assert.Equal(ShownUnder("Critical"), queue.GetProperty("criticalCount").GetInt32());
+        Assert.Equal(ShownUnder("Warning"), queue.GetProperty("warningCount").GetInt32());
+        Assert.Equal(ShownUnder("Informational"), queue.GetProperty("informationalCount").GetInt32());
+
+        // Three work items, and the emergency really did trip three Critical rules at once.
+        Assert.Equal(3, items.Length);
+        Assert.Equal(1, queue.GetProperty("criticalCount").GetInt32());
+        Assert.Equal(1, queue.GetProperty("warningCount").GetInt32());
+        Assert.Equal(1, queue.GetProperty("informationalCount").GetInt32());
+
+        var emergencyItem = items.Single(i => i.GetProperty("title").GetString() == "Gas odor investigation");
+        Assert.Equal(
+            new[] { "Overdue", "SlaBreach", "UnassignedEmergency" },
+            Reasons(emergencyItem).Order().ToArray());
     }
 
     [Fact]

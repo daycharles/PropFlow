@@ -70,10 +70,13 @@ function NeedsAttention({ session }: { session: Session }) {
     Warning: queue?.warningCount ?? 0,
     Informational: queue?.informationalCount ?? 0,
   };
-  const total = counts.Critical + counts.Warning + counts.Informational;
+  // One row per work item, and the filter uses the same predicate the server counts with — a
+  // work item that trips rules at two severities shows under each card, counted once in each.
+  // Keep this in step with AttentionItem.HasSeverity (PropFlow.Application/Attention).
+  const total = queue?.items.length ?? 0;
   const shown = queue
     ? filter
-      ? queue.items.filter((item) => item.severity === filter)
+      ? queue.items.filter((item) => item.findings.some((finding) => finding.severity === filter))
       : queue.items
     : [];
 
@@ -138,7 +141,7 @@ function NeedsAttention({ session }: { session: Session }) {
           ) : (
             <ul className="attention-list">
               {shown.map((item) => (
-                <AttentionRow key={`${item.workId}-${item.reason}`} item={item} />
+                <AttentionRow key={item.workId} item={item} />
               ))}
             </ul>
           )}
@@ -152,11 +155,20 @@ function AttentionRow({ item }: { item: AttentionItem }) {
   return (
     <li className={`attention-row severity-${item.severity.toLowerCase()}`}>
       <div className="attention-row-main">
-        <span className="attention-reason">{reasonLabels[item.reason]}</span>
         <Link href={`/work/${item.workId}`}>
           <strong>{item.title}</strong>
         </Link>
-        <p className="attention-detail">{item.detail}</p>
+        <ul className="attention-findings">
+          {item.findings.map((finding) => (
+            <li
+              key={finding.reason}
+              className={`attention-finding finding-${finding.severity.toLowerCase()}`}
+            >
+              <span className="attention-reason">{reasonLabels[finding.reason]}</span>
+              <p className="attention-detail">{finding.detail}</p>
+            </li>
+          ))}
+        </ul>
       </div>
       <dl className="attention-row-meta">
         <div>

@@ -15,6 +15,8 @@ public sealed class CommunicationsOptionsTests
         Assert.Equal(TimeSpan.FromMinutes(2), options.RetryDelay);
         Assert.Equal(8, options.MaxDeliveryAttempts);
         Assert.Equal(TimeSpan.FromMinutes(5), options.StaleClaimTimeout);
+        Assert.Equal("Mock", options.SmsProvider);
+        Assert.Equal("Mock", options.EmailProvider);
     }
 
     [Fact]
@@ -36,5 +38,20 @@ public sealed class CommunicationsOptionsTests
         Assert.Equal(TimeSpan.FromMinutes(5), options.RetryDelay);
         Assert.Equal(3, options.MaxDeliveryAttempts);
         Assert.Equal(TimeSpan.FromMinutes(10), options.StaleClaimTimeout);
+    }
+
+    [Fact]
+    public void Real_provider_configuration_requires_its_credentials()
+    {
+        var options = new CommunicationsOptions { SmsProvider = "Twilio" };
+        var exception = Assert.Throws<InvalidOperationException>(() => options.Validate(productionOrStaging: true));
+        Assert.Contains("Twilio", exception.Message);
+    }
+
+    [Fact]
+    public void Unknown_provider_is_rejected()
+    {
+        var options = new CommunicationsOptions { EmailProvider = "Unknown" };
+        Assert.Throws<InvalidOperationException>(() => options.Validate(productionOrStaging: false));
     }
 }

@@ -7,6 +7,7 @@ public enum OutboxStatus
     Failed = 2,
     Sending = 3
 }
+public enum ProviderDeliveryStatus { Unknown = 0, Delivered = 1, Failed = 2 }
 
 // A queued resident message. Enqueued in the transaction that triggers it, then delivered out
 // of band by the dispatcher. Idempotency is enforced per organization by the idempotency key;
@@ -64,6 +65,20 @@ public sealed class OutboxMessage : TenantEntity
     public DateTimeOffset? LastAttemptAt { get; private set; }
     public string? ProviderReference { get; private set; }
     public string? FailureReason { get; private set; }
+    public ProviderDeliveryStatus ProviderDeliveryStatus { get; private set; }
+    public DateTimeOffset? ProviderUpdatedAt { get; private set; }
+
+    public void ApplyProviderCallback(ProviderDeliveryStatus status, string? failureReason, DateTimeOffset at)
+    {
+        if (status == ProviderDeliveryStatus.Unknown) throw new ArgumentException("A terminal provider status is required.", nameof(status));
+        if (status == ProviderDeliveryStatus.Failed && string.IsNullOrWhiteSpace(failureReason))
+            throw new ArgumentException("A failed callback requires a failure reason.", nameof(failureReason));
+        var occurredAt = at.ToUniversalTime();
+        if (ProviderUpdatedAt is { } prior && prior >= occurredAt) return;
+        ProviderDeliveryStatus = status;
+        ProviderUpdatedAt = occurredAt;
+        if (status == ProviderDeliveryStatus.Failed) FailureReason = failureReason!.Trim();
+    }
 
     // Pending: eligible once RetryDelay has elapsed since the last attempt (immediately on the
     // first). Sending: eligible only if the prior claim has gone stale.

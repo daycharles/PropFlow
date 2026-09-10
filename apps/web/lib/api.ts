@@ -134,6 +134,11 @@ export type AttentionReason =
   | "WaitingOnResident"
   | "RepeatRepair"
   | "UnitTurnAtRisk";
+export type AttentionFinding = {
+  reason: AttentionReason;
+  severity: AttentionSeverity;
+  detail: string;
+};
 export type AttentionItem = {
   workId: string;
   title: string;
@@ -142,9 +147,9 @@ export type AttentionItem = {
   status: string;
   priority: string;
   dueDate?: string | null;
-  reason: AttentionReason;
+  // The most urgent severity among findings; findings carry every rule this work item tripped.
   severity: AttentionSeverity;
-  detail: string;
+  findings: AttentionFinding[];
 };
 export type AttentionQueue = {
   items: AttentionItem[];
@@ -412,6 +417,47 @@ export const api = {
           scheduledEnd: input.scheduledEnd ?? null,
           items: bulkItems(input),
         }),
+      }),
+    bulkStatus: (input: {
+      workIds: string[];
+      status: string;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: input.status, items: bulkItems(input) }),
+      }),
+    bulkPriority: (input: {
+      workIds: string[];
+      priority: string;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/priority", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: input.priority, items: bulkItems(input) }),
+      }),
+    bulkNote: (input: {
+      workIds: string[];
+      note: string;
+      internal: boolean;
+      concurrencyTokens?: Record<string, string>;
+    }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: input.note,
+          internal: input.internal,
+          items: bulkItems(input),
+        }),
+      }),
+    bulkReopen: (input: { workIds: string[]; concurrencyTokens?: Record<string, string> }) =>
+      mutation<BulkAssignmentResult>("/api/work/bulk/reopen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: bulkItems(input) }),
       }),
     // POST /api/work/{id}/message — queue one resident message for this work item's resident.
     // 202 { queued } on success; the caller classifies 4xx (no resident / no consent / etc.).

@@ -34,11 +34,17 @@ backlog decision, not a drive-by.
 
 ## Playwright has no `webServer`
 
-`apps/web/playwright.config.ts` defines `testDir: ./e2e`, a chromium project, and a `baseURL` of
-`http://127.0.0.1:3000` — and **no `webServer` block** (`playwright.config.ts:3-16`). Nothing
-starts the app for you. The API and `next dev` must already be running before `npm run e2e`; the
-`e2e` CI job does that by hand at `.github/workflows/ci.yml:70-78`. Override the target with
-`PLAYWRIGHT_BASE_URL`.
+`apps/web/playwright.config.ts` defines `testDir: ./e2e`, a chromium project, a `baseURL` of
+`http://127.0.0.1:3000` and a `globalSetup` — and **no `webServer` block**
+(`playwright.config.ts:3-20`). Nothing starts the app for you. The API and `next dev` must
+already be running before `npm run e2e`; the `e2e` CI job does that by hand at
+`.github/workflows/ci.yml:106-126`. Override the target with `PLAYWRIGHT_BASE_URL`.
+
+The `globalSetup` (`e2e/global-setup.ts`) starts nothing either: it GETs each route in
+`lib/navigation.ts` plus `/work/[id]` and `/assets/[id]` once, so `next dev`'s on-demand compile
+happens before the suite instead of inside the first spec's 10s `expect` timeout — the failure
+mode was three specs red with `Compiling` / `Loading…` on screen. A route it cannot reach is
+logged and skipped, never fatal.
 
 ## Always go through the Next proxy
 

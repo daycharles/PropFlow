@@ -44,6 +44,7 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.Property(x => x.ProviderReference).HasMaxLength(200);
             entity.Property(x => x.FailureReason).HasMaxLength(1000);
+            entity.Property(x => x.ProviderDeliveryStatus).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.Property<uint>("Version").IsRowVersion();
             entity.HasIndex(x => new { x.OrganizationId, x.IdempotencyKey }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });

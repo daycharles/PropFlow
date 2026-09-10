@@ -554,8 +554,30 @@ function TechnicianQuickActions({
 function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
+/**
+ * Format a stored UTC instant for an `<input type="datetime-local">`, which reads and writes
+ * LOCAL wall-clock time and carries no offset.
+ *
+ * `toISOString().slice(0, 16)` was the defect: it emits UTC digits, so a scheduled visit stored
+ * as 2026-09-15T13:00Z rendered as "13:00" in the input even at UTC-4, where the user had typed
+ * 09:00. Worse than cosmetic — the onChange handlers at :366 and :379 parse a bare
+ * `datetime-local` string as local and convert back with `toISOString()`, so re-confirming the
+ * schedule the user was shown re-read those UTC digits as local and pushed the stored instant
+ * forward by the offset on every pass.
+ *
+ * The local getters below are the exact inverse of that write path. Each one reports the local
+ * wall-clock field of the instant, so the platform resolves the UTC offset — including a DST
+ * change, where the offset differs from today's — and there is no `getTimezoneOffset()`
+ * arithmetic whose sign can be inverted. Every field is zero-padded: `getMonth()` is 0-based and
+ * the rest are unpadded numbers, and a local midnight must render as "00:00", not "0:0".
+ */
 function dateTimeInput(value?: string | null) {
-  return value ? new Date(value).toISOString().slice(0, 16) : "";
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number, width = 2) => String(part).padStart(width, "0");
+  const day = `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${day}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(

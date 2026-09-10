@@ -307,11 +307,17 @@ and row-level security, so results never cross an organization. The result set i
 | --- | --- | --- |
 | GET | /api/attention | `Work.Read`; the actionable attention queue for the tenant — `{ items: [...], criticalCount, warningCount, informationalCount }` |
 
-Each item is `{ workId, title, propertyId, propertyName, status, priority, dueDate, reason, severity, detail }`.
-One open work item can produce several items — one per rule it trips. Items are ordered by
-`severity` (Critical → Warning → Informational), then soonest `dueDate`, then work id. The three
-counts are of **distinct work items** at each severity, so a work item flagged both Critical and
-Warning is counted in each.
+Each item is
+`{ workId, title, propertyId, propertyName, status, priority, dueDate, severity, findings }`,
+and each entry in `findings` is `{ reason, severity, detail }`. There is **one item per work
+item**, however many rules it trips; `findings` carries them all, most urgent first, and the
+item's `severity` is the most urgent among them. Items are ordered by `severity`
+(Critical → Warning → Informational), then soonest `dueDate`, then work id.
+
+The three counts are of **distinct work items** with at least one finding at that severity, so a
+work item flagged both Critical and Warning is counted in each — and each count is exactly the
+number of items whose `findings` contain that severity, which is what the `/attention` severity
+cards filter the list to. The card and the list can therefore never disagree.
 
 `reason` is one of:
 
