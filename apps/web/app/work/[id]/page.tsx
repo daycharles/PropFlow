@@ -201,7 +201,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
             {work.propertyName ?? "Property"} · {work.workType ?? "Work order"}
           </p>
         </div>
-        <span className="badge">{work.status}</span>
+        <span className={`badge ${statusClass(work.status)}`}>{work.status}</span>
       </div>
       {error && (
         <p className="message" role="alert">
@@ -375,7 +375,8 @@ function Detail({ session, id }: { session: Session; id: string }) {
         <section className="panel notes">
           <h2>Notes</h2>
           <p className="hint">
-            Notes autosave when you leave a field. Resident-visible notes may be shared externally.
+            Internal notes stay in the staff record. Only resident-visible notes are safe to share
+            externally.
           </p>
           <label>
             Internal notes
@@ -386,7 +387,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
             />
           </label>
           <label>
-            Resident-visible notes
+            Resident-visible notes <span className="visibility-marker">Shared with resident</span>
             <textarea
               value={work.residentVisibleNotes ?? ""}
               onChange={(event) => change("residentVisibleNotes", event.target.value || null)}
@@ -402,7 +403,17 @@ function Detail({ session, id }: { session: Session; id: string }) {
             {timeline.map((entry) => (
               <li key={entry.id}>
                 <strong>{entry.eventType ?? "Work updated"}</strong>
+                {entry.residentVisible ? (
+                  <span className="visibility-marker">Resident-visible</span>
+                ) : null}
                 <span>{formatDateTime(entry.occurredAt)}</span>
+                {entry.communicationStatus ? (
+                  <span
+                    className={`badge communication-status communication-${entry.communicationStatus.toLowerCase()}`}
+                  >
+                    {entry.communicationStatus}
+                  </span>
+                ) : null}
                 {entry.oldValue || entry.newValue ? (
                   <small>
                     {entry.oldValue ?? "—"} → {entry.newValue ?? "—"}
@@ -461,4 +472,7 @@ function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
   );
+}
+function statusClass(status: string) {
+  return status === "Completed" ? "badge-complete" : status === "New" ? "badge-urgent" : "";
 }

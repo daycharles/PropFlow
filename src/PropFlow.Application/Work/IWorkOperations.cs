@@ -35,7 +35,8 @@ public interface IWorkOperations
     Task<WorkListPage> ListAsync(WorkListQuery query, CancellationToken cancellationToken);
     Task<WorkItem?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<uint?> VersionAsync(Guid id, CancellationToken cancellationToken);
-    Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, CancellationToken cancellationToken);
+    /// <param name="residentVisibleOnly">Returns only entries deliberately marked safe for resident display.</param>
+    Task<IReadOnlyList<TimelineItem>?> TimelineAsync(Guid id, bool residentVisibleOnly, CancellationToken cancellationToken);
     Task<WorkItem> CreateAsync(CreateWorkCommand command, CancellationToken cancellationToken);
     Task<WorkWriteOutcome> UpdateAsync(Guid id, UpdateWorkCommand command, CancellationToken cancellationToken);
     Task<AssignmentOutcome> AssignVendorAsync(Guid workId, Guid vendorId, Guid actorId, uint? version, CancellationToken cancellationToken);

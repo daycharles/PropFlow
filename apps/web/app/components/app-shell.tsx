@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { api, type Session } from "../../lib/api";
 import { hasCapability } from "../../lib/capabilities";
@@ -14,6 +14,7 @@ export function AppShell({
   onLogout?: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   async function logout() {
     try {
       await api.auth.logout();
@@ -30,9 +31,16 @@ export function AppShell({
           PropFlow
         </Link>
         <nav aria-label="Primary navigation">
-          <Link href="/">Work</Link>
+          <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
+            Work
+          </Link>
           {hasCapability(session, "Settings.ManageCategories") && (
-            <Link href="/settings/categories">Categories</Link>
+            <Link
+              href="/settings/categories"
+              aria-current={pathname === "/settings/categories" ? "page" : undefined}
+            >
+              Categories
+            </Link>
           )}
         </nav>
         <span className="role">{session.role}</span>

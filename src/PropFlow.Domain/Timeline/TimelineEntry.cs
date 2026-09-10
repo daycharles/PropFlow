@@ -22,6 +22,8 @@ public sealed class TimelineEntry : TenantEntity
     public Guid? RelatedObjectId { get; private set; }
     public string? OldValue { get; private set; }
     public string? NewValue { get; private set; }
+    /// <summary>Whether this entry is safe to include in a resident-facing history.</summary>
+    public bool ResidentVisible { get; private set; }
 
     // The row id is the domain event's own EventId, so re-saving the same event is idempotent
     // rather than appending a second row. Entries with no originating event get a fresh Guid.
@@ -45,7 +47,7 @@ public sealed class TimelineEntry : TenantEntity
 
     public static TimelineEntry Record(Guid organizationId, Guid? actorId, DateTimeOffset occurredAt,
         string eventType, string? relatedObjectType, Guid? relatedObjectId, string? oldValue, string? newValue,
-        Guid? workId = null, string changes = "{}", Guid? id = null)
+        Guid? workId = null, string changes = "{}", Guid? id = null, bool residentVisible = false)
     {
         if (organizationId == Guid.Empty) throw new ArgumentException("Organization is required.", nameof(organizationId));
         if (string.IsNullOrWhiteSpace(eventType) || eventType.Trim().Length > 100) throw new ArgumentException("Event type is required.", nameof(eventType));
@@ -57,7 +59,8 @@ public sealed class TimelineEntry : TenantEntity
         {
             WorkId = workId, ActorId = actorId, OccurredAt = occurredAt.ToUniversalTime(), EventType = eventType.Trim(),
             RelatedObjectType = string.IsNullOrWhiteSpace(relatedObjectType) ? null : relatedObjectType.Trim(),
-            RelatedObjectId = relatedObjectId, OldValue = oldValue, NewValue = newValue, Changes = changes
+            RelatedObjectId = relatedObjectId, OldValue = oldValue, NewValue = newValue, Changes = changes,
+            ResidentVisible = residentVisible
         };
     }
 }

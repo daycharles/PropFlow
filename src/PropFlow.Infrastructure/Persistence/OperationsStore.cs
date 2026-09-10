@@ -119,6 +119,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.RelatedObjectType).HasMaxLength(100);
             entity.Property(x => x.OldValue).HasMaxLength(4000);
             entity.Property(x => x.NewValue).HasMaxLength(4000);
+            entity.Property(x => x.ResidentVisible).HasDefaultValue(false);
             entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.OccurredAt });

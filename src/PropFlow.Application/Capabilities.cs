@@ -24,7 +24,8 @@ public static class Capabilities
         "Regional Manager" => CategoryManagement,
         "Maintenance Supervisor" => WorkManagement,
         "Read Only" => [ReadWork],
-        // Field/vendor access needs assignment-level scoping in milestone 3. Deny until implemented.
+        // PF-5.01 supplies the scope evaluator. PF-5.02 must only grant field capabilities after
+        // an authenticated membership supplies a non-empty WorkAccessScope.
         "Technician" or "Vendor" => [],
         _ => []
     };

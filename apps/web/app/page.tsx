@@ -526,10 +526,10 @@ function WorkList({ session }: { session: Session }) {
                     {item.propertyName && <small>{item.propertyName}</small>}
                   </td>
                   <td>
-                    <span className="badge">{item.status}</span>
+                    <span className={`badge ${statusClass(item.status)}`}>{item.status}</span>
                   </td>
                   <td>
-                    <span className={`priority priority-${item.priority.toLowerCase()}`}>
+                    <span className={`priority ${priorityClass(item.priority, item.status)} `}>
                       {item.priority}
                     </span>
                   </td>
@@ -655,4 +655,16 @@ function formatDate(value?: string | null) {
         year: "numeric",
       }).format(new Date(value))
     : "—";
+}
+
+function statusClass(status: string) {
+  return status === "Completed" ? "badge-complete" : status === "New" ? "badge-urgent" : "";
+}
+
+function priorityClass(priority: string, status: string) {
+  return status === "Completed" || status === "Cancelled"
+    ? ""
+    : priority === "High" || priority === "Critical"
+      ? "priority-urgent"
+      : "";
 }

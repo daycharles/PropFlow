@@ -58,6 +58,7 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
         var queued = Assert.Single(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageQueued");
         Assert.True(queued.GetProperty("residentVisible").GetBoolean());
         Assert.Contains("Sms", queued.GetProperty("newValue").GetString());
+        Assert.Equal("Queued", queued.GetProperty("communicationStatus").GetString());
 
         // the enqueued body was rendered against the work + resident
         await using (var comms = s.Comms(s.OrganizationA))
@@ -74,7 +75,8 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
             Assert.Equal(1, await new OutboxProcessor(comms, senders, TimeProvider.System, new() { RetryDelay = TimeSpan.Zero })
                 .ProcessPendingAsync(default));
 
-        Assert.Contains(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageSent");
+        var sent = Assert.Single(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageSent");
+        Assert.Equal("Sent", sent.GetProperty("communicationStatus").GetString());
         Assert.DoesNotContain(await TimelineAsync(s, workId), e => e.GetProperty("eventType").GetString() == "MessageQueued");
     }
 

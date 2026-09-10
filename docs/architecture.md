@@ -54,7 +54,7 @@ The Integrations module (milestone 6) adds an `integrations`-schema context with
 
 ## Remaining decisions / boundaries
 
-- Property- and assignment-level scope for regional, technician and vendor access remains to be defined before field workflows ship.
+- PF-5.01 defines work scope in `WorkAccessScope`: regional access requires an explicit property grant; technician and vendor access require the current matching employee/vendor assignment, and an optional property allow-list can only narrow that assignment. An empty scope denies. Persisting these grants and filtering endpoints are PF-5.02 work; field roles retain no capabilities until then.
 - Invitations, self-service account recovery, MFA and organization switching are not included. Initial provisioning is an administrator-only command.
 - `Production`/`Staging` startup requires `DataProtection:KeyPath` (a persistent, instance-shared key ring, optionally certificate-encrypted via `DataProtection:CertificatePath`). A multi-instance deployment still needs trusted proxy configuration, managed secrets and PostgreSQL TLS; the local defaults are not a production deployment recipe.
 - RLS policies and grants must accompany every new business table; migrations are reviewed and explicitly applied, never run by the API.
