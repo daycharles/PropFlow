@@ -60,6 +60,18 @@ public sealed class WorkItem : TenantEntity
     public void Publish(DateTimeOffset at) { if (Status != WorkStatus.Draft) throw new InvalidOperationException("Only drafts may be published."); Status = WorkStatus.New; CreatedAt = at.ToUniversalTime(); }
     public void Schedule(DateTimeOffset start, DateTimeOffset? end) { RefuseWhenTerminal(); if (VendorId is null && EmployeeId is null) throw new InvalidOperationException("Scheduling requires a vendor or employee."); if (end is not null && end < start) throw new ArgumentException("Schedule end must follow start."); ScheduledStart = start.ToUniversalTime(); ScheduledEnd = end?.ToUniversalTime(); Status = WorkStatus.Scheduled; }
     public void ChangeStatus(WorkStatus status, DateTimeOffset at) { if (Status is WorkStatus.Completed or WorkStatus.Cancelled) throw new InvalidOperationException("Completed and cancelled work is terminal."); if (status == WorkStatus.Draft || status == Status) throw new InvalidOperationException("Invalid status transition."); Status = status; if (status == WorkStatus.Completed) CompletedAt = at.ToUniversalTime(); }
+    public void SetPriority(WorkPriority priority) { RefuseWhenTerminal(); Priority = priority; }
+    // The one sanctioned way out of a terminal state: an explicit, audited reopen. Everything
+    // else (Edit, Schedule, ChangeStatus, the assignment overloads) still refuses terminal work.
+    public WorkReopened Reopen(Guid actorId, DateTimeOffset at)
+    {
+        if (actorId == Guid.Empty) throw new ArgumentException("Actor is required.", nameof(actorId));
+        if (!IsTerminal) throw new InvalidOperationException("Only completed or cancelled work can be reopened.");
+        var from = Status;
+        Status = VendorId is not null || EmployeeId is not null ? WorkStatus.Assigned : WorkStatus.New;
+        CompletedAt = null;
+        return new WorkReopened(Guid.NewGuid(), OrganizationId, actorId, at.ToUniversalTime(), Id, from, Status);
+    }
     public bool CanDelete(Guid actorId) => Status == WorkStatus.Draft && CreatorId == actorId;
     private void RefuseWhenTerminal() { if (IsTerminal) throw new InvalidOperationException("Completed and cancelled work is terminal."); }
     private static Guid RequiredId(Guid id, string name) => id == Guid.Empty ? throw new ArgumentException("ID is required.", name) : id;
@@ -69,3 +81,4 @@ public sealed class WorkItem : TenantEntity
 
 public sealed record VendorAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousVendorId, Guid VendorId) : IDomainEvent;
 public sealed record EmployeeAssigned(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, Guid? PreviousEmployeeId, Guid EmployeeId) : IDomainEvent;
+public sealed record WorkReopened(Guid EventId, Guid OrganizationId, Guid ActorId, DateTimeOffset OccurredAt, Guid WorkId, WorkStatus PreviousStatus, WorkStatus NewStatus) : IDomainEvent;

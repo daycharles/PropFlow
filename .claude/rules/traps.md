@@ -57,3 +57,11 @@ throws unless `DatabaseSafety.HasSafeRuntimeRoleAsync` passes (`DatabaseHealth.c
 registered `src/PropFlow.Api/Program.cs:87`). Schema work goes through
 `dotnet run --project tools/PropFlow.Admin -- migrate`. Adding a `db.Database.Migrate()` to
 startup for convenience defeats both controls.
+
+**`Completed`/`Cancelled` work is terminal — except through `WorkItem.Reopen()`.**
+`Edit`, `Schedule`, `SetPriority`, `ChangeStatus`, and both assignment overloads all call
+`RefuseWhenTerminal()` (`WorkItem.cs`). `Reopen(actorId, at)` is the **one** sanctioned exit: it
+requires `IsTerminal`, moves the item to `Assigned`/`New`, clears `CompletedAt`, and raises
+`WorkReopened`. Audit A-1 (`docs/audit-2026-09-10.md`) fixed the old hole where `Schedule` had
+no guard and silently un-completed work. Do not remove a `RefuseWhenTerminal()` call, and do not
+add a second path out of a terminal state — extend `Reopen` instead.

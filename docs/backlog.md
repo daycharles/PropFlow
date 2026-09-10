@@ -103,7 +103,7 @@ wiring. PF-4.06–4.11 remain (they need more of milestone 3).
 | PF-4.04 | Communication provider abstraction with mock SMS + mock email implementations (no real send) | application | M | PF-4.02 |
 | PF-4.05 | Transactional outbox + idempotent dispatch worker for communications | infra | L | PF-4.04 |
 | PF-4.06 | Communication records + delivery status surfaced as timeline entries with explicit visibility | application | M | PF-4.05, PF-3.10 |
-| PF-4.07 | Extend bulk actions: schedule, change status, change priority, add note, add tag, close, reopen — bounded + all-or-nothing | api | L | PF-3.16 |
+| PF-4.07 | ⚠️ Extend bulk actions — **done bar `add tag`**: `bulk/status`, `bulk/priority`, `bulk/schedule`, `bulk/note`, `bulk/reopen` (bounded ≤100, one transaction, per-item version check, one timeline entry per changed item). `close` = `bulk/status` to `Completed`/`Cancelled`; `reopen` is the sanctioned exit from a terminal state via `WorkItem.Reopen()`. `add tag` waits on the tag-vocabulary decision. | api | L | PF-3.16 |
 | PF-4.08 | Bulk "assign & notify" flow in web: vendor + schedule window + resident message + confirm + success summary | web | L | PF-4.07, PF-4.03, PF-3.20 |
 | PF-4.09 | Mobile-responsive Work list and detail; large touch targets for field use | web | M | PF-3.19 |
 | PF-4.10 | Seed: Tidewater Residential Management — 3 properties, ~10 buildings, ~80 spaces, ~70 residents, 6 vendors, 5 employees, ~100 work items, ~60 assets, ≥18 pest-control requests, mix of emergency/overdue/completed | infra | M | PF-4.01, PF-3.22 |
