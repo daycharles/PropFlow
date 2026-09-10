@@ -78,7 +78,7 @@ public static class CommunicationEndpoints
         app.MapPost("/api/work/{workId:guid}/message", async (
             Guid workId, SendResidentMessageRequest request,
             OperationsStore operations, CommunicationsStore comms, IOutbox outbox, ITemplateRenderer renderer,
-            CancellationToken ct) =>
+            TimeProvider clock, CancellationToken ct) =>
         {
             if (request.TemplateId == Guid.Empty) return Results.Problem(statusCode: 400, title: "A template id is required");
 
@@ -122,19 +122,23 @@ public static class CommunicationEndpoints
             }
 
             var recipient = channel == MessageChannel.Sms ? resident.Phone! : resident.Email!;
-            var submission = new OutboxSubmission(channel, recipient, subject, body,
-                $"work-message:{workId:N}:{Guid.NewGuid():N}", WorkId: workId, ResidentVisible: true);
+            // Dedupe an accidental double-submit (same template, same work item, same hour) via
+            // the outbox idempotency key. A deliberate re-send an hour later still goes through.
+            var idempotencyKey = $"work-message:{workId:N}:{request.TemplateId:N}:{channel}:{clock.GetUtcNow():yyyyMMddHH}";
+            var submission = new OutboxSubmission(channel, recipient, subject, body, idempotencyKey,
+                WorkId: workId, ResidentVisible: true);
 
+            bool queued;
             try
             {
-                await outbox.EnqueueAsync(submission, ct);
+                queued = await outbox.EnqueueAsync(submission, ct);
             }
             catch (ArgumentException e)
             {
                 return Results.Problem(statusCode: 400, title: e.Message);
             }
 
-            return Results.Accepted($"/api/work/{workId}/timeline", new { queued = true });
+            return Results.Accepted($"/api/work/{workId}/timeline", new { queued });
         }).RequireAuthorization(Capabilities.SendResidentMessage);
     }
 }

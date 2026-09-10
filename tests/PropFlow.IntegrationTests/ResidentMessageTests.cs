@@ -110,6 +110,57 @@ public sealed class ResidentMessageTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task A_double_submit_of_the_same_template_is_deduped()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var workId = await SeedWorkWithResidentAsync(s);
+        var templateId = await SeedSmsTemplateAsync(s);
+
+        var first = await (await s.Client.PostAsJsonAsync($"/api/work/{workId}/message", new { templateId }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var second = await (await s.Client.PostAsJsonAsync($"/api/work/{workId}/message", new { templateId }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.True(first.GetProperty("queued").GetBoolean());
+        Assert.False(second.GetProperty("queued").GetBoolean());
+
+        await using var comms = s.Comms(s.OrganizationA);
+        Assert.Equal(1, await comms.OutboxMessages.CountAsync(x => x.WorkId == workId));
+    }
+
+    [Fact]
+    public async Task A_control_character_reaching_a_rendered_email_subject_is_a_400()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+        var workId = await SeedWorkWithResidentAsync(s);
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            // grant ResidentA email consent so an email template is deliverable
+            var r = await store.Residents.SingleAsync(x => x.Id == s.ResidentA);
+            r.SetConsent(PropFlow.Domain.Communications.MessageChannel.Email, granted: true, DateTimeOffset.UtcNow);
+            // a work title carrying a CRLF, which flows into {{ work.title }}
+            var w = await store.WorkItems.SingleAsync(x => x.Id == workId);
+            w.Edit("Roof repair\r\nBcc: attacker@evil.test", null, null, WorkPriority.Normal);
+            await store.SaveChangesAsync();
+        }
+        var templateId = Guid.NewGuid();
+        await using (var store = s.CommsAsAdmin(s.OrganizationA))
+        {
+            store.MessageTemplates.Add(new MessageTemplate(s.OrganizationA, templateId, "Injected",
+                MessageChannel.Email, "Re: {{ work.title }}", "Hello {{ resident.name }}"));
+            await store.SaveChangesAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await s.Client.PostAsJsonAsync($"/api/work/{workId}/message", new { templateId })).StatusCode);
+
+        await using var comms = s.Comms(s.OrganizationA);
+        Assert.Equal(0, await comms.OutboxMessages.CountAsync(x => x.WorkId == workId));
+    }
+
+    [Fact]
     public async Task A_template_placeholder_with_no_value_is_a_400()
     {
         await using var s = await fixture.CreateScenarioAsync();
