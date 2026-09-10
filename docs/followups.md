@@ -93,7 +93,7 @@ Flagged in the 2026-09-09 code-quality audit, left for the M3 owner.
 
 | Item | Source | Owner | Unblocks when |
 | --- | --- | --- | --- |
-| `main` branch protection not configured | Slack #agent-updates 2026-09-09; CLAUDE.md ("Protected: `verify` must be green") | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI (broke `main` once, commit `8c88b20`, recovered by PR #79). The keyring `gh` token has `repo` but not Administration, so an agent still can't set it — a human does it in repo Settings → Branches |
+| `main` branch protection not configured | Slack #agent-updates 2026-09-09; re-verified 2026-09-10 (`branches/main/protection` → 404, `rulesets` → empty) | unassigned | `verify` is not a required check, so direct pushes to `main` bypass CI (broke `main` once, commit `8c88b20`, recovered by PR #79). The keyring `gh` token has `repo` but not Administration, so an agent still can't set it — a human does it in repo Settings → Branches. `CLAUDE.md` and `.claude/rules/workflow.md` now say the gate is convention rather than enforcement; revert that wording once protection is on |
 | `gh` (2.63.2) and Node (`~/.local/node`, v22.14) on the macOS box are hand-installed, not on `PATH` by default | 2026-09-09 / 2026-09-10 agent sessions | unassigned | Neither is from a package manager or in the documented toolchain. `gh` auth: keyring `mday440` token (`project`/`workflow`/`repo`) — do not set `GH_TOKEN`. Pin the tools or fold into `docs/local-development.md` |
 | `daycdev` pushes M3 directly to `main` rather than via PR into `develop` | CLAUDE.md branching rules; git log (`8c88b20` direct) | daycdev | Process drift; ties into branch protection above |
 
