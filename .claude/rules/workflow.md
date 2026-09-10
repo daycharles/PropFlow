@@ -59,11 +59,13 @@ gh issue edit <n> --add-assignee mday440   # the human, NOT necessarily the toke
 
 - Assign to the **human who owns the session**, which is not always the account `gh` is authed
   as. The macOS box's fine-grained PAT authenticates as `daycharles` (the repo owner), but the
-  person running it is **Michael Day → `mday440`** — assign `mday440`, not `@me`. `daycdev`'s
-  sessions assign `daycdev`.
+  person running it is **Michael Day → `mday440`** — assign `mday440`, not `@me`.
 - Only repo **collaborators** are assignable (`gh api repos/daycharles/PropFlow/assignees`).
-  Today that is `daycharles` and `mday440`. `michaelday` is a real account but not a
-  collaborator, so it cannot be assigned until it is invited.
+  Today that is just `daycharles` and `mday440`. `michaelday` is a real account but not a
+  collaborator; `daycdev` (the git-author name on the M3 commits, `cday@cushingsystems.us`) is
+  not a GitHub account at all. So the M3 track cannot be assigned to its owner — by decision
+  (2026-09-09) the **M3 task issues `#6`–`#31` stay assigned to `daycharles`** and that is what
+  marks them as the other track. Do not reassign or unassign them.
 - On merge, close the issue from the PR or by hand with a comment that names the PR and says an
   agent session did it:
   ```bash
