@@ -12,10 +12,10 @@ Umbrella solution `PropFlow.slnx` — 8 projects: 4 `src`, 3 `tests`, 1 `tools`.
 `10.0.300` with `rollForward: latestPatch` (`global.json`); this box has 10.0.303, which the
 band accepts.
 
-**M3** (first usable vertical slice) is complete and on `main`. **M4** (communications/outbox) is
-in flight, and **M6** (assets, search, integrations) was started ahead of **M5**, which has not
-begun — so milestone number is not milestone order here. `docs/milestones.md` holds the
-per-milestone status; `docs/backlog.md` carries the tasks.
+**M3, M4, M5 and M6 are all complete and on `main`** (M6 was built in parallel with M5, so
+milestone number is not milestone order). **M7** — deployment and platform hardening — is the
+remaining track. `docs/milestones.md` holds the per-milestone status; `docs/backlog.md` carries
+the tasks.
 
 ## Build / test / run
 
@@ -129,20 +129,17 @@ baseline and `.claude/settings.local.json` stays gitignored.
 |---|---|
 | `docs/architecture.md` | Normative for cross-cutting design and persistence |
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
-| `docs/api.md` | The HTTP contract for every endpoint that exists — M3, M4 and M6 |
+| `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M6) |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
-| `docs/milestones.md` | Per-milestone status: what shipped, what is in flight, what has not begun. Reconciled to GitHub 2026-09-10 |
+| `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M6 reconciled to GitHub 2026-09-10 |
 
 Known stale, verified 2026-09-10 — fix them if your change touches them:
 
-- The `README.md`, `docs/architecture.md` and `docs/api.md` rows that used to sit here were fixed
-  in the 2026-09-10 milestone-doc reconcile. `Capabilities.cs` remains the authority for the
-  role→capability map — restate it, never paraphrase from memory.
-- `src/PropFlow.Application/Capabilities.cs:26` comments that Technician/Vendor scoping is
-  "milestone 3". It is milestone 5 (PF-5.01, PF-5.02), which has not started. Code comment, not
-  prose — fix it in the change that implements the scoping.
+- `Capabilities.cs` remains the authority for the role→capability map — restate it, never
+  paraphrase from memory. `docs/architecture.md`'s enumeration of "the current capability set"
+  omits the milestone-5 additions (`Work.MarkOnTheWay`, `Settings.ManageAutomationRules`).
 - `DatabaseProvisioner.MigrateAsync` migrates **four** contexts (identity, operations,
   communications, integrations) — keep the `PropFlow.Admin` migrate message and any prose count
   in step when a fifth is added.
