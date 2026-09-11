@@ -15,8 +15,13 @@ public interface IPreventiveWorkOccurrenceSink
     Task<bool> TryCreateAsync(PreventiveWorkCandidate candidate, CancellationToken cancellationToken);
 }
 
+public interface IPreventiveMaintenanceGenerator
+{
+    Task<int> GenerateThroughAsync(DateOnly through, CancellationToken cancellationToken);
+}
+
 public sealed class PreventiveMaintenanceService(IPreventiveMaintenancePlanSource plans,
-    IPreventiveWorkOccurrenceSink occurrences)
+    IPreventiveWorkOccurrenceSink occurrences) : IPreventiveMaintenanceGenerator
 {
     public async Task<int> GenerateThroughAsync(DateOnly through, CancellationToken cancellationToken)
     {

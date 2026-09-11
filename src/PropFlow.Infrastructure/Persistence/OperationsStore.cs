@@ -31,12 +31,15 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<PreventiveMaintenancePlan> PreventiveMaintenancePlans => Set<PreventiveMaintenancePlan>();
+    public DbSet<PreventiveMaintenanceOccurrence> PreventiveMaintenanceOccurrences => Set<PreventiveMaintenanceOccurrence>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<AssetLifecycleCost> AssetLifecycleCosts => Set<AssetLifecycleCost>();
     public DbSet<ComplianceObligation> ComplianceObligations => Set<ComplianceObligation>();
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<Violation> Violations => Set<Violation>();
     public DbSet<Remediation> Remediations => Set<Remediation>();
+    public DbSet<ComplianceEvidence> ComplianceEvidence => Set<ComplianceEvidence>();
+    public DbSet<ComplianceOccurrence> ComplianceOccurrences => Set<ComplianceOccurrence>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
@@ -143,6 +146,23 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.IsActive });
+        });
+        model.Entity<PreventiveMaintenanceOccurrence>(entity =>
+        {
+            entity.ToTable("PreventiveMaintenanceOccurrences");
+            entity.Property(x => x.OccurrenceKey).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.GeneratedAt).IsRequired();
+            entity.HasOne<PreventiveMaintenancePlan>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PlanId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.WorkItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.OccurrenceKey }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.DueOn });
         });
         model.Entity<MeterReading>(entity =>
         {

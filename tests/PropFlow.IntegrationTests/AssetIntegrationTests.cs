@@ -163,4 +163,14 @@ public sealed class AssetIntegrationTests(DatabaseFixture fixture)
             kind = "Hvac", name = "Nope", propertyId = s.PropertyA, spaceId = (Guid?)null, condition = "Unknown"
         })).StatusCode);
     }
+
+    [Fact]
+    public async Task Read_only_role_can_read_due_alerts_but_cannot_run_generation()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync(reader: true);
+
+        Assert.Equal(HttpStatusCode.OK, (await s.Client.GetAsync("/api/assets/maintenance-due-alerts")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await s.Client.PostAsync("/api/assets/maintenance-generation", null)).StatusCode);
+    }
 }

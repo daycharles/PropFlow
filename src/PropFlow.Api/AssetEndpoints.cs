@@ -13,6 +13,33 @@ public static class AssetEndpoints
     {
         var group = app.MapGroup("/api/assets").RequireAuthorization(Capabilities.ReadWork);
 
+        // The scheduler is safe to invoke repeatedly: the durable occurrence sink uses a
+        // tenant-scoped unique occurrence key and commits the occurrence and work item together.
+        group.MapPost("/maintenance-generation", async (DateOnly? through, IPreventiveMaintenanceGenerator generator,
+            TimeProvider clock, CancellationToken ct) =>
+        {
+            var effectiveThrough = through ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.Date);
+            try { return Results.Ok(new { through = effectiveThrough, created = await generator.GenerateThroughAsync(effectiveThrough, ct) }); }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageAssets);
+
+        group.MapGet("/maintenance-due-alerts", async (DateOnly? through, OperationsStore store,
+            TimeProvider clock, CancellationToken ct) =>
+        {
+            var effectiveThrough = through ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.Date);
+            var alerts = await (
+                from occurrence in store.PreventiveMaintenanceOccurrences.AsNoTracking()
+                join work in store.WorkItems.AsNoTracking() on occurrence.WorkItemId equals work.Id
+                where occurrence.DueOn <= effectiveThrough &&
+                      work.Status != WorkStatus.Completed && work.Status != WorkStatus.Cancelled
+                orderby occurrence.DueOn, occurrence.Id
+                select new PreventiveMaintenanceDueAlert(occurrence.Id, occurrence.PlanId, occurrence.AssetId,
+                    occurrence.WorkItemId, occurrence.OccurrenceKey, occurrence.DueOn, work.Title,
+                    work.Status, work.DueDate)
+            ).Take(500).ToListAsync(ct);
+            return Results.Ok(new { through = effectiveThrough, alerts });
+        });
+
         group.MapGet("/", async (Guid? propertyId, OperationsStore store, CancellationToken ct) =>
         {
             var query = store.Assets.AsNoTracking();
@@ -203,6 +230,8 @@ public sealed record RepeatRepairPolicyRequest(int RepairThreshold, int WindowDa
 public sealed record MaintenancePlanRequest(string Name, MaintenanceRecurrence Recurrence, DateOnly FirstDueOn);
 public sealed record MeterReadingRequest(string MeterName, MeterUnit Unit, decimal Reading, DateOnly ReadOn);
 public sealed record LifecycleCostRequest(AssetCostType Type, decimal Amount, DateOnly IncurredOn, string Description, Guid? WorkItemId);
+public sealed record PreventiveMaintenanceDueAlert(Guid OccurrenceId, Guid PlanId, Guid AssetId, Guid WorkItemId,
+    string OccurrenceKey, DateOnly DueOn, string Title, WorkStatus Status, DateTimeOffset? DueDate);
 
 // Tenant comes from the verified session.
 public sealed record AssetRequest(
