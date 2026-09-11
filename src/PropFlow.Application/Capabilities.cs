@@ -16,17 +16,21 @@ public static class Capabilities
     public const string SendResidentMessage = "Communications.SendMessage";
     public const string ManageAutomationRules = "Settings.ManageAutomationRules";
     public const string ManageAttachments = "Work.ManageAttachments";
+    public const string ManageProperties = "Properties.Manage";
+    public const string ManageLeasing = "Leasing.Manage";
+    public const string ResidentPortalRead = "ResidentPortal.Read";
+    public const string ResidentPortalRequest = "ResidentPortal.Request";
     // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
     // organization-editable role -> capability matrix is PF-S01.04, not yet built.
     public const string ManageMembers = "Identity.ManageMembers";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageMembers];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ResidentPortalRead, ResidentPortalRequest, ManageMembers];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
     public static IReadOnlyList<string> ForRole(string role, Guid? employeeId = null, Guid? vendorId = null) => role switch
     {
-        "Organization Admin" or "Property Manager" => All,
+        "Organization Admin" or "Property Manager" => All.Where(x => x is not ResidentPortalRead and not ResidentPortalRequest).ToArray(),
         "Regional Manager" => CategoryManagement,
         "Maintenance Supervisor" => WorkManagement,
         "Read Only" => [ReadWork],
@@ -35,6 +39,7 @@ public static class Capabilities
         "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay, ManageAttachments],
         "Vendor" when vendorId is not null => [ReadWork],
         "Technician" or "Vendor" => [],
+        "Resident" when employeeId is null && vendorId is null => [ResidentPortalRead, ResidentPortalRequest],
         _ => []
     };
 }

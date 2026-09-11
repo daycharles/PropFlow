@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows installer for PropFlow.
+
+  Built by scripts/Publish-Deployment.ps1 -Installer, which passes:
+    -d BundleDir=<the staged win-x64 bundle>
+    -d ProductVersion=<numeric MSI version, e.g. 1.0.0>
+    -d InformationalVersion=<the real version, e.g. 1.0.0-rc.3>
+
+  Two things worth knowing before editing:
+
+  * MSI ProductVersion is numeric only - it cannot express "1.0.0-rc.3". Every 1.0.0 prerelease
+    therefore installs as 1.0.0, and AllowSameVersionUpgrades lets a later rc replace an earlier
+    one in place. The real version is recorded in ARPCOMMENTS so Add/Remove Programs shows it.
+
+  * The application is installed read-only under Program Files. propflow-deploy detects that and
+    relocates everything it writes - credentials, key ring, attachments, logs, and the web build -
+    to %ProgramData%\PropFlow. See DeploymentLayout.Resolve. The installer deliberately does NOT
+    create or own that directory: the deployer makes it on first run, and leaving it behind on
+    uninstall is correct, because it holds the database credentials and attachment blobs.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="PropFlow"
+           Manufacturer="PropFlow"
+           Version="$(ProductVersion)"
+           UpgradeCode="8f3a6d21-5c7e-4b19-9a6f-2d4e8c1b7f30"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="PropFlow $(InformationalVersion) - property operations platform" />
+
+    <!-- A later prerelease replaces an earlier one rather than installing beside it. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of PropFlow is already installed. Uninstall it first." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Shown in Add/Remove Programs. ARPCOMMENTS carries the prerelease suffix the numeric
+         ProductVersion cannot. -->
+    <Property Id="ARPCOMMENTS" Value="Version $(InformationalVersion). Requires Docker Desktop and Node.js 22." />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/daycharles/PropFlow" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <Launch Condition="Installed OR VersionNT64"
+            Message="PropFlow requires 64-bit Windows." />
+
+    <Feature Id="Main" Title="PropFlow" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="BundleFiles" />
+      <ComponentGroupRef Id="Shortcuts" />
+      <ComponentGroupRef Id="PathEntry" />
+    </Feature>
+
+    <!--
+      No WixUI dialog set, deliberately. Every stock WiX wizard leads with a
+      LicenseAgreementDlg that demands "I accept the terms in the License Agreement", and this
+      repository ships no LICENSE file - there are no terms to show. Presenting an invented or
+      empty agreement would be worse than presenting none, so the MSI installs with Windows'
+      own progress UI instead. Add a LICENSE to the repository and a WixUI_InstallDir dialog set
+      becomes the obvious upgrade.
+    -->
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="PropFlow" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ShortcutFolder" Name="PropFlow" />
+    </StandardDirectory>
+  </Fragment>
+
+  <!-- Harvests the staged bundle wholesale: propflow-deploy.exe, api\, admin\, web\,
+       compose.yaml and the .cmd launchers. WiX assigns stable component GUIDs per file path. -->
+  <Fragment>
+    <ComponentGroup Id="BundleFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(BundleDir)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- The shortcuts point at the .cmd wrappers, not at propflow-deploy.exe directly: a console
+       program launched from a shortcut closes its window the moment it returns, and `up` returns
+       as soon as the stack is running. The wrappers pause so the printed credentials stay on
+       screen. -->
+  <Fragment>
+    <ComponentGroup Id="Shortcuts" Directory="ShortcutFolder">
+      <Component Id="StartShortcut" Guid="2b9c4e17-83da-4f56-bb21-6c0e9f5a4d38">
+        <Shortcut Id="StartPropFlow"
+                  Name="Start PropFlow"
+                  Description="Start the PropFlow stack and print the sign-in credentials"
+                  Target="[INSTALLFOLDER]PropFlow-Start.cmd"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="StopPropFlow"
+                  Name="Stop PropFlow"
+                  Description="Stop the PropFlow stack"
+                  Target="[INSTALLFOLDER]PropFlow-Stop.cmd"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="PropFlowGuide"
+                  Name="Deployment guide"
+                  Description="How to run and troubleshoot PropFlow"
+                  Target="[INSTALLFOLDER]README.md"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveShortcutFolder" Directory="ShortcutFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\PropFlow" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- Puts propflow-deploy on PATH so it works from any terminal, and removes it on uninstall. -->
+  <Fragment>
+    <ComponentGroup Id="PathEntry" Directory="INSTALLFOLDER">
+      <Component Id="PathComponent" Guid="7d1e5b40-9af2-4c83-8e67-15b3a2c9d04e">
+        <Environment Id="PropFlowPath"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Permanent="no"
+                     Part="last"
+                     Action="set"
+                     System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\PropFlow" Name="path" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

@@ -20,6 +20,22 @@ public static class SessionEndpoints
                 userAgent: context.Request.Headers.UserAgent.ToString(), ipAddress: context.Connection.RemoteIpAddress?.ToString())
                 ? Results.NoContent() : Results.Problem(statusCode: 401, title: "Unable to sign in with those credentials and organization");
         }).AllowAnonymous().RequireRateLimiting("login");
+        app.MapPost("/api/auth/password-recovery/request", async (PasswordRecoveryRequest request, SessionAuthentication authentication, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 254 ||
+                string.IsNullOrWhiteSpace(request.OrganizationSlug) || request.OrganizationSlug.Length > 63)
+                return Results.Problem(statusCode: 400, title: "Organization slug and email are required");
+            await authentication.RequestPasswordResetAsync(request.Email.Trim(), request.OrganizationSlug, ct);
+            return Results.Accepted();
+        }).AllowAnonymous().RequireRateLimiting("login");
+        app.MapPost("/api/auth/password-recovery/reset", async (PasswordResetRequest request, SessionAuthentication authentication, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.OrganizationSlug) ||
+                string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrEmpty(request.NewPassword))
+                return Results.Problem(statusCode: 400, title: "Organization slug, email, token, and new password are required");
+            return await authentication.ResetPasswordAsync(request.Email.Trim(), request.OrganizationSlug, request.Token, request.NewPassword, ct)
+                ? Results.NoContent() : Results.Problem(statusCode: 400, title: "The password reset token is invalid or expired");
+        }).AllowAnonymous().RequireRateLimiting("login");
         app.MapPost("/api/auth/logout", async (ClaimsPrincipal user, SessionAuthentication authentication) =>
         {
             await authentication.LogoutAsync(user);
@@ -35,3 +51,5 @@ public static class SessionEndpoints
     }
 }
 public sealed record LoginRequest(string OrganizationSlug, string Email, string Password);
+public sealed record PasswordRecoveryRequest(string OrganizationSlug, string Email);
+public sealed record PasswordResetRequest(string OrganizationSlug, string Email, string Token, string NewPassword);

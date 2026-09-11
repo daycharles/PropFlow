@@ -62,4 +62,29 @@ Close the production gaps called out in [architecture.md](architecture.md). Pull
 
 Delivered (all 6 tasks closed, `#68`–`#73`). The `daycdev` hardening pass (`#151`) shipped multi-instance readiness (PF-7.02), the observability pass with end-to-end trace IDs and `/health/metrics` (PF-7.03), the UTC-instant-plus-IANA scheduling model (PF-7.04), real-provider consent / signed callbacks / retry controls (PF-7.05), and the first cut of attachment storage; the `mday440` follow-up completed PF-7.01 — the field-role scope check on every attachment route, `Work.ManageAttachments` granted to the hands-on work roles and a bound Technician, the `AttachmentRetentionSweep` that enforces `retainUntil`, the work-detail attachments panel and the technician "Add photo" flow. PF-7.06 (`#73`) enforces the RLS/grants checklist in the PR template.
 
+## Full-suite expansion (FS) — gates 1-5
+
+Milestones 1-7 delivered the **Operations/Maintenance release**. The remaining product surface is
+scoped in [full-suite-scope.md](full-suite-scope.md) and tracked under `FS-` ids; the gate-to-
+milestone-to-slice map, with every GitHub issue number, is in
+[backlog.md](backlog.md) under *Full-suite expansion (FS)*.
+
+Each of gates 1-4 is split into two GitHub milestones — an `A` platform track and a `B` workflow
+track — so `FS-G1A`/`FS-G1B`, `FS-G2A`/`FS-G2B` and their siblings are **milestones, not
+issues**.
+
+**Gate 1 — Core PMS foundation (partially implemented).** `FS-G1B` (Core PMS workflows) is
+delivered: portfolio/property management with archive state, contacts and documents (`FS-S02`);
+marketing, listings, availability, showings and applicants (`FS-S04`); leases, renewals, notices,
+parties, documents and charges (`FS-S06`); and the resident portal with announcements, household
+members and resident payments (`FS-S07`). It landed as the single branch `feat/fs-gate1-core`
+because the fourteen migrations interleave across the four slices and share one hand-written
+security migration, `20260911160000_FS_S04S06TenantSecurity.cs`. `FS-G1A` — identity/organizations/
+permissions/audit (`FS-S01` `#189`) and configuration/workflow administration (`FS-S03` `#191`) —
+is **not delivered**: the board marks `FS-S01` *In progress*, but nothing for it is on `develop`,
+and `FS-S03` is still `Backlog`.
+
+Gates 2-5 are not started. Their acceptance criteria are the per-gate test lists in
+[full-suite-scope.md](full-suite-scope.md) -> *Release gates*.
+
 Each milestone must build and pass its relevant checks. Do not implement the full product in one pass.

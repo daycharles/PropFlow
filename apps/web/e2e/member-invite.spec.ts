@@ -21,7 +21,10 @@ test("an invited member accepts their invitation and signs in", async ({ page })
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Work" })).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Members" }).click();
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Members" })
+    .click();
   await expect(page.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
 
   // Send the invitation as a Property Manager, so the invited user lands with
@@ -63,7 +66,9 @@ test("an invited member accepts their invitation and signs in", async ({ page })
 
   await expect(inviteePage.getByRole("heading", { name: "Work" })).toBeVisible();
   await expect(
-    inviteePage.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Members" }),
+    inviteePage
+      .getByRole("navigation", { name: "Primary navigation" })
+      .getByRole("link", { name: "Members" }),
   ).toBeVisible();
 
   await inviteeContext.close();

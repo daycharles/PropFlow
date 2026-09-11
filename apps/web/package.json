@@ -1,7 +1,7 @@
 {
   "name": "propflow-web",
   "private": true,
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

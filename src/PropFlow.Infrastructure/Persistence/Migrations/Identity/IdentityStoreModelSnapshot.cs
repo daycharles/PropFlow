@@ -374,6 +374,9 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Identity
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("ResidentId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(80)

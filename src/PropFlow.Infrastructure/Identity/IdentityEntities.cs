@@ -23,6 +23,7 @@ public sealed class OrganizationMembership
     // one person may represent different vendors/employees for different organizations.
     public Guid? EmployeeId { get; set; }
     public Guid? VendorId { get; set; }
+    public Guid? ResidentId { get; set; }
 }
 
 /// <summary>Optional property narrowing for a field membership. No cross-schema FK is used:

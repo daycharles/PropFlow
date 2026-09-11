@@ -35,6 +35,8 @@ internal sealed class StackController(DeploymentLayout layout, Action<string> lo
         if (problems.Count > 0) return ReportPreflight(problems);
 
         layout.EnsureStateDirectories();
+        if (!layout.BundleIsWritable)
+            log($"Installed read-only at {layout.Root}; state lives in {layout.StateRoot}.");
         var secrets = DeploymentSecrets.LoadOrCreate(layout, log);
         CertificateFactory.EnsureCertificate(layout, secrets, log);
 
@@ -59,6 +61,7 @@ internal sealed class StackController(DeploymentLayout layout, Action<string> lo
         }
 
         log("5/6  Building the web app (first run only — this is the slow step)");
+        layout.SeedWebSourceIfNeeded(log);
         if (!await BuildWebAsync(cancellationToken).ConfigureAwait(false)) return 1;
 
         log("6/6  Starting the API and the web app");
@@ -85,14 +88,24 @@ internal sealed class StackController(DeploymentLayout layout, Action<string> lo
         if (seedDemo)
         {
             log("");
-            log("  Sign in with organization slug + email + password:");
-            log($"    tidewater-demo   demo-admin@tidewater.example.test        {secrets.DemoPassword}");
-            log($"    tidewater-demo   demo-technician@tidewater.example.test   {secrets.DemoPassword}");
-            log($"    isolation-demo   demo-admin@isolation.example.test        {secrets.DemoPassword}");
+            log("  The sign-in form wants all three fields: organization slug, email, password.");
+            log("");
+            log($"    Organization slug   tidewater-demo");
+            log($"    Email               demo-admin@tidewater.example.test");
+            log($"    Password            {secrets.DemoPassword}");
+            log("");
+            log("    Also seeded, same password:");
+            log("      tidewater-demo / demo-technician@tidewater.example.test   (Technician)");
+            log("      isolation-demo / demo-admin@isolation.example.test        (second tenant)");
+            WriteSignInFile(secrets);
+            log("");
+            log($"  Saved to      {SignInFile}");
+            log("  Reprint with  propflow-deploy credentials");
         }
         log("");
         log($"  Logs          {layout.LogDirectory}");
         log($"  Credentials   {layout.SecretsFile}");
+        log($"  State         {layout.StateRoot}");
         log("  Stop with     propflow-deploy down");
         return 0;
     }
@@ -116,9 +129,72 @@ internal sealed class StackController(DeploymentLayout layout, Action<string> lo
         if (removeData)
         {
             log("Removed the database volume. The next `up` starts from an empty database.");
-            log($"Left {layout.StateDirectory} in place — delete it by hand for a full reset.");
+            log($"Left {layout.StateRoot} in place — delete it by hand for a full reset.");
         }
         log("PropFlow is down.");
+        return 0;
+    }
+
+    private string SignInFile => Path.Combine(layout.StateRoot, "SIGN-IN.txt");
+
+    /// <summary>
+    /// Leaves the sign-in details on disk in plain sight. A terminal gets closed; a file does not.
+    /// </summary>
+    private void WriteSignInFile(DeploymentSecrets secrets) => File.WriteAllText(SignInFile, $"""
+        PropFlow — how to sign in
+        =========================
+
+        Open http://127.0.0.1:3000
+
+        The form asks for three things. The organization slug is the one people miss.
+
+            Organization slug   tidewater-demo
+            Email               demo-admin@tidewater.example.test
+            Password            {secrets.DemoPassword}
+
+        Other seeded accounts, same password:
+
+            tidewater-demo / demo-technician@tidewater.example.test
+                A Technician. Deliberately sees only work assigned to them — fewer
+                work orders here is the access model working, not a fault.
+
+            isolation-demo / demo-admin@isolation.example.test
+                A separate organization, for checking tenant isolation.
+
+        If the page does not load, the stack is not running. Start it with:
+
+            propflow-deploy up
+
+        and check it with:
+
+            propflow-deploy status
+
+        """);
+
+    /// <summary>
+    /// Prints the sign-in accounts for this deployment. Exists because the credentials used to be
+    /// visible only in the scrollback of the `up` that created them.
+    /// </summary>
+    public int Credentials()
+    {
+        if (!File.Exists(layout.SecretsFile))
+        {
+            log("This deployment has not been brought up yet, so no accounts exist.");
+            log("Run `propflow-deploy up` first.");
+            return 1;
+        }
+
+        var secrets = DeploymentSecrets.LoadOrCreate(layout, _ => { });
+        log("Sign in at http://127.0.0.1:3000 with organization slug + email + password.");
+        log("");
+        log($"  Password for all three accounts:  {secrets.DemoPassword}");
+        log("");
+        log("  Organization slug   Email                                    Role");
+        log("  tidewater-demo      demo-admin@tidewater.example.test        Organization Admin (start here)");
+        log("  tidewater-demo      demo-technician@tidewater.example.test   Technician (scoped to assigned work)");
+        log("  isolation-demo      demo-admin@isolation.example.test        A second tenant, for isolation checks");
+        log("");
+        log($"Stored in {layout.SecretsFile}");
         return 0;
     }
 
@@ -126,6 +202,9 @@ internal sealed class StackController(DeploymentLayout layout, Action<string> lo
     {
         var problems = await Preflight.RunAsync(layout, requirePortsFree: false, cancellationToken).ConfigureAwait(false);
         foreach (var problem in problems) log($"  [!] {problem.What}");
+
+        log($"  Bundle      {layout.Root}{(layout.BundleIsWritable ? "" : "  (read-only)")}");
+        log($"  State       {layout.StateRoot}");
 
         log($"  PostgreSQL  port {Preflight.DatabasePort}  {(Preflight.IsPortInUse(Preflight.DatabasePort) ? "listening" : "not listening")}");
         log($"  API         port {Preflight.ApiPort}  {(Preflight.IsPortInUse(Preflight.ApiPort) ? "listening" : "not listening")}");

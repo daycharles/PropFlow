@@ -79,7 +79,20 @@ public static class DatabaseProvisioner
             -- audit trail cannot be altered or erased by the application role itself.
             GRANT SELECT, INSERT ON identity."AuditEntries" TO propflow_app;
             GRANT SELECT ON operations."Vendors" TO propflow_app;
-            GRANT SELECT ON operations."Employees", operations."Portfolios", operations."Properties", operations."Buildings", operations."Spaces" TO propflow_app;
+            GRANT SELECT ON operations."Employees" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."Buildings", operations."Spaces" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."Portfolios", operations."Properties" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."Listings", operations."Inquiries", operations."Showings" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."Leases", operations."LeaseNotices" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."Announcements" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."LeaseParties" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."LeaseDocuments" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."ResidentPayments" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."LeaseCharges" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."PropertyContacts" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."PropertyDocuments" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Applicants" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."HouseholdMembers" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."WorkCategories", operations."Residents", operations."Occupancies", operations."Assets" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."SavedViews" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."AutomationRules" TO propflow_app;

@@ -18,6 +18,10 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
   const links = nav.getByRole("link");
   await expect(links).toHaveText([
     "Work",
+    "Properties",
+    "Listings",
+    "Leases",
+    "Announcements",
     "Needs attention",
     "Categories",
     "Automation",
@@ -25,6 +29,10 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
     "Members",
   ]);
   await expect(nav.getByRole("link", { name: "Work" })).toHaveAttribute("href", "/");
+  await expect(nav.getByRole("link", { name: "Properties" })).toHaveAttribute(
+    "href",
+    "/properties",
+  );
   await expect(nav.getByRole("link", { name: "Needs attention" })).toHaveAttribute(
     "href",
     "/attention",

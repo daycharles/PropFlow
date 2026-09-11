@@ -39,7 +39,21 @@ at `http://127.0.0.1:3000` — a potentially-trustworthy origin, so Chrome still
 
 Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID and slug (the slug is used for login) and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
 
-On subsequent runs set `ConnectionStrings__Database` from your private local configuration and start the API. Do not point the API at the PostgreSQL owner/admin account: startup rejects superuser, RLS-bypass, administrative, and schema/table-owner roles.
+On subsequent runs the helper is not re-run: set `ConnectionStrings__Database` yourself before
+starting the API. Nothing persists it. `scripts/Initialize-Local.ps1:46` derives the value from
+the ignored `.env` (`POSTGRES_DB`, `APP_DB_PASSWORD`) and exports it into **that shell only**, so
+a fresh terminal has no runtime connection and the API exits at startup. Re-derive it from the
+repository root:
+
+```powershell
+$v = @{}; Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { $v[$Matches[1]] = $Matches[2] } }
+$env:ConnectionStrings__Database = "Host=localhost;Database=$($v.POSTGRES_DB);Username=propflow_app;Password=$($v.APP_DB_PASSWORD)"
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet run --project src/PropFlow.Api --urls https://localhost:5001
+```
+
+The username is always `propflow_app`. Do not point the API at the PostgreSQL owner/admin
+account: startup rejects superuser, RLS-bypass, administrative, and schema/table-owner roles.
 
 ## Manual administration / other platforms
 
@@ -77,6 +91,9 @@ to `Draft`. It also seeds **4 active message templates** (`Visit scheduled (SMS)
 `Visit scheduled (email)`, `Work completed (SMS)`, and the M5 `Technician on the way` SMS —
 `tools/PropFlow.Admin/TidewaterSeed.cs:281-292`) so the web **Assign &amp; notify** flow and the
 technician "on the way" workflow both have something to send.
+
+The seed also creates `demo-resident@tidewater.example.test` with the same `Demo__Password`, bound
+to a current seeded resident for verifying the resident portal and service-request workflow.
 
 **The isolation tenant** (`demo-admin@isolation.example.test`, same password) keeps a minimal
 seed — one portfolio/property/building/space, one vendor, one employee, two categories, and 12

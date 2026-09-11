@@ -1,5 +1,6 @@
 **/bin/
 **/obj/
+.DS_Store
 **/node_modules/
 **/.next/
 **/coverage/
@@ -20,3 +21,7 @@
 
 # Deployment bundles produced by scripts/Publish-Deployment.ps1
 /artifacts/
+
+# Agent-written scratch notes and handoffs. These have carried live local credentials
+# (see git history) — never track this directory.
+/Claude outputs/

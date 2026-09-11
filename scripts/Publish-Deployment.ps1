@@ -41,11 +41,26 @@
 param(
     [string[]]$RuntimeIdentifier = @('osx-arm64', 'osx-x64'),
     [string]$OutputDirectory = 'artifacts',
-    [switch]$SkipArchive
+    [switch]$SkipArchive,
+    [switch]$Installer
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+function Get-WixTool {
+    <#
+        Returns the WiX v4+ CLI, or $null. It installs as a global dotnet tool, whose directory
+        is not on PATH in a shell that was open before the install -- so check there explicitly
+        rather than relying on PATH alone.
+    #>
+    $onPath = Get-Command wix -CommandType Application -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    foreach ($candidate in @("$env:USERPROFILE\.dotnet\tools\wix.exe", "$env:USERPROFILE/.dotnet/tools/wix")) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
 
 function Get-GnuTar {
     <#
@@ -172,12 +187,28 @@ try {
         Copy-Item 'docs/DEPLOYMENT.md' (Join-Path $bundle 'README.md')
         Copy-Item 'CHANGELOG.md' (Join-Path $bundle 'CHANGELOG.md')
 
+        # The Start Menu shortcuts the MSI creates point at these, not at propflow-deploy.exe:
+        # a console program launched from a shortcut closes its window as soon as it returns,
+        # and `up` returns while the stack keeps running. They are harmless in a zip too.
+        if ($rid -like 'win-*') {
+            Copy-Item 'installer/PropFlow-Start.cmd' (Join-Path $bundle 'PropFlow-Start.cmd')
+            Copy-Item 'installer/PropFlow-Stop.cmd' (Join-Path $bundle 'PropFlow-Stop.cmd')
+        }
+
         # Windows filesystems carry no Unix execute bit, so an archive built here would unpack
         # with propflow-deploy non-executable. GNU tar's --mode stamps one into the archive;
         # Windows' bundled bsdtar rejects the option outright ("Option --mode=a+rx is not
         # supported"). Git for Windows ships GNU tar, so prefer that and say so loudly when only
         # bsdtar is available rather than shipping a bundle that cannot run.
-        if (-not $SkipArchive) {
+        if (-not $SkipArchive -and $rid -like 'win-*') {
+            # Windows gets a zip: Explorer opens it natively, and there is no execute bit to
+            # preserve, which is the only reason the tar dance below exists.
+            $archive = Join-Path $output "$bundleName.zip"
+            if (Test-Path $archive) { Remove-Item -Force $archive }
+            Write-Host "  archive -> $archive"
+            Compress-Archive -Path $bundle -DestinationPath $archive -CompressionLevel Optimal
+        }
+        elseif (-not $SkipArchive) {
             $archive = Join-Path $output "$bundleName.tar.gz"
             if (Test-Path $archive) { Remove-Item -Force $archive }
             Write-Host "  archive -> $archive"
@@ -206,6 +237,50 @@ try {
                     "chmod +x propflow-deploy api/PropFlow.Api admin/PropFlow.Admin")
                 tar --create --gzip --file $archive --directory $output $bundleName
                 if ($LASTEXITCODE -ne 0) { throw "tar failed for $bundleName." }
+            }
+        }
+
+        if ($Installer) {
+            if ($rid -notlike 'win-*') {
+                Write-Warning "  -Installer only applies to a win-* runtime identifier; skipping for $rid."
+            }
+            else {
+                $wix = Get-WixTool
+                if (-not $wix) {
+                    throw ("WiX is not installed. Run: dotnet tool install --global wix`n" +
+                        "(then reopen the shell, or add $env:USERPROFILE\.dotnet\tools to PATH).")
+                }
+                $msi = Join-Path $output "$bundleName.msi"
+                if (Test-Path $msi) { Remove-Item -Force $msi }
+                Write-Host "  installer -> $msi"
+
+                # MSI ProductVersion is numeric only, so the prerelease suffix is dropped here
+                # and carried in ARPCOMMENTS instead. See the comment block in PropFlow.wxs.
+                $msiVersion = ([xml](Get-Content 'Directory.Build.props')).Project.PropertyGroup.VersionPrefix
+
+                # --acceptEula: WiX v7 refuses to run (WIX7015) until the Open Source Maintenance
+                # Fee EULA is accepted. Accepting is a licensing decision, not a build detail --
+                # the repository owner authorised it on 2026-09-11. The per-invocation flag is
+                # used rather than `wix eula` on purpose: it keeps the acceptance visible here in
+                # source instead of in an undiscoverable file on one build machine.
+                # NOTE: the OSMF is a paid maintenance fee for commercial use. If that is not
+                # wanted, pin `dotnet tool install --global wix --version 5.*`, which is MS-RL
+                # licensed with no fee and builds this same .wxs unchanged.
+                & $wix build 'installer/PropFlow.wxs' `
+                    --acceptEula wix7 `
+                    -arch x64 `
+                    -d "BundleDir=$bundle" `
+                    -d "ProductVersion=$msiVersion" `
+                    -d "InformationalVersion=$version" `
+                    -out $msi
+                if ($LASTEXITCODE -ne 0) { throw "wix build failed for $bundleName." }
+
+                # wix emits a .wixpdb beside the .msi. It is a build symbol file, not something
+                # to publish alongside a release, so drop it rather than let it be uploaded.
+                $wixpdb = [IO.Path]::ChangeExtension($msi, '.wixpdb')
+                if (Test-Path $wixpdb) { Remove-Item -Force $wixpdb }
+
+                Write-Host "  installer built: $msi" -ForegroundColor Green
             }
         }
 

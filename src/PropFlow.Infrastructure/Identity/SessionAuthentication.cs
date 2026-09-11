@@ -1,19 +1,53 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using PropFlow.Application;
+using PropFlow.Application.Communications;
+using PropFlow.Domain.Communications;
+using PropFlow.Infrastructure.Communications;
+using PropFlow.Infrastructure.Persistence;
 
 namespace PropFlow.Infrastructure.Identity;
 
 public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
     SignInManager<ApplicationUser> signIn, MembershipAccess memberships, RoleCapabilityService roleCapabilities,
-    UserSessionService sessions)
+    UserSessionService sessions, IConfiguration configuration, TimeProvider clock)
 {
     // A valid Identity password hash whose work factor VerifyHashedPassword reads from the hash
     // itself. Verifying against it for an unknown email spends the same time as a wrong-password
     // check, so a missing account is not distinguishable by response latency.
     private static readonly PasswordHasher<ApplicationUser> DecoyHasher = new();
     private static readonly string DecoyHash = new PasswordHasher<ApplicationUser>().HashPassword(new ApplicationUser(), "decoy");
+
+    public async Task RequestPasswordResetAsync(string email, string organizationSlug, CancellationToken ct)
+    {
+        var user = await users.FindByEmailAsync(email);
+        if (user is null) return;
+        var membership = await memberships.FindActiveBySlugAsync(user.Id, organizationSlug.Trim().ToLowerInvariant(), ct);
+        if (membership is null) return;
+
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var connection = configuration.GetConnectionString("Database")
+            ?? throw new InvalidOperationException("Set ConnectionStrings__Database.");
+        await using var communications = DatabaseProvisioner.CreateCommunicationsStore(connection, membership.OrganizationId);
+        var outbox = new EfOutbox(communications, clock);
+        await outbox.EnqueueAsync(new OutboxSubmission(
+            MessageChannel.Email,
+            user.Email!,
+            "Reset your PropFlow password",
+            $"A password reset was requested for your PropFlow account.\n\nOrganization: {organizationSlug.Trim()}\nReset token: {token}\n\nThis token expires according to the configured Identity token lifetime and can be used only once.",
+            $"password-reset:{membership.OrganizationId}:{user.Id}:{Guid.NewGuid():N}"), ct);
+    }
+
+    public async Task<bool> ResetPasswordAsync(string email, string organizationSlug, string token, string newPassword, CancellationToken ct)
+    {
+        var user = await users.FindByEmailAsync(email);
+        if (user is null) return false;
+        if (await memberships.FindActiveBySlugAsync(user.Id, organizationSlug.Trim().ToLowerInvariant(), ct) is null) return false;
+        var result = await users.ResetPasswordAsync(user, token, newPassword);
+        return result.Succeeded;
+    }
 
     public async Task<bool> LoginAsync(string email, string password, Guid organizationId, CancellationToken ct,
         string? userAgent = null, string? ipAddress = null)
