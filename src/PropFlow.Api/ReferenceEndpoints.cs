@@ -103,7 +103,8 @@ public static class ReferenceEndpoints
                 .Select(x => new { x.Id, x.BuildingId, x.Code, x.IsArchived, IsOccupied = store.Occupancies.Any(occupancy => occupancy.SpaceId == x.Id && occupancy.MovedOutOn == null) }).Take(ListCap).ToListAsync(ct);
             var contacts = await store.PropertyContacts.AsNoTracking().Where(x => x.PropertyId == id).OrderBy(x => x.FullName).ThenBy(x => x.Id).Select(x => new { x.Id, x.PropertyId, x.FullName, x.Role, x.Email, x.Phone }).Take(ListCap).ToListAsync(ct);
             var documents = await store.PropertyDocuments.AsNoTracking().Where(x => x.PropertyId == id).OrderByDescending(x => x.CreatedAt).Select(x => new { x.Id, x.PropertyId, x.Title, x.DocumentUrl, x.DocumentType, x.CreatedAt }).Take(ListCap).ToListAsync(ct);
-            return Results.Ok(new { property, buildings, spaces, contacts, documents });
+            var amenities = await store.PropertyAmenities.AsNoTracking().Where(x => x.PropertyId == id && !x.IsArchived).OrderBy(x => x.Name).ThenBy(x => x.Id).Select(x => new { x.Id, x.PropertyId, x.Name, x.Details }).Take(ListCap).ToListAsync(ct);
+            return Results.Ok(new { property, buildings, spaces, contacts, documents, amenities });
         });
         properties.MapPost("/", async (PropertyRequest request, OperationsStore store, CancellationToken ct) =>
         {
@@ -126,6 +127,33 @@ public static class ReferenceEndpoints
             if (!await store.Properties.AnyAsync(x => x.Id == propertyId, ct)) return Results.NotFound();
             try { var contact = new PropertyContact(store.OrganizationId, Guid.NewGuid(), propertyId, request.FullName, request.Role, request.Email, request.Phone); store.PropertyContacts.Add(contact); await store.SaveChangesAsync(ct); return Results.Created($"/api/properties/{propertyId}/contacts/{contact.Id}", contact); }
             catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageProperties);
+        properties.MapGet("/{propertyId:guid}/amenities", async (Guid propertyId, OperationsStore store, CancellationToken ct) =>
+            Results.Ok(await store.PropertyAmenities.AsNoTracking().Where(x => x.PropertyId == propertyId && !x.IsArchived).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(ct)));
+        properties.MapPost("/{propertyId:guid}/amenities", async (Guid propertyId, PropertyAmenityRequest request, OperationsStore store, CancellationToken ct) =>
+        {
+            if (!await store.Properties.AnyAsync(x => x.Id == propertyId, ct)) return Results.NotFound();
+            try
+            {
+                var amenity = new PropertyAmenity(store.OrganizationId, Guid.NewGuid(), propertyId, request.Name, request.Details);
+                store.PropertyAmenities.Add(amenity);
+                await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/properties/{propertyId}/amenities/{amenity.Id}", amenity);
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageProperties);
+        properties.MapPut("/{propertyId:guid}/amenities/{amenityId:guid}", async (Guid propertyId, Guid amenityId, PropertyAmenityRequest request, OperationsStore store, CancellationToken ct) =>
+        {
+            var amenity = await store.PropertyAmenities.SingleOrDefaultAsync(x => x.Id == amenityId && x.PropertyId == propertyId, ct);
+            if (amenity is null) return Results.NotFound();
+            try { amenity.Update(request.Name, request.Details); await store.SaveChangesAsync(ct); return Results.Ok(amenity); }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageProperties);
+        properties.MapPost("/{propertyId:guid}/amenities/{amenityId:guid}/archive", async (Guid propertyId, Guid amenityId, OperationsStore store, CancellationToken ct) =>
+        {
+            var amenity = await store.PropertyAmenities.SingleOrDefaultAsync(x => x.Id == amenityId && x.PropertyId == propertyId, ct);
+            if (amenity is null) return Results.NotFound();
+            amenity.Archive(); await store.SaveChangesAsync(ct); return Results.NoContent();
         }).RequireAuthorization(Capabilities.ManageProperties);
         properties.MapPut("/{id:guid}", async (Guid id, PropertyRequest request, OperationsStore store, CancellationToken ct) =>
         {
@@ -206,3 +234,4 @@ public sealed record NameRequest(string Name);
 public sealed record SpaceRequest(Guid? BuildingId, string Code);
 public sealed record PropertyContactRequest(string FullName, string Role, string? Email, string? Phone);
 public sealed record PropertyDocumentRequest(string Title, string DocumentUrl, string? DocumentType);
+public sealed record PropertyAmenityRequest(string Name, string? Details);

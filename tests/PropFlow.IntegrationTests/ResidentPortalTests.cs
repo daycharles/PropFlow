@@ -17,12 +17,14 @@ public sealed class ResidentPortalTests(DatabaseFixture fixture)
     public async Task Bound_resident_can_read_portal_and_create_a_service_request_only_for_current_space()
     {
         await using var s = await fixture.CreateScenarioAsync();
+        Guid chargeId;
         await using (var seedStore = s.AdminStore(s.OrganizationA))
         {
             var residentLease = new Lease(s.OrganizationA, Guid.NewGuid(), s.ResidentA, s.SpaceA, new DateOnly(2026, 1, 15), new DateOnly(2026, 12, 31), 1650, 1650);
             residentLease.Activate();
             seedStore.Leases.Add(residentLease);
-            seedStore.LeaseCharges.Add(new LeaseCharge(s.OrganizationA, Guid.NewGuid(), residentLease.Id, LeaseChargeType.Recurring, "Monthly rent", 1650, new DateOnly(2026, 2, 1)));
+            chargeId = Guid.NewGuid();
+            seedStore.LeaseCharges.Add(new LeaseCharge(s.OrganizationA, chargeId, residentLease.Id, LeaseChargeType.Recurring, "Monthly rent", 1650, new DateOnly(2026, 2, 1)));
             var announcement = new Announcement(s.OrganizationA, Guid.NewGuid(), "Planned water shutdown", "Water will be unavailable Saturday morning.", null);
             announcement.Publish();
             seedStore.Announcements.Add(announcement);
@@ -72,14 +74,21 @@ public sealed class ResidentPortalTests(DatabaseFixture fixture)
         var documentList = await documents.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Contains(documentList.EnumerateArray(), item => item.GetProperty("fileName").GetString() == "lease-packet.pdf");
         var leaseId = portal.GetProperty("leases").EnumerateArray().First().GetProperty("id").GetGuid();
-        using var payment = await s.Client.PostAsJsonAsync("/api/portal/payments", new { leaseId, amount = 1650, dueOn = "2026-03-01", reference = "March rent" });
+        using var payment = await s.Client.PostAsJsonAsync("/api/portal/payments", new { leaseId, chargeId, amount = 1650, dueOn = "2026-03-01", reference = "March rent" });
         Assert.Equal(HttpStatusCode.Created, payment.StatusCode);
+        var paymentJson = await payment.Content.ReadFromJsonAsync<JsonElement>();
+        var paymentId = paymentJson.GetProperty("id").GetGuid();
+        Assert.Equal(chargeId, paymentJson.GetProperty("chargeId").GetGuid());
         using var payments = await s.Client.GetAsync("/api/portal/payments");
         Assert.Contains("March rent", await payments.Content.ReadAsStringAsync());
         var managerPayment = new ResidentPayment(s.OrganizationA, Guid.NewGuid(), leaseId, s.ResidentA, 100, new DateOnly(2026, 4, 1), "manager-settlement");
         store.ResidentPayments.Add(managerPayment);
         await store.SaveChangesAsync();
         await s.LoginAsync();
+        using var settledChargePayment = await s.Client.PostAsync($"/api/leasing/leases/payments/{paymentId}/settle", null);
+        Assert.Equal(HttpStatusCode.OK, settledChargePayment.StatusCode);
+        await using var chargeStore = s.AdminStore(s.OrganizationA);
+        Assert.Equal(LeaseChargeStatus.Paid, (await chargeStore.LeaseCharges.FindAsync(s.OrganizationA, chargeId))!.Status);
         using var settled = await s.Client.PostAsync($"/api/leasing/leases/payments/{managerPayment.Id}/settle", null);
         Assert.Equal(HttpStatusCode.OK, settled.StatusCode);
         Assert.Equal("Settled", (await settled.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetString());

@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using PropFlow.Domain.Marketing;
+using PropFlow.Domain.People;
+using PropFlow.Domain.Properties;
 using Xunit;
 
 namespace PropFlow.IntegrationTests;
@@ -64,5 +66,31 @@ public sealed class MarketingEndpointsTests(DatabaseFixture fixture)
         await s.RefreshCsrfAsync();
         var hidden = await s.Client.GetFromJsonAsync<JsonElement[]>($"/api/marketing/listings/?propertyId={s.PropertyA}");
         Assert.Empty(hidden!);
+    }
+
+    [Fact]
+    public async Task Published_space_listing_disappears_when_space_becomes_occupied()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var spaceId = Guid.NewGuid();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            admin.Spaces.Add(new Space(s.OrganizationA, spaceId, s.PropertyA, null, $"AV-{spaceId:N}"));
+            await admin.SaveChangesAsync();
+        }
+        await s.LoginAsync();
+        using var create = await s.Client.PostAsJsonAsync("/api/marketing/listings/", new
+        { propertyId = s.PropertyA, spaceId, headline = "Available home", availableOn = "2026-10-01", monthlyRent = 1900 });
+        var listingId = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await s.Client.PostAsync($"/api/marketing/listings/{listingId}/publish", null)).StatusCode);
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            admin.Occupancies.Add(new Occupancy(s.OrganizationA, Guid.NewGuid(), s.ResidentA, spaceId, new DateOnly(2026, 9, 1)));
+            await admin.SaveChangesAsync();
+        }
+        var listings = await s.Client.GetFromJsonAsync<JsonElement[]>($"/api/marketing/listings/?status=Published");
+        Assert.DoesNotContain(listings!, item => item.GetProperty("id").GetGuid() == listingId);
+        using var inquiry = await s.Client.PostAsJsonAsync($"/api/marketing/listings/{listingId}/inquiries", new { prospectName = "Alex", email = "alex-occupied@example.test" });
+        Assert.Equal(HttpStatusCode.NotFound, inquiry.StatusCode);
     }
 }

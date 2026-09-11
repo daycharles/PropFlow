@@ -77,5 +77,9 @@ public sealed class ReferenceEndpointsTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.Created, document.StatusCode);
         var detailWithDocument = await s.Client.GetFromJsonAsync<JsonElement>($"/api/properties/{property}");
         Assert.Contains(detailWithDocument.GetProperty("documents").EnumerateArray(), item => item.GetProperty("title").GetString() == "Building rules");
+        using var amenity = await s.Client.PostAsJsonAsync($"/api/properties/{property}/amenities", new { name = "Resident lounge", details = "Open daily" });
+        Assert.Equal(HttpStatusCode.Created, amenity.StatusCode);
+        var detailWithAmenity = await s.Client.GetFromJsonAsync<JsonElement>($"/api/properties/{property}");
+        Assert.Contains(detailWithAmenity.GetProperty("amenities").EnumerateArray(), item => item.GetProperty("name").GetString() == "Resident lounge");
     }
 }

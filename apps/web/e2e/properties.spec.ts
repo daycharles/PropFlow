@@ -37,7 +37,13 @@ test("property management lists the tenant portfolio and supports property searc
   await page.getByLabel("Property document type").fill("Policy");
   await page.getByRole("button", { name: "Add document" }).click();
   await expect(page.getByText("Document added.")).toBeVisible();
-  await expect(page.getByText(/Browser property rules — Policy/)).toBeVisible();
+  await expect(page.getByText(/Browser property rules — Policy/).first()).toBeVisible();
+  const amenityName = `Fitness center ${Date.now()}`;
+  await page.getByLabel("Property amenity name").fill(amenityName);
+  await page.getByLabel("Property amenity details").fill("Open 24 hours");
+  await page.getByRole("button", { name: "Add amenity" }).click();
+  await expect(page.getByText("Amenity added.")).toBeVisible();
+  await expect(page.getByText(`${amenityName} — Open 24 hours`)).toBeVisible();
 });
 
 test("property management creates a portfolio and property", async ({ page }) => {

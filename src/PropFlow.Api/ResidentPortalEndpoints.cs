@@ -99,7 +99,15 @@ public static class ResidentPortalEndpoints
         {
             var residentId = await ResidentId(user, memberships, ct); if (residentId is null) return Results.Forbid();
             var lease = await store.Leases.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.LeaseId && x.ResidentId == residentId, ct); if (lease is null) return Results.NotFound();
-            try { var payment = new ResidentPayment(store.OrganizationId, Guid.NewGuid(), lease.Id, residentId.Value, request.Amount, request.DueOn, request.Reference); store.ResidentPayments.Add(payment); await store.SaveChangesAsync(ct); return Results.Created($"/api/portal/payments/{payment.Id}", payment); }
+            LeaseCharge? charge = null;
+            if (request.ChargeId is { } chargeId)
+            {
+                charge = await store.LeaseCharges.SingleOrDefaultAsync(x => x.Id == chargeId && x.LeaseId == lease.Id, ct);
+                if (charge is null) return Results.NotFound();
+                if (charge.Status != LeaseChargeStatus.Open || request.Amount != charge.Amount || await store.ResidentPayments.AnyAsync(x => x.ChargeId == charge.Id && x.Status != ResidentPaymentStatus.Failed, ct))
+                    return Results.Conflict("The charge is already paid, pending payment, or the amount does not match.");
+            }
+            try { var payment = new ResidentPayment(store.OrganizationId, Guid.NewGuid(), lease.Id, residentId.Value, request.Amount, request.DueOn, request.Reference, request.ChargeId); store.ResidentPayments.Add(payment); await store.SaveChangesAsync(ct); return Results.Created($"/api/portal/payments/{payment.Id}", payment); }
             catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
         }).RequireAuthorization(Capabilities.ResidentPortalRequest);
         group.MapPost("/service-requests", async (ServiceRequest request, ClaimsPrincipal user, MembershipAccess memberships, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
@@ -125,4 +133,4 @@ public sealed record ServiceRequest(Guid SpaceId, string Title, string? Descript
 public sealed record PortalProfileRequest(string FullName, string? Email, string? Phone);
 public sealed record PortalPreferencesRequest(bool EmailEnabled, bool SmsEnabled);
 public sealed record HouseholdMemberRequest(string FullName, string Relationship, string? Email);
-public sealed record ResidentPaymentRequest(Guid LeaseId, decimal Amount, DateOnly DueOn, string? Reference);
+public sealed record ResidentPaymentRequest(Guid LeaseId, decimal Amount, DateOnly DueOn, string? Reference, Guid? ChargeId);
