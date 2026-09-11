@@ -6,9 +6,14 @@ A from-scratch walkthrough for running PropFlow locally and exercising it. Writt
 
 > **What is and is not verified.** The command sequence below is the one CI runs green on
 > `ubuntu-latest`. It was also dry-run end to end on a Windows box before this release was
-> tagged. The **macOS-specific** steps — the keychain prompt on `dotnet dev-certs https --trust`,
-> and Docker Desktop on Apple Silicon — were **not** executed by the author on macOS. If one of
-> them behaves differently, that is the likeliest place for this guide to be wrong.
+> tagged — `down -v` onward: fresh volume, all four migrations, `configure-runtime`, `seed-demo`,
+> the API healthy on `https://localhost:5001`, `next dev` on `127.0.0.1:3000`, sign-in as
+> `tidewater-demo`, 100 seeded work items, and a 10-item bulk vendor assignment that moved every
+> one to `Assigned` with a `VendorAssigned` timeline entry.
+>
+> The **macOS-specific** steps — the keychain prompt on `dotnet dev-certs https --trust`, and
+> Docker Desktop on Apple Silicon — were **not** executed by the author on macOS. If one of them
+> behaves differently, that is the likeliest place for this guide to be wrong.
 
 Every other doc in this repo uses PowerShell. This one does not, and `pwsh` is **not** required:
 the bash path below replaces `scripts/Initialize-Local.ps1` entirely.
@@ -329,6 +334,7 @@ is a defect to report — they are the accepted state of `v1.0.0-rc.1`.
 | API exits at startup, log mentions a privileged connection | `ConnectionStrings__Database` points at the owner account. The API refuses superuser / RLS-bypass / owner roles by design |
 | Login returns 500 from `/api/auth/csrf` | The API is on http, or on `127.0.0.1` instead of `localhost` |
 | `next dev` logs `DEPTH_ZERO_SELF_SIGNED_CERT` | `NODE_EXTRA_CA_CERTS` is unset, or points at a file that was never written |
+| `⨯ Another next dev server is already running` | An earlier `next dev` for this directory survived. It names the PID and an alternate port in the message — stop that PID rather than using the other port, or the browser and the proxy disagree about which server is live |
 | `/health/ready` never leaves 503 | `migrate` or `configure-runtime` did not actually succeed — re-read their output |
 | Nothing to bulk-assign | The demo already consumed the `New` items. Section 8 — `down -v` and re-seed |
 
