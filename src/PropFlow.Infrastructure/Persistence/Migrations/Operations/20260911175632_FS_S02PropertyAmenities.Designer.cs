@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    partial class OperationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260911175632_FS_S02PropertyAmenities")]
+    partial class FS_S02PropertyAmenities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -414,9 +417,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
-                    b.Property<Guid?>("ChargeId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateOnly>("DueOn")
                         .HasColumnType("date");
 
@@ -442,8 +442,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ChargeId");
 
                     b.HasIndex("OrganizationId", "LeaseId");
 
@@ -1341,11 +1339,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 
             modelBuilder.Entity("PropFlow.Domain.Leasing.ResidentPayment", b =>
                 {
-                    b.HasOne("PropFlow.Domain.Leasing.LeaseCharge", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ChargeId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("PropFlow.Domain.Leasing.Lease", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "LeaseId")

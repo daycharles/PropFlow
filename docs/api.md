@@ -58,15 +58,18 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | PUT | /api/properties/{propertyId}/spaces/{spaceId} | Properties.Manage + CSRF; updates a space code and building assignment |
 | GET/POST | /api/properties/{propertyId}/contacts | Read or add tenant-scoped property contacts |
 | GET/POST | /api/properties/{propertyId}/documents | Read or add tenant-scoped property document links |
+| GET | /api/properties/{propertyId}/amenities | Work.Read; active property amenities |
+| POST/PUT | /api/properties/{propertyId}/amenities[/{amenityId}] | Properties.Manage + CSRF; creates or updates a property amenity |
+| POST | /api/properties/{propertyId}/amenities/{amenityId}/archive | Properties.Manage + CSRF; archives an amenity |
 | POST | /api/properties/{propertyId}/spaces/{spaceId}/archive | Properties.Manage + CSRF; archives a space from property detail |
 | POST | /api/properties/{propertyId}/spaces/{spaceId}/restore | Properties.Manage + CSRF; restores an archived space |
-| GET | /api/marketing/listings/ | Work.Read; tenant-scoped listings, optionally filtered by property or status |
+| GET | /api/marketing/listings/ | Work.Read; tenant-scoped listings, optionally filtered by property or status; published unit listings are excluded once current occupancy exists and include `isAvailable` |
 | GET | /api/marketing/listings/{id} | Work.Read; listing detail, or 404 |
 | POST | /api/marketing/listings/ | Leasing.Manage + CSRF; creates a draft listing with availability and rent |
 | PUT | /api/marketing/listings/{id} | Leasing.Manage + CSRF; updates listing content and availability |
 | POST | /api/marketing/listings/{id}/publish | Leasing.Manage + CSRF; publishes a listing |
 | POST | /api/marketing/listings/{id}/unpublish | Leasing.Manage + CSRF; returns a published listing to draft |
-| GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry with optional lead-source attribution; active duplicate email inquiries return 409 |
+| GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry for an available published listing with optional lead-source attribution; active duplicate email inquiries return 409 |
 | PUT | /api/marketing/listings/{id}/inquiries/{inquiryId}/status | Leasing.Manage + CSRF; advances inquiry status |
 | GET/POST | /api/marketing/listings/{id}/showings | Read or request a showing for a published listing |
 | PUT | /api/marketing/listings/{id}/showings/{showingId}/status | Leasing.Manage + CSRF; updates showing status |
@@ -91,9 +94,9 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /api/portal/documents | ResidentPortal.Read; lists resident-visible documents attached to the resident's work |
 | GET | /api/portal/documents/{attachmentId} | ResidentPortal.Read; downloads a document only when it belongs to the authenticated resident |
 | GET | /api/portal/lease-documents | ResidentPortal.Read; lists resident-visible lease document links for the authenticated resident |
-| GET/POST | /api/portal/payments | ResidentPortal.Read/Request; lists or submits a payment for the authenticated resident's own lease |
+| GET/POST | /api/portal/payments | ResidentPortal.Read/Request; lists or submits a payment for the authenticated resident's own lease; optional `chargeId` requires an open charge and an exact amount match |
 | GET | /api/leasing/leases/payments | Work.Read; lists tenant-scoped resident payments |
-| POST | /api/leasing/leases/payments/{paymentId}/settle | Leasing.Manage + CSRF; settles a submitted payment |
+| POST | /api/leasing/leases/payments/{paymentId}/settle | Leasing.Manage + CSRF; settles a submitted payment and marks its linked charge paid atomically |
 | GET/POST | /api/leasing/leases/{id}/charges | Read or add recurring/one-time lease charges |
 | GET | /api/portal/charges | ResidentPortal.Read; lists charges for the authenticated resident's leases |
 | GET | /api/portal/announcements | ResidentPortal.Read; lists active published announcements for the resident's organization |

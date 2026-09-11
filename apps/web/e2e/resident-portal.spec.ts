@@ -42,7 +42,19 @@ test("resident can submit and see a service request", async ({ page }) => {
           securityDeposit: null,
         }),
       });
-      return (await leaseResponse.json()) as { id: string };
+      const lease = (await leaseResponse.json()) as { id: string };
+      const chargeResponse = await fetch(`/api/leasing/leases/${lease.id}/charges`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": token },
+        body: JSON.stringify({
+          type: "Recurring",
+          description: "Browser monthly rent",
+          amount: 1650,
+          dueOn: "2026-04-01",
+        }),
+      });
+      const charge = (await chargeResponse.json()) as { id: string };
+      return { ...lease, chargeId: charge.id };
     },
     { token: csrf.token },
   );
@@ -64,6 +76,9 @@ test("resident can submit and see a service request", async ({ page }) => {
   await page.getByRole("link", { name: "Resident portal" }).click();
   await expect(page.getByRole("heading", { name: "Resident portal" })).toBeVisible();
   await expect(page.getByRole("heading", { name: announcementTitle })).toBeVisible();
+  await page.getByLabel("Payment lease charge").selectOption(demoLease.chargeId);
+  await expect(page.getByLabel("Payment amount")).toHaveValue("1650");
+  await expect(page.getByLabel("Payment due date")).toHaveValue("2026-04-01");
   await page.getByLabel("Payment amount").fill("1650");
   await page.getByLabel("Payment due date").fill("2026-04-01");
   await page.getByLabel("Payment reference").fill(`Browser rent ${Date.now()}`);

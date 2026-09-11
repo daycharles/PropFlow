@@ -8,6 +8,7 @@ import {
   type LeaseNotice,
   type LeaseParty,
   type LeaseCharge,
+  type PortalLeaseDocument,
   type PropertyReference,
   type ResidentReference,
   type Session,
@@ -43,6 +44,11 @@ function LeasesContent({ session }: { session: Session }) {
   const [partyEmail, setPartyEmail] = useState("");
   const [chargeLease, setChargeLease] = useState<Lease | null>(null);
   const [charges, setCharges] = useState<LeaseCharge[]>([]);
+  const [documentLease, setDocumentLease] = useState<Lease | null>(null);
+  const [leaseDocuments, setLeaseDocuments] = useState<PortalLeaseDocument[]>([]);
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentUrl, setDocumentUrl] = useState("");
+  const [documentResidentVisible, setDocumentResidentVisible] = useState(true);
   const [chargeDescription, setChargeDescription] = useState("");
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeDueOn, setChargeDueOn] = useState("");
@@ -198,6 +204,32 @@ function LeasesContent({ session }: { session: Session }) {
       setError(caught instanceof Error ? caught.message : "Unable to load lease charges.");
     }
   };
+  const viewDocuments = async (lease: Lease) => {
+    setError("");
+    try {
+      setDocumentLease(lease);
+      setLeaseDocuments(await api.leasing.leases.documents(lease.id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to load lease documents.");
+    }
+  };
+  const addDocument = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!documentLease) return;
+    try {
+      await api.leasing.leases.addDocument(documentLease.id, {
+        title: documentTitle,
+        documentUrl,
+        residentVisible: documentResidentVisible,
+      });
+      setDocumentTitle("");
+      setDocumentUrl("");
+      await viewDocuments(documentLease);
+      setMessage("Lease document added.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to add lease document.");
+    }
+  };
   const addCharge = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!chargeLease) return;
@@ -260,6 +292,9 @@ function LeasesContent({ session }: { session: Session }) {
                       </button>{" "}
                       <button type="button" onClick={() => void viewCharges(lease)}>
                         Charges
+                      </button>{" "}
+                      <button type="button" onClick={() => void viewDocuments(lease)}>
+                        Documents
                       </button>{" "}
                       {lease.status === "Draft" && (
                         <button type="button" onClick={() => void action(lease, "activate")}>
@@ -468,6 +503,81 @@ function LeasesContent({ session }: { session: Session }) {
                 required
               />
               <button type="submit">Add charge</button>
+            </form>
+          )}
+        </section>
+      )}
+      {documentLease && (
+        <section className="panel">
+          <h2>Documents for {residentNames.get(documentLease.residentId) ?? "resident"}</h2>
+          {leaseDocuments.length ? (
+            <ul>
+              {leaseDocuments.map((document) => (
+                <li key={document.id}>
+                  <a href={document.documentUrl} target="_blank" rel="noreferrer">
+                    {document.title}
+                  </a>{" "}
+                  — {document.status}
+                  {document.status === "Draft" && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await api.leasing.leases.sendDocument(documentLease.id, document.id);
+                        await viewDocuments(documentLease);
+                      }}
+                    >
+                      Send
+                    </button>
+                  )}
+                  {document.status === "Sent" && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const signedBy = window.prompt("Signed by", "Resident") ?? "";
+                        if (!signedBy) return;
+                        await api.leasing.leases.signDocument(
+                          documentLease.id,
+                          document.id,
+                          signedBy,
+                        );
+                        await viewDocuments(documentLease);
+                      }}
+                    >
+                      Record signature
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No lease documents recorded.</p>
+          )}
+          {canManage && (
+            <form className="form-grid" onSubmit={(event) => void addDocument(event)}>
+              <input
+                aria-label="Lease document title"
+                value={documentTitle}
+                onChange={(event) => setDocumentTitle(event.target.value)}
+                placeholder="Document title"
+                required
+              />
+              <input
+                aria-label="Lease document URL"
+                type="url"
+                value={documentUrl}
+                onChange={(event) => setDocumentUrl(event.target.value)}
+                placeholder="https://..."
+                required
+              />
+              <label>
+                <input
+                  type="checkbox"
+                  checked={documentResidentVisible}
+                  onChange={(event) => setDocumentResidentVisible(event.target.checked)}
+                />{" "}
+                Resident visible
+              </label>
+              <button type="submit">Add lease document</button>
             </form>
           )}
         </section>

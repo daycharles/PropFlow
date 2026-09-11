@@ -132,6 +132,7 @@ export type PropertyDetail = {
     documentType?: string | null;
     createdAt: string;
   }[];
+  amenities: { id: string; propertyId: string; name: string; details?: string | null }[];
 };
 export type Lease = {
   id: string;
@@ -164,6 +165,7 @@ export type ResidentPayment = {
   id: string;
   leaseId: string;
   residentId: string;
+  chargeId?: string | null;
   amount: number;
   dueOn: string;
   reference?: string | null;
@@ -546,6 +548,25 @@ export const api = {
       csrfToken = undefined;
       await csrf();
     },
+    requestPasswordRecovery(input: { organizationSlug: string; email: string }) {
+      return mutation<void>("/api/auth/password-recovery/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+    },
+    resetPassword(input: {
+      organizationSlug: string;
+      email: string;
+      token: string;
+      newPassword: string;
+    }) {
+      return mutation<void>("/api/auth/password-recovery/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+    },
     async logout() {
       await mutation<void>("/api/auth/logout", { method: "POST" });
       csrfToken = undefined;
@@ -787,6 +808,28 @@ export const api = {
           },
         ),
     },
+    amenities: {
+      create: (propertyId: string, input: { name: string; details?: string | null }) =>
+        mutation<unknown>(`/api/properties/${propertyId}/amenities`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      update: (
+        propertyId: string,
+        amenityId: string,
+        input: { name: string; details?: string | null },
+      ) =>
+        mutation<unknown>(`/api/properties/${propertyId}/amenities/${amenityId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      archive: (propertyId: string, amenityId: string) =>
+        mutation<void>(`/api/properties/${propertyId}/amenities/${amenityId}/archive`, {
+          method: "POST",
+        }),
+    },
     spaces: {
       create: (propertyId: string, input: { buildingId?: string | null; code: string }) =>
         mutation<{ id: string; propertyId: string; buildingId?: string | null; code: string }>(
@@ -943,6 +986,27 @@ export const api = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
         }),
+      documents: (id: string) =>
+        request<PortalLeaseDocument[]>(`/api/leasing/leases/${id}/documents`),
+      addDocument: (
+        id: string,
+        input: { title: string; documentUrl: string; residentVisible: boolean },
+      ) =>
+        mutation<PortalLeaseDocument>(`/api/leasing/leases/${id}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      sendDocument: (id: string, documentId: string) =>
+        mutation<PortalLeaseDocument>(`/api/leasing/leases/${id}/documents/${documentId}/send`, {
+          method: "POST",
+        }),
+      signDocument: (id: string, documentId: string, signedBy: string) =>
+        mutation<PortalLeaseDocument>(`/api/leasing/leases/${id}/documents/${documentId}/sign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signedBy }),
+        }),
       charges: (id: string) => request<LeaseCharge[]>(`/api/leasing/leases/${id}/charges`),
       addCharge: (
         id: string,
@@ -968,6 +1032,7 @@ export const api = {
     charges: () => request<LeaseCharge[]>("/api/portal/charges"),
     submitPayment: (input: {
       leaseId: string;
+      chargeId?: string | null;
       amount: number;
       dueOn: string;
       reference?: string | null;

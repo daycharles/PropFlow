@@ -37,6 +37,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [recovery, setRecovery] = useState(false);
   async function bootstrap() {
     try {
       setSession(await api.session());
@@ -73,6 +74,43 @@ export default function Home() {
       setSubmitting(false);
     }
   }
+  async function requestRecovery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await api.auth.requestPasswordRecovery({
+        organizationSlug: String(values.get("organizationSlug") ?? ""),
+        email: String(values.get("email") ?? ""),
+      });
+      setMessage("If the account exists, reset instructions have been sent.");
+    } catch {
+      setMessage("If the account exists, reset instructions have been sent.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  async function resetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await api.auth.resetPassword({
+        organizationSlug: String(values.get("organizationSlug") ?? ""),
+        email: String(values.get("email") ?? ""),
+        token: String(values.get("token") ?? ""),
+        newPassword: String(values.get("newPassword") ?? ""),
+      });
+      setRecovery(false);
+      setMessage("Password reset. You can sign in now.");
+    } catch (error) {
+      setMessage(error instanceof ApiError ? error.message : "Unable to reset the password.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
   if (!ready)
     return (
       <main className="centered">
@@ -84,21 +122,74 @@ export default function Home() {
       <main className="login">
         <h1>PropFlow</h1>
         <p>Internal property operations</p>
-        <form onSubmit={login}>
-          <label>
-            Organization slug
-            <input name="organizationSlug" autoComplete="organization" required />
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" autoComplete="email" required />
-          </label>
-          <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
-          </label>
-          <button disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
-        </form>
+        {!recovery ? (
+          <form onSubmit={login}>
+            <label>
+              Organization slug
+              <input name="organizationSlug" autoComplete="organization" required />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" autoComplete="email" required />
+            </label>
+            <label>
+              Password
+              <input name="password" type="password" autoComplete="current-password" required />
+            </label>
+            <button disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
+          </form>
+        ) : (
+          <>
+            <form onSubmit={requestRecovery}>
+              <label>
+                Organization slug
+                <input name="organizationSlug" autoComplete="organization" required />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" autoComplete="email" required />
+              </label>
+              <button disabled={submitting}>
+                {submitting ? "Sending…" : "Send reset instructions"}
+              </button>
+            </form>
+            <form onSubmit={resetPassword}>
+              <label>
+                Organization slug
+                <input name="organizationSlug" autoComplete="organization" required />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" autoComplete="email" required />
+              </label>
+              <label>
+                Reset token
+                <input name="token" required />
+              </label>
+              <label>
+                New password
+                <input
+                  name="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  required
+                />
+              </label>
+              <button disabled={submitting}>Reset password</button>
+            </form>
+          </>
+        )}
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => {
+            setRecovery((value) => !value);
+            setMessage("");
+          }}
+        >
+          {recovery ? "Back to sign in" : "Forgot password?"}
+        </button>
         {message && (
           <p className="message" role="alert">
             {message}
