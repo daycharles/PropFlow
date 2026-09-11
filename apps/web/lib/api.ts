@@ -432,6 +432,30 @@ export type SavedView = {
   columns: string;
   isDefault: boolean;
 };
+export type Invitation = {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  expiresAt: string;
+};
+// The token is returned only here, at creation - PF-S01.09's member-management page shows the
+// invite link once, in this response, and never again (it is not re-readable from the pending list).
+export type CreatedInvitation = Invitation & { token: string };
+export type ActiveMember = {
+  userId: string;
+  email: string;
+  role: string;
+  employeeId?: string | null;
+  vendorId?: string | null;
+};
+export type RoleCapabilities = {
+  role: string;
+  defaults: string[];
+  grants: string[];
+  revocations: string[];
+  effective: string[];
+};
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -1071,5 +1095,38 @@ export const api = {
         }),
       }),
     delete: (id: string) => mutation<void>(`/api/saved-views/${id}`, { method: "DELETE" }),
+  },
+  // PF-S01.09: organization membership administration (invitations, roles, members).
+  invitations: {
+    list: () => request<Invitation[]>("/api/organizations/current/invitations"),
+    create: (input: { email: string; role: string }) =>
+      mutation<CreatedInvitation>("/api/organizations/current/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    // Anonymous - the acceptor has no session yet. Still goes through `mutation`, which fetches
+    // its own CSRF token first; the app's antiforgery middleware applies to every non-GET /api/*
+    // route regardless of authentication.
+    accept: (token: string, password: string) =>
+      mutation<void>(`/api/invitations/${encodeURIComponent(token)}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      }),
+  },
+  roles: {
+    list: () => request<RoleCapabilities[]>("/api/organizations/current/roles"),
+  },
+  members: {
+    list: () => request<ActiveMember[]>("/api/organizations/current/members"),
+    changeRole: (userId: string, role: string) =>
+      mutation<void>(`/api/organizations/current/members/${userId}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      }),
+    remove: (userId: string) =>
+      mutation<void>(`/api/organizations/current/members/${userId}`, { method: "DELETE" }),
   },
 };

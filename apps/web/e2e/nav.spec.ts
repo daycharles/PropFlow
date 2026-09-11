@@ -26,6 +26,7 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
     "Categories",
     "Automation",
     "Integrations",
+    "Members",
   ]);
   await expect(nav.getByRole("link", { name: "Work" })).toHaveAttribute("href", "/");
   await expect(nav.getByRole("link", { name: "Properties" })).toHaveAttribute(
@@ -47,6 +48,10 @@ test("the primary navigation lists exactly the shipped destinations", async ({ p
   await expect(nav.getByRole("link", { name: "Integrations" })).toHaveAttribute(
     "href",
     "/integrations",
+  );
+  await expect(nav.getByRole("link", { name: "Members" })).toHaveAttribute(
+    "href",
+    "/settings/members",
   );
 
   // No detail routes leak into the nav, and the search control is present for a Work.Read user.

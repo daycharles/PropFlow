@@ -70,6 +70,12 @@ builder.Services.AddDbContext<CommunicationsStore>(options => options.UseNpgsql(
 builder.Services.AddDbContext<IntegrationStore>(options => options.UseNpgsql(connection,
     postgres => postgres.MigrationsHistoryTable("__IntegrationsMigrations", "integrations")));
 builder.Services.AddScoped<MembershipAccess>();
+builder.Services.AddScoped<InvitationService>();
+builder.Services.AddScoped<RoleCapabilityService>();
+builder.Services.AddScoped<TeamService>();
+builder.Services.AddScoped<UserSessionService>();
+builder.Services.AddScoped<IdentityAuditLog>();
+builder.Services.AddScoped<MembershipManagementService>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
@@ -194,6 +200,7 @@ app.MapGet("/health/metrics", () => Results.Ok(PropFlowObservability.Snapshot())
 app.MapHealthChecks("/health/ready");
 app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
+app.MapSessionManagementEndpoints();
 app.MapWorkEndpoints();
 app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
@@ -212,6 +219,11 @@ app.MapSavedViewEndpoints();
 app.MapIntegrationEndpoints();
 app.MapAutomationEndpoints();
 app.MapProviderCallbackEndpoints();
+app.MapInvitationEndpoints();
+app.MapRoleCapabilityEndpoints();
+app.MapTeamEndpoints();
+app.MapMembershipManagementEndpoints();
+app.MapAuditEndpoints();
 app.Run();
 
 public partial class Program { }

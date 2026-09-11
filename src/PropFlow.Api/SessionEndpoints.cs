@@ -11,12 +11,13 @@ public static class SessionEndpoints
     {
         app.MapGet("/api/auth/csrf", (HttpContext context, IAntiforgery antiforgery) =>
             Results.Ok(new { token = antiforgery.GetAndStoreTokens(context).RequestToken })).AllowAnonymous();
-        app.MapPost("/api/auth/login", async (LoginRequest request, SessionAuthentication authentication, CancellationToken ct) =>
+        app.MapPost("/api/auth/login", async (LoginRequest request, HttpContext context, SessionAuthentication authentication, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 254 ||
                 string.IsNullOrEmpty(request.Password) || request.Password.Length > 1024 || string.IsNullOrWhiteSpace(request.OrganizationSlug))
                 return Results.Problem(statusCode: 400, title: "Organization slug, email, and password are required");
-            return await authentication.LoginAsync(request.Email.Trim(), request.Password, request.OrganizationSlug, ct)
+            return await authentication.LoginAsync(request.Email.Trim(), request.Password, request.OrganizationSlug, ct,
+                userAgent: context.Request.Headers.UserAgent.ToString(), ipAddress: context.Connection.RemoteIpAddress?.ToString())
                 ? Results.NoContent() : Results.Problem(statusCode: 401, title: "Unable to sign in with those credentials and organization");
         }).AllowAnonymous().RequireRateLimiting("login");
         app.MapPost("/api/auth/password-recovery/request", async (PasswordRecoveryRequest request, SessionAuthentication authentication, CancellationToken ct) =>
