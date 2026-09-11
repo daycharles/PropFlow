@@ -11,6 +11,7 @@ using PropFlow.Application;
 using PropFlow.Application.Assets;
 using PropFlow.Application.Attachments;
 using PropFlow.Application.Attention;
+using PropFlow.Application.Automation;
 using PropFlow.Application.Communications;
 using PropFlow.Application.Integrations;
 using PropFlow.Application.Search;
@@ -67,6 +68,8 @@ builder.Services.AddDbContext<IntegrationStore>(options => options.UseNpgsql(con
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
+builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
+builder.Services.AddScoped<IAutomationEngine, EfAutomationEngine>();
 builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IRepeatRepairDetector, EfRepeatRepairDetector>();
 builder.Services.AddScoped<IAttentionQueue, EfAttentionQueue>();

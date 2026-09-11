@@ -83,74 +83,25 @@ public static class CommunicationEndpoints
     private static void MapResidentMessageEndpoint(WebApplication app)
     {
         app.MapPost("/api/work/{workId:guid}/message", async (
-            Guid workId, SendResidentMessageRequest request,
-            OperationsStore operations, CommunicationsStore comms, IOutbox outbox, ITemplateRenderer renderer,
-            TimeProvider clock, CancellationToken ct) =>
+            Guid workId, SendResidentMessageRequest request, IResidentMessenger messenger, TimeProvider clock, CancellationToken ct) =>
         {
             if (request.TemplateId == Guid.Empty) return Results.Problem(statusCode: 400, title: "A template id is required");
 
-            var work = await operations.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == workId, ct);
-            if (work is null) return Results.NotFound();
-            if (work.ResidentId is not { } residentId)
-                return Results.Problem(statusCode: 409, title: "This work item has no resident to contact");
-
-            var template = await comms.MessageTemplates.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.TemplateId, ct);
-            if (template is null) return Results.NotFound();
-            if (!template.IsActive) return Results.Problem(statusCode: 409, title: "That template is inactive");
-
-            var resident = await operations.Residents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == residentId, ct);
-            if (resident is null) return Results.NotFound();
-
-            var channel = template.Channel;
-            if (!resident.AllowsContact(channel))
-                return Results.Problem(statusCode: 409, title: $"The resident has not consented to {channel} contact, or has no {channel} address");
-
-            var property = await operations.Properties.AsNoTracking().SingleOrDefaultAsync(x => x.Id == work.PropertyId, ct);
-            // Schedule times are stored UTC; a resident reads them in the property's local zone.
-            // An unrecognised IANA id (or no property) falls back to the stored offset.
-            var zone = ResolveZone(property?.TimeZoneId);
-            string LocalTime(DateTimeOffset? instant) => instant is not { } value ? ""
-                : (zone is null ? value : TimeZoneInfo.ConvertTime(value, zone)).ToString("f");
-            var values = new Dictionary<string, string>(StringComparer.Ordinal)
+            // Dedupe an accidental double-submit (same template, same work item, same hour). The
+            // template id already implies the channel, so it is not in the key. A deliberate
+            // re-send an hour later still goes through.
+            var key = $"work-message:{workId:N}:{request.TemplateId:N}:{clock.GetUtcNow():yyyyMMddHH}";
+            var result = await messenger.QueueForWorkAsync(workId, request.TemplateId, key, cancellationToken: ct);
+            return result.Outcome switch
             {
-                ["resident.name"] = resident.FullName,
-                ["work.title"] = work.Title,
-                ["work.status"] = work.Status.ToString(),
-                ["property.name"] = property?.Name ?? "",
-                ["schedule.start"] = LocalTime(work.ScheduledStart),
-                ["schedule.end"] = LocalTime(work.ScheduledEnd),
+                ResidentMessageOutcome.Queued => Results.Accepted($"/api/work/{workId}/timeline", new { queued = true }),
+                ResidentMessageOutcome.Deduplicated => Results.Accepted($"/api/work/{workId}/timeline", new { queued = false }),
+                ResidentMessageOutcome.WorkNotFound or ResidentMessageOutcome.TemplateNotFound => Results.NotFound(),
+                ResidentMessageOutcome.RenderFailed => Results.Problem(statusCode: 400, title: result.Detail ?? "The template could not be rendered"),
+                ResidentMessageOutcome.NoResident => Results.Problem(statusCode: 409, title: "This work item has no resident to contact"),
+                ResidentMessageOutcome.TemplateInactive => Results.Problem(statusCode: 409, title: "That template is inactive"),
+                _ => Results.Problem(statusCode: 409, title: result.Detail ?? "The resident cannot be contacted through that template's channel"),
             };
-
-            string body;
-            string? subject;
-            try
-            {
-                body = renderer.Render(template.Body, values);
-                subject = template.Subject is null ? null : renderer.Render(template.Subject, values);
-            }
-            catch (TemplateRenderException e)
-            {
-                return Results.Problem(statusCode: 400, title: e.Message);
-            }
-
-            var recipient = channel == MessageChannel.Sms ? resident.Phone! : resident.Email!;
-            // Dedupe an accidental double-submit (same template, same work item, same hour) via
-            // the outbox idempotency key. A deliberate re-send an hour later still goes through.
-            var idempotencyKey = $"work-message:{workId:N}:{request.TemplateId:N}:{channel}:{clock.GetUtcNow():yyyyMMddHH}";
-            var submission = new OutboxSubmission(channel, recipient, subject, body, idempotencyKey,
-                WorkId: workId, ResidentVisible: true);
-
-            bool queued;
-            try
-            {
-                queued = await outbox.EnqueueAsync(submission, ct);
-            }
-            catch (ArgumentException e)
-            {
-                return Results.Problem(statusCode: 400, title: e.Message);
-            }
-
-            return Results.Accepted($"/api/work/{workId}/timeline", new { queued });
         }).RequireAuthorization(Capabilities.SendResidentMessage);
 
         // The batch is completely checked before the outbox transaction begins: an item without
@@ -204,16 +155,6 @@ public static class CommunicationEndpoints
             var changed = queued.Count(x => x);
             return Results.Accepted("/api/work", new { changed, unchanged = queued.Count - changed, total = queued.Count });
         }).RequireAuthorization(Capabilities.SendResidentMessage);
-    }
-
-    // .NET 6+ resolves IANA ids on every platform; a stored id we cannot map is treated as
-    // "render in the original offset" rather than failing the send.
-    private static TimeZoneInfo? ResolveZone(string? timeZoneId)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId)) return null;
-        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
-        catch (TimeZoneNotFoundException) { return null; }
-        catch (InvalidTimeZoneException) { return null; }
     }
 }
 

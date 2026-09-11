@@ -306,8 +306,8 @@ export function BulkEditFlow({
             <h2 id="bulk-edit-title">Done</h2>
             <p className="success" role="status">
               Applied to {result.changed} of {result.total} {result.total === 1 ? "item" : "items"}
-              {result.unchanged > 0 ? ` — ${result.unchanged} already matched` : ""}. The list has
-              been refreshed.
+              {result.unchanged > 0 ? ` — ${result.unchanged} already matched` : ""}. Close this to
+              refresh the list.
             </p>
             <div className="modal-actions">
               <button onClick={() => onClose(true)}>Done</button>

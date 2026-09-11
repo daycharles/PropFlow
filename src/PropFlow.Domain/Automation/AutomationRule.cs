@@ -6,7 +6,7 @@ namespace PropFlow.Domain.Automation;
 // v1 is deliberately closed: administrators choose from these values rather than supplying
 // expressions or scripts. The JSON payload keeps the persisted rule shape forward-compatible
 // with a future visual builder without turning the database into an executable DSL.
-public enum AutomationTrigger { WorkCreated, WorkStatusChanged }
+public enum AutomationTrigger { WorkCreated, WorkStatusChanged, WorkNoteAdded }
 public enum AutomationConditionKind { WorkStatusEquals, CategoryEquals }
 public enum AutomationActionKind { SendResidentMessage, SetPriority }
 
@@ -63,6 +63,25 @@ public sealed class AutomationRule : TenantEntity
         JsonSerializer.Deserialize<AutomationCondition[]>(Conditions, Json) ?? [];
     public IReadOnlyList<AutomationAction> ReadActions() =>
         JsonSerializer.Deserialize<AutomationAction[]>(Actions, Json) ?? [];
+
+    /// <summary>
+    /// Whether a work item in this state satisfies every one of the rule's conditions (they are
+    /// ANDed; an empty condition list always matches). The trigger is checked by the caller.
+    /// </summary>
+    public bool Matches(WorkStatus status, Guid? categoryId)
+    {
+        foreach (var condition in ReadConditions())
+        {
+            var ok = condition.Kind switch
+            {
+                AutomationConditionKind.WorkStatusEquals => condition.Status == status,
+                AutomationConditionKind.CategoryEquals => condition.CategoryId == categoryId,
+                _ => false,
+            };
+            if (!ok) return false;
+        }
+        return true;
+    }
 
     public void Update(string name, AutomationTrigger trigger, IReadOnlyList<AutomationCondition>? conditions,
         IReadOnlyList<AutomationAction> actions, DateTimeOffset updatedAt)

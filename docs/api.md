@@ -142,12 +142,13 @@ about the work item: body `{ "templateId": "<guid>" }`. It resolves the work ite
 checks per-channel consent, renders the template's subject/body against
 `resident.name` / `work.title` / `work.status` / `property.name` / `schedule.start` /
 `schedule.end` (the two schedule values in the property's IANA time zone, `""` when the item is
-not scheduled), and enqueues on the template's channel. 202 with `{ "queued": true }` on
+not scheduled) and `note.text` (the note body when the message was enqueued by a `WorkNoteAdded`
+rule, `""` here), and enqueues on the template's channel. 202 with `{ "queued": true }` on
 success; 404 for an unknown work item or template; 409 when the work item has no resident, the
 template is inactive, or the resident has not consented to that channel; 400 for a template
 placeholder with no value or a control character reaching a rendered subject. The same template
-sent to the same work item on the same channel twice within an hour is de-duplicated —
-`{ "queued": false }`, 202, nothing enqueued.
+sent to the same work item twice within an hour is de-duplicated (the template implies the
+channel) — `{ "queued": false }`, 202, nothing enqueued.
 
 ### Assignment
 
@@ -194,7 +195,7 @@ as `bulk/vendor` — `items` is 1–100 entries with distinct `workId`s, one tra
 | `bulk/status` | `"status": "<WorkStatus>"` | not terminal | `Draft` target is 400; an item already in that status counts as `unchanged` |
 | `bulk/priority` | `"priority": "<WorkPriority>"` | not terminal | a same-priority item counts as `unchanged` |
 | `bulk/schedule` | `"scheduledStart"`, optional `"scheduledEnd"` | not terminal **and** have a vendor or employee | `end` before `start` is 400; moves each item to `Scheduled` |
-| `bulk/note` | `"note"` (1–2000 chars), optional `"internal": true` | any (including terminal) | appends a `WorkNote` timeline entry carrying the text and `internal`/`resident` visibility |
+| `bulk/note` | `"note"` (1–2000 chars), optional `"internal": true` | any (including terminal) | appends a `WorkNote` timeline entry carrying the text and `internal`/`resident` visibility; a resident-visible note fires the `WorkNoteAdded` automation trigger |
 | `bulk/reopen` | — | **all** completed or cancelled | moves each back to `Assigned` (if it has an assignee) or `New`, clears `completedAt`, writes a `WorkReopened` entry — the only sanctioned exit from a terminal state |
 
 A batch that mixes assignable and non-assignable items is refused whole with a 400 whose title
@@ -280,6 +281,34 @@ with the work-event wiring in a later task.
 Dispatcher behavior is configured under `Communications` (`PollInterval`, `RetryDelay`,
 `MaxDeliveryAttempts`, `StaleClaimTimeout`); defaults suit a single instance with mock
 providers.
+
+## Automation rules (milestone 5)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/automation/rules | `Settings.ManageAutomationRules`; the tenant's rules, name-ordered |
+| POST | /api/automation/rules | `Settings.ManageAutomationRules` + CSRF; `{ name, trigger, conditions, actions }`; 201, or 400 on an invalid shape |
+| POST | /api/automation/rules/{id}/enabled | `Settings.ManageAutomationRules` + CSRF; `{ "enabled": bool }`; 200, or 404 |
+
+A rule is `{ trigger, conditions[], actions[] }` from a closed v1 vocabulary — `trigger` is
+`WorkCreated`, `WorkStatusChanged` or `WorkNoteAdded` (a resident-visible note added; an
+internal note never fires it); a `condition` is `WorkStatusEquals` (`status`) or
+`CategoryEquals` (`categoryId`); an `action` is `SetPriority` (`priority`) or
+`SendResidentMessage` (`templateId`). At least one action is required.
+
+**Rules execute.** After a work create commits, an explicit status change commits (`PUT
+/api/work/{id}`, `POST /api/work/bulk/status`), or a resident-visible note commits (`POST
+/api/work/bulk/note` without `internal`), the evaluator runs the tenant's enabled rules
+for that trigger, `AND`s every condition against the committed work item, and applies the
+matches: `SetPriority` is skipped when the priority already matches or the work is terminal;
+`SendResidentMessage` goes through the same path as `POST /api/work/{id}/message`, keyed so a
+retry does not double-send. A `WorkNoteAdded` message can render `{{ note.text }}` with the note
+body (the engine re-reads the committed note and refuses a non-resident-visible one); consent
+and no-resident skips are recorded on the `AutomationApplied` timeline entry, which never
+carries internal note text. Each rule is idempotent per occurrence (an `AutomationApplied`
+timeline entry fences it), runs in its own transaction, and a failing rule is logged and
+skipped without affecting the work write or other rules. Evaluation is post-commit and
+in-process — there is no durable retry queue yet.
 
 ## Global search (milestone 6)
 
