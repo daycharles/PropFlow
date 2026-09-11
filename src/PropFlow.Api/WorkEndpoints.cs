@@ -177,7 +177,12 @@ public static class WorkEndpoints
             catch (InvalidTimeZoneException) { }
         }
         DateTimeOffset? Local(DateTimeOffset? value) => value is { } instant && zone is not null ? TimeZoneInfo.ConvertTime(instant, zone) : value;
-        return new WorkResponse(item, version, zoneId, Local(item.ScheduledStart), Local(item.ScheduledEnd));
+        var customFields = await (
+            from value in operations.CustomFieldValues.AsNoTracking()
+            join definition in operations.CustomFieldDefinitions.AsNoTracking() on value.CustomFieldDefinitionId equals definition.Id
+            where value.WorkId == item.Id
+            select new { definition.Key, value.Value }).ToDictionaryAsync(x => x.Key, x => x.Value, ct);
+        return new WorkResponse(item, version, zoneId, Local(item.ScheduledStart), Local(item.ScheduledEnd), customFields);
     }
     private const string TerminalTitle = "Completed and cancelled work cannot be assigned";
     private static bool ValidBatch(List<BulkWorkVersion>? items) =>
@@ -195,7 +200,8 @@ public static class WorkEndpoints
 
 public sealed record WorkListRequest(string? Search, Guid? CategoryId, WorkStatus? Status, WorkPriority? Priority, Guid? PropertyId, Guid? SpaceId, string? Sort, bool Descending = false, int Page = 1, int PageSize = 25);
 public sealed record WorkResponse(WorkItem Item, uint Version, string? PropertyTimeZone = null,
-    DateTimeOffset? ScheduledStartLocal = null, DateTimeOffset? ScheduledEndLocal = null);
+    DateTimeOffset? ScheduledStartLocal = null, DateTimeOffset? ScheduledEndLocal = null,
+    IReadOnlyDictionary<string, string>? CustomFields = null);
 public sealed record AssignVendorRequest(Guid VendorId, uint? Version = null);
 public sealed record AssignEmployeeRequest(Guid EmployeeId, uint? Version = null);
 public sealed record BulkWorkVersion(Guid WorkId, uint Version);
@@ -206,7 +212,7 @@ public sealed record BulkPriorityRequest(WorkPriority Priority, List<BulkWorkVer
 public sealed record BulkScheduleRequest(DateTimeOffset ScheduledStart, DateTimeOffset? ScheduledEnd, List<BulkWorkVersion>? Items);
 public sealed record BulkNoteRequest(string? Note, bool Internal, List<BulkWorkVersion>? Items);
 public sealed record BulkReopenRequest(List<BulkWorkVersion>? Items);
-public sealed record CreateWorkRequest(string Title, Guid PropertyId, string? Description = null, WorkType WorkType = WorkType.WorkOrder, Guid? CategoryId = null, WorkPriority Priority = WorkPriority.Normal, Guid? BuildingId = null, Guid? SpaceId = null, Guid? ResidentId = null, Guid? AssetId = null, DateTimeOffset? DueDate = null, decimal? Cost = null, string? InternalNotes = null, string? ResidentVisibleNotes = null)
-{ public CreateWorkCommand ToCommand(Guid actor) => new(Title, PropertyId, actor, Description, WorkType, CategoryId, Priority, BuildingId, SpaceId, ResidentId, AssetId, DueDate, Cost, InternalNotes, ResidentVisibleNotes); }
-public sealed record UpdateWorkRequest(string Title, string? Description, Guid? CategoryId, WorkPriority Priority, Guid PropertyId, Guid? BuildingId, Guid? SpaceId, Guid? ResidentId, Guid? AssetId, DateTimeOffset? DueDate, decimal? Cost, string? InternalNotes, string? ResidentVisibleNotes, WorkStatus? Status, DateTimeOffset? ScheduledStart, DateTimeOffset? ScheduledEnd, uint Version)
-{ public UpdateWorkCommand ToCommand(Guid actor) => new(Title, Description, CategoryId, Priority, PropertyId, BuildingId, SpaceId, ResidentId, AssetId, DueDate, Cost, InternalNotes, ResidentVisibleNotes, Status, ScheduledStart, ScheduledEnd, Version, actor); }
+public sealed record CreateWorkRequest(string Title, Guid PropertyId, string? Description = null, WorkType WorkType = WorkType.WorkOrder, Guid? CategoryId = null, WorkPriority Priority = WorkPriority.Normal, Guid? BuildingId = null, Guid? SpaceId = null, Guid? ResidentId = null, Guid? AssetId = null, DateTimeOffset? DueDate = null, decimal? Cost = null, string? InternalNotes = null, string? ResidentVisibleNotes = null, Dictionary<string, string?>? CustomFields = null)
+{ public CreateWorkCommand ToCommand(Guid actor) => new(Title, PropertyId, actor, Description, WorkType, CategoryId, Priority, BuildingId, SpaceId, ResidentId, AssetId, DueDate, Cost, InternalNotes, ResidentVisibleNotes, CustomFields); }
+public sealed record UpdateWorkRequest(string Title, string? Description, Guid? CategoryId, WorkPriority Priority, Guid PropertyId, Guid? BuildingId, Guid? SpaceId, Guid? ResidentId, Guid? AssetId, DateTimeOffset? DueDate, decimal? Cost, string? InternalNotes, string? ResidentVisibleNotes, WorkStatus? Status, DateTimeOffset? ScheduledStart, DateTimeOffset? ScheduledEnd, uint Version, Dictionary<string, string?>? CustomFields = null)
+{ public UpdateWorkCommand ToCommand(Guid actor) => new(Title, Description, CategoryId, Priority, PropertyId, BuildingId, SpaceId, ResidentId, AssetId, DueDate, Cost, InternalNotes, ResidentVisibleNotes, Status, ScheduledStart, ScheduledEnd, Version, actor, CustomFields); }

@@ -5,6 +5,7 @@ using PropFlow.Application.Automation;
 using PropFlow.Application.Work;
 using PropFlow.Domain.Automation;
 using PropFlow.Domain.Communications;
+using PropFlow.Domain.Configuration;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 using PropFlow.Infrastructure.Communications;
@@ -151,7 +152,9 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         var work = new WorkItem(store.OrganizationId, Guid.NewGuid(), c.Title, c.PropertyId, c.ActorId, c.WorkType);
         work.Edit(c.Title, c.Description, c.CategoryId, c.Priority); work.SetLocation(c.PropertyId, c.BuildingId, c.SpaceId, c.ResidentId); work.SetAsset(c.AssetId); work.SetDueDate(c.DueDate); work.SetCost(c.Cost); work.SetNotes(c.InternalNotes, c.ResidentVisibleNotes); work.Publish(clock.GetUtcNow());
         var created = Event(work, c.ActorId, "WorkCreated", null, work.Title);
-        store.WorkItems.Add(work); store.Timeline.Add(created); await store.SaveChangesAsync(ct);
+        store.WorkItems.Add(work); store.Timeline.Add(created);
+        await ApplyCustomFieldsAsync(work.Id, c.CustomFields, ct);
+        await store.SaveChangesAsync(ct);
         await RunAutomationAsync(AutomationTrigger.WorkCreated, work.Id, created.Id, ct);
         return work;
     }
@@ -172,6 +175,7 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         TimelineEntry? statusChanged = null;
         if (oldStatus != work.Status) store.Timeline.Add(statusChanged = Event(work, c.ActorId, "StatusChanged", oldStatus.ToString(), work.Status.ToString()));
         if (oldStart != work.ScheduledStart) store.Timeline.Add(Event(work, c.ActorId, "Scheduled", oldStart?.ToString("O"), work.ScheduledStart?.ToString("O"), now));
+        await ApplyCustomFieldsAsync(work.Id, c.CustomFields, ct);
         try { await store.SaveChangesAsync(ct); } catch (DbUpdateConcurrencyException) { return WorkWriteOutcome.Conflict; }
         if (statusChanged is not null) await RunAutomationAsync(AutomationTrigger.WorkStatusChanged, id, statusChanged.Id, ct);
         return WorkWriteOutcome.Updated;
@@ -343,6 +347,45 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     }
 
     private TimelineEntry Event(WorkItem work, Guid actor, string type, string? oldValue, string? newValue, DateTimeOffset? at = null) => TimelineEntry.Record(work.OrganizationId, actor, at ?? clock.GetUtcNow(), type, "WorkItem", work.Id, oldValue, newValue, work.Id, JsonSerializer.Serialize(new { oldValue, newValue }));
+
+    // PF-S03.02. Stages CustomFieldValue add/update/remove into the same change set as the work
+    // write, so both save in the one SaveChangesAsync call below and commit atomically together.
+    // A blank/null incoming value clears any existing value rather than storing an empty row —
+    // "not set" and "set to blank" are the same state for a field that isn't required. An unknown
+    // key, an archived definition, or a value the definition rejects all fail the whole write
+    // (fail-fast on the first bad entry, matching EnsureChildReferencesAsync below) rather than
+    // applying the rest and silently dropping one field.
+    private async Task ApplyCustomFieldsAsync(Guid workId, IReadOnlyDictionary<string, string?>? fields, CancellationToken ct)
+    {
+        if (fields is null || fields.Count == 0) return;
+        var definitions = await store.CustomFieldDefinitions
+            .Where(x => x.AppliesTo == CustomFieldAppliesTo.WorkItem)
+            .ToDictionaryAsync(x => x.Key, ct);
+        var existing = await store.CustomFieldValues.Where(x => x.WorkId == workId)
+            .ToDictionaryAsync(x => x.CustomFieldDefinitionId, ct);
+        var now = clock.GetUtcNow();
+        foreach (var (rawKey, raw) in fields)
+        {
+            var key = rawKey?.Trim().ToLowerInvariant() ?? "";
+            if (!definitions.TryGetValue(key, out var definition))
+                throw new ArgumentException($"Unknown custom field '{rawKey}'.", nameof(fields));
+            if (definition.IsArchived)
+                throw new ArgumentException($"Custom field '{rawKey}' is archived and cannot be set.", nameof(fields));
+            if (!definition.Accepts(raw))
+                throw new ArgumentException($"Invalid value for custom field '{rawKey}'.", nameof(fields));
+
+            var blank = string.IsNullOrWhiteSpace(raw);
+            if (existing.TryGetValue(definition.Id, out var value))
+            {
+                if (blank) store.CustomFieldValues.Remove(value);
+                else value.SetValue(raw!, now);
+            }
+            else if (!blank)
+            {
+                store.CustomFieldValues.Add(CustomFieldValue.Create(store.OrganizationId, Guid.NewGuid(), workId, definition.Id, raw!, now));
+            }
+        }
+    }
 
     // The optional location/category/asset refs on a work item carry no FK check the domain can
     // do (they are nullable and cross several tables), so a create/update could otherwise stash a
