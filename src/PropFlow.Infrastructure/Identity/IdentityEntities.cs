@@ -55,3 +55,17 @@ public sealed class Invitation
     // existing user gaining a new organization membership" without a second lookup.
     public Guid? AcceptedByUserId { get; set; }
 }
+
+/// <summary>PF-S01.04: a per-organization addition to a role's built-in default capabilities
+/// (<see cref="Application.Capabilities.ForRole"/>). <see cref="IsRevocation"/> distinguishes a
+/// grant (a capability the defaults do not give this role) from a revocation (a default
+/// capability withheld for this organization); see <c>RoleCapabilityMatrix.Effective</c> for how
+/// the two combine. There is deliberately one row shape for both rather than two tables, since an
+/// organization's customization of one role is naturally edited as a single list.</summary>
+public sealed class RoleCapabilityOverride
+{
+    public Guid OrganizationId { get; set; }
+    public string Role { get; set; } = "";
+    public string Capability { get; set; } = "";
+    public bool IsRevocation { get; set; }
+}

@@ -13,6 +13,7 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<OrganizationMembership> Memberships => Set<OrganizationMembership>();
     public DbSet<MembershipPropertyBinding> MembershipPropertyBindings => Set<MembershipPropertyBinding>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<RoleCapabilityOverride> RoleCapabilityOverrides => Set<RoleCapabilityOverride>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -53,6 +54,13 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.InvitedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.AcceptedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<RoleCapabilityOverride>(entity =>
+        {
+            entity.HasKey(x => new { x.OrganizationId, x.Role, x.Capability });
+            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Capability).HasMaxLength(120).IsRequired();
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

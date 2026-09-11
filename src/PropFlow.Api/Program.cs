@@ -71,6 +71,7 @@ builder.Services.AddDbContext<IntegrationStore>(options => options.UseNpgsql(con
     postgres => postgres.MigrationsHistoryTable("__IntegrationsMigrations", "integrations")));
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<InvitationService>();
+builder.Services.AddScoped<RoleCapabilityService>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
@@ -209,6 +210,7 @@ app.MapIntegrationEndpoints();
 app.MapAutomationEndpoints();
 app.MapProviderCallbackEndpoints();
 app.MapInvitationEndpoints();
+app.MapRoleCapabilityEndpoints();
 app.Run();
 
 public partial class Program { }
