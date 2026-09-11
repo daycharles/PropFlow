@@ -73,6 +73,7 @@ builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<RoleCapabilityService>();
 builder.Services.AddScoped<TeamService>();
+builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
@@ -197,6 +198,7 @@ app.MapGet("/health/metrics", () => Results.Ok(PropFlowObservability.Snapshot())
 app.MapHealthChecks("/health/ready");
 app.MapOpenApi().RequireAuthorization();
 app.MapSessionEndpoints();
+app.MapSessionManagementEndpoints();
 app.MapWorkEndpoints();
 app.MapReferenceEndpoints();
 app.MapCommunicationEndpoints();

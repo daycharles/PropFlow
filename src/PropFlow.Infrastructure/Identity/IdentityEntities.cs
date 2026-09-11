@@ -90,3 +90,21 @@ public sealed class TeamMembership
     public Guid OrganizationId { get; set; }
     public Guid UserId { get; set; }
 }
+
+/// <summary>PF-S01.06: one signed-in session/device, tracked so a user (or an admin, in a later
+/// pass) can see and revoke a single device without the "sign out everywhere" effect of
+/// <c>UserManager.UpdateSecurityStampAsync</c> (still used unchanged by <c>LogoutAsync</c> for the
+/// bulk case). <see cref="Id"/> is issued at login and carried in the cookie as the
+/// <c>TenantAccess.SessionClaim</c> claim; <see cref="RevokedAt"/> set means the cookie is rejected
+/// on its next validation even though <c>SecurityStamp</c> still matches.</summary>
+public sealed class UserSession
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid OrganizationId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public string? UserAgent { get; set; }
+    public string? IpAddress { get; set; }
+}

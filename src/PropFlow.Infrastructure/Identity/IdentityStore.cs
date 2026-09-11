@@ -16,6 +16,7 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<RoleCapabilityOverride> RoleCapabilityOverrides => Set<RoleCapabilityOverride>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -77,6 +78,15 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<OrganizationMembership>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<UserSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.HasIndex(x => new { x.UserId, x.OrganizationId });
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
