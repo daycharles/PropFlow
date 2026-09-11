@@ -95,6 +95,52 @@ public sealed class ScopedWorkAuthorizationTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkA}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Technician_attachments_are_scoped_to_assigned_work()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        var technician = Guid.NewGuid(); var employee = Guid.NewGuid();
+        await AddFieldUserAsync(s, technician, "Technician", employeeId: employee);
+        var assigned = Guid.NewGuid();
+        await using (var store = s.AdminStore(s.OrganizationA))
+        {
+            store.Employees.Add(new Employee(s.OrganizationA, employee, "Scoped Technician", null, null));
+            var work = new WorkItem(s.OrganizationA, assigned, "Technician repair", s.PropertyA, s.AdminA);
+            work.AssignEmployee(employee);
+            store.WorkItems.Add(work);
+            await store.SaveChangesAsync();
+        }
+
+        using var login = await s.AttemptLoginAsync($"{technician:N}@example.test", s.OrganizationA);
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        await s.RefreshCsrfAsync();
+
+        System.Net.Http.MultipartFormDataContent Photo()
+        {
+            var form = new System.Net.Http.MultipartFormDataContent();
+            var bytes = new System.Net.Http.ByteArrayContent("photo-bytes"u8.ToArray());
+            bytes.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+            form.Add(bytes, "file", "site.jpg");
+            return form;
+        }
+
+        // Own work: upload and list succeed.
+        using (var form = Photo())
+        {
+            using var ok = await s.Client.PostAsync($"/api/work/{assigned}/attachments/", form);
+            Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.OK, (await s.Client.GetAsync($"/api/work/{assigned}/attachments/")).StatusCode);
+
+        // Someone else's work: the scope check hides it as a 404 before the capability matters.
+        using (var form = Photo())
+        {
+            using var denied = await s.Client.PostAsync($"/api/work/{s.WorkA}/attachments/", form);
+            Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.NotFound, (await s.Client.GetAsync($"/api/work/{s.WorkA}/attachments/")).StatusCode);
+    }
+
     private static async Task AddFieldUserAsync(Scenario s, Guid id, string role, Guid? employeeId = null, Guid? vendorId = null, Guid? propertyId = null)
     {
         await using var identity = s.Identity();

@@ -180,11 +180,11 @@ earlier milestones when a feature forces the issue.
 
 | ID | Task | Area | Est | Depends on |
 | --- | --- | --- | --- | --- |
-| PF-7.01 | Attachment/photo storage service: upload, tenant-scoped access control, resident vs internal visibility, retention | infra | L | PF-3.19 |
-| PF-7.02 | Multi-instance readiness: shared encrypted Data Protection keys, trusted proxy configuration, managed secrets, PostgreSQL TLS | infra | L | — |
-| PF-7.03 | Observability pass: structured log review, request trace IDs end to end, basic metrics/health dashboards | infra | M | — |
-| PF-7.04 | Scheduling model: store UTC instants plus property IANA time zones; render local times in web | domain | M | PF-3.08 |
-| PF-7.05 | Message consent + provider callback + retry/retention controls for real communication providers | application | L | PF-4.05 |
+| PF-7.01 | ✅ Attachment/photo storage service. `Attachment` domain entity + forced-RLS `Attachments` table + `IAttachmentStorage` (`LocalAttachmentStorage`, path-traversal guarded). `/api/work/{id}/attachments` upload (25 MB, PDF/JPEG/PNG/WebP/HEIC) / list / stream-download / delete behind `Work.ManageAttachments`, every route narrowed by the field-role scope check so a Technician only touches their own work. `residentVisible` flag; `retainUntil` enforced by `AttachmentRetentionSweep` (per-tenant hosted service, blob + row). Web: attachments panel on the work detail page + a working "Add photo" on the technician view. | infra | L | PF-3.19 |
+| PF-7.02 | ✅ Multi-instance readiness: shared encrypted Data Protection keys, trusted proxy / forwarded-headers trust boundary, `Attachments:RootPath` / secret configuration gates, PostgreSQL TLS. `DeploymentConfigurationTests`. | infra | L | — |
+| PF-7.03 | ✅ Observability pass: structured logs, end-to-end request trace IDs, `/health/metrics` snapshot. `ObservabilityTests`. | infra | M | — |
+| PF-7.04 | ✅ Scheduling model: UTC instants + property IANA time zones, local-time projections rendered in web. | domain | M | PF-3.08 |
+| PF-7.05 | ✅ Real communication providers: message consent, signed provider callbacks, retry / retention controls. | application | L | PF-4.05 |
 | PF-7.06 | ✅ RLS/grants review checklist enforced in PR template for every new business table | ci | S | — |
 
 ---

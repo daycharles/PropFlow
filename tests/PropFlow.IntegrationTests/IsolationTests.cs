@@ -91,6 +91,27 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    [Fact]
+    public async Task Rls_confines_the_attachments_table_to_its_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            admin.Attachments.Add(Attachment.Create(s.OrganizationA, Guid.NewGuid(), s.WorkA, "a.pdf",
+                "application/pdf", 12, $"{s.OrganizationA:N}/x/a.pdf", residentVisible: false, DateTimeOffset.UtcNow, null));
+            await admin.SaveChangesAsync();
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        // Filter-bypass read from the other tenant sees nothing.
+        Assert.Empty(await store.Attachments.IgnoreQueryFilters().ToListAsync());
+        Assert.Empty(await store.Attachments.FromSqlRaw("SELECT * FROM operations.\"Attachments\"").IgnoreQueryFilters().ToListAsync());
+        // Raw cross-tenant insert is refused by the forced RLS policy.
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"Attachments\" (\"OrganizationId\", \"Id\", \"WorkId\", \"FileName\", \"ContentType\", \"Length\", \"StorageKey\", \"ResidentVisible\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.WorkA}, 'f.pdf', 'application/pdf', 1, 'k', false, now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
