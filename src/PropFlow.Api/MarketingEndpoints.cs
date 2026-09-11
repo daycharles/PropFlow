@@ -14,13 +14,14 @@ public static class MarketingEndpoints
             Results.Ok(await store.Listings.AsNoTracking()
                 .Where(x => propertyId == null || x.PropertyId == propertyId)
                 .Where(x => status == null || x.Status == status)
+                .Where(x => x.Status != ListingStatus.Published || x.SpaceId == null || !store.Occupancies.Any(occupancy => occupancy.SpaceId == x.SpaceId && occupancy.MovedOutOn == null))
                 .OrderBy(x => x.AvailableOn).ThenBy(x => x.Headline).Take(500)
-                .Select(x => new { x.Id, x.PropertyId, x.SpaceId, x.Headline, x.Description, x.AvailableOn, x.MonthlyRent, x.Status }).ToListAsync(ct)));
+                .Select(x => new { x.Id, x.PropertyId, x.SpaceId, x.Headline, x.Description, x.AvailableOn, x.MonthlyRent, x.Status, IsAvailable = x.SpaceId == null || !store.Occupancies.Any(occupancy => occupancy.SpaceId == x.SpaceId && occupancy.MovedOutOn == null) }).ToListAsync(ct)));
 
         group.MapGet("/{id:guid}", async (Guid id, OperationsStore store, CancellationToken ct) =>
         {
             var listing = await store.Listings.AsNoTracking().Where(x => x.Id == id)
-                .Select(x => new { x.Id, x.PropertyId, x.SpaceId, x.Headline, x.Description, x.AvailableOn, x.MonthlyRent, x.Status }).SingleOrDefaultAsync(ct);
+                .Select(x => new { x.Id, x.PropertyId, x.SpaceId, x.Headline, x.Description, x.AvailableOn, x.MonthlyRent, x.Status, IsAvailable = x.SpaceId == null || !store.Occupancies.Any(occupancy => occupancy.SpaceId == x.SpaceId && occupancy.MovedOutOn == null) }).SingleOrDefaultAsync(ct);
             return listing is null ? Results.NotFound() : Results.Ok(listing);
         });
 
@@ -47,7 +48,7 @@ public static class MarketingEndpoints
             Results.Ok(await store.Inquiries.AsNoTracking().Where(x => x.ListingId == id).OrderByDescending(x => x.CreatedAt).Take(200).ToListAsync(ct)));
         group.MapPost("/{id:guid}/inquiries", async (Guid id, InquiryRequest request, OperationsStore store, CancellationToken ct) =>
         {
-            if (!await store.Listings.AnyAsync(x => x.Id == id && x.Status == ListingStatus.Published, ct)) return Results.NotFound();
+            if (!await store.Listings.AnyAsync(x => x.Id == id && x.Status == ListingStatus.Published && (x.SpaceId == null || !store.Occupancies.Any(occupancy => occupancy.SpaceId == x.SpaceId && occupancy.MovedOutOn == null)), ct)) return Results.NotFound();
             if (await store.Inquiries.AnyAsync(x => x.ListingId == id && x.Email == request.Email && x.Status != InquiryStatus.Closed, ct)) return Results.Conflict("An active inquiry already exists for this email.");
             var inquiry = new Inquiry(store.OrganizationId, Guid.NewGuid(), id, request.ProspectName, request.Email, request.Phone, request.Message, request.LeadSource); store.Inquiries.Add(inquiry); await store.SaveChangesAsync(ct); return Results.Created($"/api/marketing/listings/{id}/inquiries/{inquiry.Id}", inquiry);
         });
@@ -69,7 +70,7 @@ public static class MarketingEndpoints
         group.MapGet("/{id:guid}/showings", async (Guid id, OperationsStore store, CancellationToken ct) => Results.Ok(await store.Showings.AsNoTracking().Where(x => x.ListingId == id).OrderBy(x => x.ScheduledAt).ToListAsync(ct)));
         group.MapPost("/{id:guid}/showings", async (Guid id, ShowingRequest request, OperationsStore store, CancellationToken ct) =>
         {
-            if (!await store.Listings.AnyAsync(x => x.Id == id && x.Status == ListingStatus.Published, ct)) return Results.NotFound();
+            if (!await store.Listings.AnyAsync(x => x.Id == id && x.Status == ListingStatus.Published && (x.SpaceId == null || !store.Occupancies.Any(occupancy => occupancy.SpaceId == x.SpaceId && occupancy.MovedOutOn == null)), ct)) return Results.NotFound();
             var showing = new Showing(store.OrganizationId, Guid.NewGuid(), id, request.ProspectName, request.ScheduledAt); store.Showings.Add(showing); await store.SaveChangesAsync(ct); return Results.Created($"/api/marketing/listings/{id}/showings/{showing.Id}", showing);
         });
         group.MapPut("/{id:guid}/showings/{showingId:guid}/status", async (Guid id, Guid showingId, ShowingStatusRequest request, OperationsStore store, CancellationToken ct) =>

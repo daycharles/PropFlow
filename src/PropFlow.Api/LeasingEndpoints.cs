@@ -95,7 +95,22 @@ public static class LeasingEndpoints
         group.MapPost("/{id:guid}/charges", async (Guid id, LeaseChargeRequest request, OperationsStore store, CancellationToken ct) =>
         { if (!await store.Leases.AnyAsync(x => x.Id == id, ct)) return Results.NotFound(); try { var charge = new LeaseCharge(store.OrganizationId, Guid.NewGuid(), id, request.Type, request.Description, request.Amount, request.DueOn); store.LeaseCharges.Add(charge); await store.SaveChangesAsync(ct); return Results.Created($"/api/leasing/leases/{id}/charges/{charge.Id}", charge); } catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); } }).RequireAuthorization(Capabilities.ManageLeasing);
         group.MapGet("/payments", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.ResidentPayments.AsNoTracking().OrderByDescending(x => x.SubmittedAt).Take(500).ToListAsync(ct)));
-        group.MapPost("/payments/{paymentId:guid}/settle", async (Guid paymentId, OperationsStore store, CancellationToken ct) => await ChangePayment(paymentId, store, ct, payment => payment.Settle())).RequireAuthorization(Capabilities.ManageLeasing);
+        group.MapPost("/payments/{paymentId:guid}/settle", async (Guid paymentId, OperationsStore store, CancellationToken ct) =>
+        {
+            var payment = await store.ResidentPayments.SingleOrDefaultAsync(x => x.Id == paymentId, ct); if (payment is null) return Results.NotFound();
+            try
+            {
+                payment.Settle();
+                if (payment.ChargeId is { } chargeId)
+                {
+                    var charge = await store.LeaseCharges.SingleOrDefaultAsync(x => x.Id == chargeId, ct);
+                    if (charge is null) return Results.Problem(statusCode: 409, title: "The linked charge no longer exists.");
+                    charge.MarkPaid();
+                }
+                await store.SaveChangesAsync(ct); return Results.Ok(payment);
+            }
+            catch (InvalidOperationException exception) { return Results.Problem(statusCode: 409, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageLeasing);
     }
 
     private static async Task<IResult> Change(Guid id, OperationsStore store, CancellationToken ct, Action<Lease> change)

@@ -41,6 +41,8 @@ function PropertiesContent({ session }: { session: Session }) {
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentUrl, setDocumentUrl] = useState("");
   const [documentType, setDocumentType] = useState("");
+  const [amenityName, setAmenityName] = useState("");
+  const [amenityDetails, setAmenityDetails] = useState("");
   const canManage = hasCapability(session, "Properties.Manage");
 
   const refresh = () =>
@@ -439,6 +441,52 @@ function PropertiesContent({ session }: { session: Session }) {
           ) : (
             <p>No spaces yet.</p>
           )}
+          <h3>Amenities</h3>
+          {propertyDetail.amenities.length ? (
+            <ul>
+              {propertyDetail.amenities.map((amenity) => (
+                <li key={amenity.id}>
+                  {amenity.name}
+                  {amenity.details ? ` — ${amenity.details}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No amenities yet.</p>
+          )}
+          <form
+            className="form-grid"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void runMutation(
+                () =>
+                  api.properties.amenities.create(selectedProperty.id, {
+                    name: amenityName,
+                    details: amenityDetails || null,
+                  }),
+                "Amenity added.",
+              ).then(() => {
+                setAmenityName("");
+                setAmenityDetails("");
+                return openProperty(selectedProperty);
+              });
+            }}
+          >
+            <input
+              aria-label="Property amenity name"
+              value={amenityName}
+              onChange={(event) => setAmenityName(event.target.value)}
+              placeholder="Amenity name"
+              required
+            />
+            <input
+              aria-label="Property amenity details"
+              value={amenityDetails}
+              onChange={(event) => setAmenityDetails(event.target.value)}
+              placeholder="Details (optional)"
+            />
+            <button type="submit">Add amenity</button>
+          </form>
           <h3>Contacts</h3>
           {propertyDetail.contacts.length ? (
             <ul>

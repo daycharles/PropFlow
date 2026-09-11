@@ -60,6 +60,17 @@ test("property manager creates and activates a lease", async ({ page }) => {
   await page.getByRole("button", { name: "Add lease party" }).click();
   await expect(page.getByText("Lease party added.")).toBeVisible();
   await expect(page.getByText(/Browser Co-signer — Co-signer/)).toBeVisible();
+  await row.getByRole("button", { name: "Documents" }).click();
+  await page.getByLabel("Lease document title").fill("Residential lease packet");
+  await page.getByLabel("Lease document URL").fill("https://docs.example.test/lease-packet");
+  await page.getByRole("button", { name: "Add lease document" }).click();
+  await expect(page.getByText("Lease document added.")).toBeVisible();
+  await expect(page.getByText(/Residential lease packet — Draft/)).toBeVisible();
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText(/Residential lease packet — Sent/)).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept("Browser Resident"));
+  await page.getByRole("button", { name: "Record signature" }).click();
+  await expect(page.getByText(/Residential lease packet — Signed/)).toBeVisible();
   await row.getByRole("button", { name: "Charges" }).click();
   await page.getByLabel("Charge type").selectOption("Recurring");
   await page.getByLabel("Charge description").fill("Monthly rent");

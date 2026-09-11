@@ -41,6 +41,7 @@ function PortalContent({ session }: { session: Session }) {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDueOn, setPaymentDueOn] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
+  const [paymentChargeId, setPaymentChargeId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const refresh = () =>
@@ -91,11 +92,14 @@ function PortalContent({ session }: { session: Session }) {
   };
   const submitPayment = async (event: React.FormEvent) => {
     event.preventDefault();
-    const lease = summary?.leases[0];
+    const selectedCharge = charges.find((charge) => charge.id === paymentChargeId);
+    const lease =
+      summary?.leases.find((item) => item.id === selectedCharge?.leaseId) ?? summary?.leases[0];
     if (!lease) return;
     try {
       await api.portal.submitPayment({
         leaseId: lease.id,
+        chargeId: paymentChargeId || null,
         amount: Number(paymentAmount),
         dueOn: paymentDueOn,
         reference: paymentReference || null,
@@ -103,6 +107,7 @@ function PortalContent({ session }: { session: Session }) {
       setPaymentAmount("");
       setPaymentDueOn("");
       setPaymentReference("");
+      setPaymentChargeId("");
       await refresh();
       setMessage("Payment submitted.");
     } catch (caught) {
@@ -233,6 +238,7 @@ function PortalContent({ session }: { session: Session }) {
                 {payments.map((payment) => (
                   <li key={payment.id}>
                     ${payment.amount.toLocaleString()} due {payment.dueOn} — {payment.status}
+                    {payment.chargeId ? " — linked to lease charge" : ""}
                     {payment.reference ? ` — ${payment.reference}` : ""}
                   </li>
                 ))}
@@ -322,6 +328,28 @@ function PortalContent({ session }: { session: Session }) {
         <section className="panel">
           <h2>Submit a payment</h2>
           <form className="form-grid" onSubmit={(event) => void submitPayment(event)}>
+            <select
+              aria-label="Payment lease charge"
+              value={paymentChargeId}
+              onChange={(event) => {
+                const chargeId = event.target.value;
+                setPaymentChargeId(chargeId);
+                const charge = charges.find((item) => item.id === chargeId);
+                if (charge) {
+                  setPaymentAmount(String(charge.amount));
+                  setPaymentDueOn(charge.dueOn);
+                }
+              }}
+            >
+              <option value="">Unlinked payment</option>
+              {charges
+                .filter((charge) => charge.status === "Open")
+                .map((charge) => (
+                  <option key={charge.id} value={charge.id}>
+                    {charge.description} — ${charge.amount.toLocaleString()} due {charge.dueOn}
+                  </option>
+                ))}
+            </select>
             <input
               aria-label="Payment amount"
               type="number"
