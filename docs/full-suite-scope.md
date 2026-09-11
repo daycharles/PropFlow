@@ -36,27 +36,31 @@ identity foundation (`IdentityStore`, `MembershipAccess`, `SessionAuthentication
 `Capabilities.ForRole` switch) rather than replacing it. Acceptance: role matrix, invitation
 flow, negative authorization tests, tenant isolation tests, audit history, browser coverage.
 
-**None of PF-S01.02–.07 below have been built or tested against a real compiler.** The agent
-session that wrote them got the .NET 10 SDK installed in its cloud sandbox, but `dotnet restore`
-there is blocked by an organizational egress policy on `api.nuget.org` (403 from the proxy,
-alongside the earlier GitHub API restriction) — it is a policy wall, not a missing tool, and the
-session correctly did not try to route around it. Before merging this branch: `dotnet ef
-migrations add AddInvitationsAndRoleMatrix --project src/PropFlow.Infrastructure --context
-IdentityStore` (one migration covers `Invitation`, `RoleCapabilityOverride`, `Team`,
-`TeamMembership`, `UserSession`, `IdentityAuditEntry` — see local-development.md), then
-`dotnet build` and `dotnet test`.
+**PF-S01.01–.07 are now build- and test-verified**, as of the migration/grants commit on this
+branch: `dotnet build` is clean, `PropFlow.UnitTests` is 228/228, and `PropFlow.IntegrationTests`
+is 176/176 (run locally against a real Postgres via Testcontainers — the agent session that wrote
+this code could not run any of this itself, since `dotnet restore` there is blocked by an
+organizational egress policy on `api.nuget.org`; verification happened afterward, on a real
+machine). That first real run also caught a genuine bug, not just an unverified-code gap:
+`DatabaseProvisioner.ConfigureRuntimeAsync` never granted the restricted `propflow_app` runtime
+role write access to any of the six new tables (`Invitations`, `RoleCapabilityOverrides`, `Teams`,
+`TeamMemberships`, `UserSessions`, `AuditEntries`), or to `identity.Memberships`/`AspNetUsers` for
+the new write paths invitation-acceptance and membership-management need. It had been silently
+broken since PF-S01.02/03 — nothing exercised it until PF-S01.06 made every login write a
+`UserSession` row, which turned it into every integration test's login helper 500ing. Fixed in the
+same commit as the EF migration.
 
 Task breakdown (status as of this writing):
 
 | Task | Scope | Status |
 | --- | --- | --- |
 | PF-S01.01 | Invitation token generation, canonical-email matching, and expiry validation (pure logic, no persistence) | ✅ landed this pass |
-| PF-S01.02 | `Invitation` entity + `IdentityStore` mapping | Entity/mapping written. **The EF migration itself is not generated** — run `dotnet ef migrations add AddInvitations --project src/PropFlow.Infrastructure --context IdentityStore` (see local-development.md) before merging; this session has no .NET SDK to run it or verify the model builds |
-| PF-S01.03 | `InvitationService` (create / list-pending / accept) + `GET`/`POST /api/organizations/current/invitations`, `POST /api/invitations/{token}/accept`, `Identity.ManageMembers` capability (granted wherever `Capabilities.All` is — see PF-S01.04) | Written, wired into `Program.cs`. **Not build-verified** — same SDK caveat as PF-S01.02. No integration test yet (needs a real Postgres + the migration above) |
-| PF-S01.04 | Configurable role → capability matrix: additive per-organization grants/revocations layered on `Capabilities.ForRole` via `RoleCapabilityMatrix.Effective` (pure logic, tested), a new `RoleCapabilityOverride` entity/table, `RoleCapabilityService` (wired into `SessionAuthentication` so login and cookie-refresh both use the effective set), and `GET /api/organizations/current/roles` / `PUT /api/organizations/current/roles/{role}/capabilities` | Written; matrix logic unit-tested. **Not build-verified** — same SDK caveat as PF-S01.02/03, and needs the same EF migration pass (one migration covering `Invitation` + `RoleCapabilityOverride` is fine — see local-development.md). `Roles.All` (the role catalog the endpoint/UI needs) is hand-kept in sync with `Capabilities.ForRole`'s switch arms; no code shares them yet |
-| PF-S01.05 | Teams: `Team` + `TeamMembership` entities/mapping, `TeamService` (create, list, add/remove member — requires an existing active `OrganizationMembership`), `GET`/`POST /api/organizations/current/teams`, `GET`/`POST`/`DELETE .../teams/{id}/members/{userId}` (`Identity.ManageMembers`) | Written. **Not build-verified.** Grouping/addressing only — scoping work or property access by team is explicitly deferred, not implied by this pass |
-| PF-S01.06 | Session/device management: `UserSession` entity/mapping, `session_id` claim issued at login and carried in the cookie, `UserSessionService` (start/touch/list/revoke), `SessionAuthentication.ValidateCookieAsync` rejects a cookie whose session was revoked (additive to the existing `SecurityStamp` check — a cookie predating this feature has no `session_id` claim and is unaffected), `GET`/`DELETE /api/sessions` for self-service list/revoke of the caller's own devices | Written, wired into `Program.cs`. **Not build-verified** — same SDK caveat as PF-S01.02–.05, and needs the same EF migration pass (`UserSession` can go in the same migration as the others — see local-development.md). Deliberately does not touch `LogoutAsync`'s existing all-sessions revoke (bumping `SecurityStamp`); the two mechanisms are independent and both work after this change |
-| PF-S01.07 | Audit history beyond the Work timeline: `IdentityAuditEntry` (flat, append-only, mirroring `TimelineEntry`'s "no event-specific columns" shape) + `IdentityAuditLog` (record/list), wired into invitation create/accept and role-capability overrides; new `MembershipManagementService` (change role / remove member — the only two membership writes that previously had no endpoint at all, needed so there was something to audit) with the same manager-lockout guard as PF-S01.04, `GET`/`PUT .../members/{userId}/role`/`DELETE .../members/{userId}`, and `GET /api/organizations/current/audit` | Written, wired into `Program.cs`. **Not build-verified** — same SDK caveat as PF-S01.02–.06, and needs the same EF migration pass |
+| PF-S01.02 | `Invitation` entity + `IdentityStore` mapping | ✅ build- and test-verified |
+| PF-S01.03 | `InvitationService` (create / list-pending / accept) + `GET`/`POST /api/organizations/current/invitations`, `POST /api/invitations/{token}/accept`, `Identity.ManageMembers` capability (granted wherever `Capabilities.All` is — see PF-S01.04) | ✅ build- and test-verified |
+| PF-S01.04 | Configurable role → capability matrix: additive per-organization grants/revocations layered on `Capabilities.ForRole` via `RoleCapabilityMatrix.Effective` (pure logic, tested), a new `RoleCapabilityOverride` entity/table, `RoleCapabilityService` (wired into `SessionAuthentication` so login and cookie-refresh both use the effective set), and `GET /api/organizations/current/roles` / `PUT /api/organizations/current/roles/{role}/capabilities` | ✅ build- and test-verified. `Roles.All` (the role catalog the endpoint/UI needs) is hand-kept in sync with `Capabilities.ForRole`'s switch arms; no code shares them yet |
+| PF-S01.05 | Teams: `Team` + `TeamMembership` entities/mapping, `TeamService` (create, list, add/remove member — requires an existing active `OrganizationMembership`), `GET`/`POST /api/organizations/current/teams`, `GET`/`POST`/`DELETE .../teams/{id}/members/{userId}` (`Identity.ManageMembers`) | ✅ build- and test-verified. Grouping/addressing only — scoping work or property access by team is explicitly deferred, not implied by this pass |
+| PF-S01.06 | Session/device management: `UserSession` entity/mapping, `session_id` claim issued at login and carried in the cookie, `UserSessionService` (start/touch/list/revoke), `SessionAuthentication.ValidateCookieAsync` rejects a cookie whose session was revoked (additive to the existing `SecurityStamp` check — a cookie predating this feature has no `session_id` claim and is unaffected), `GET`/`DELETE /api/sessions` for self-service list/revoke of the caller's own devices | ✅ build- and test-verified. Deliberately does not touch `LogoutAsync`'s existing all-sessions revoke (bumping `SecurityStamp`); the two mechanisms are independent and both work |
+| PF-S01.07 | Audit history beyond the Work timeline: `IdentityAuditEntry` (flat, append-only, mirroring `TimelineEntry`'s "no event-specific columns" shape) + `IdentityAuditLog` (record/list), wired into invitation create/accept and role-capability overrides; new `MembershipManagementService` (change role / remove member — the only two membership writes that previously had no endpoint at all, needed so there was something to audit) with the same manager-lockout guard as PF-S01.04, `GET`/`PUT .../members/{userId}/role`/`DELETE .../members/{userId}`, and `GET /api/organizations/current/audit` | ✅ build- and test-verified |
 | PF-S01.08 | Negative-authorization + tenant-isolation integration test suite for the above | Not started |
 | PF-S01.09 | Browser (Playwright) coverage for invite → accept → login | Not started |
 
