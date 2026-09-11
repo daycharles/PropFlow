@@ -36,6 +36,8 @@ public sealed class AttachmentRetentionSweep(
         foreach (var organization in organizations)
         {
             await using var store = DatabaseProvisioner.CreateOperationsStore(connection, organization);
+            await store.ComplianceEvidence.Where(x => x.RetainUntil != null && x.RetainUntil < now)
+                .ExecuteDeleteAsync(cancellationToken);
             var expired = await store.Attachments.AsNoTracking()
                 .Where(x => x.RetainUntil != null && x.RetainUntil < now)
                 .Select(x => x.StorageKey)
