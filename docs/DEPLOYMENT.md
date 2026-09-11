@@ -4,7 +4,7 @@ This is the complete guide for installing PropFlow on one machine and signing in
 `README.md` inside every release bundle.
 
 For running from source while changing code (`dotnet run`, `next dev`), see
-[RELEASE-TESTING.md](RELEASE-TESTING.md) instead — **the credentials in that document are for that
+[RELEASE-TESTING.md](https://github.com/daycharles/PropFlow/blob/main/docs/RELEASE-TESTING.md) instead — **the credentials in that document are for that
 path only and will not work with a bundle installed from here.**
 
 ---
@@ -130,7 +130,7 @@ time, so a second start takes seconds.
 
 ## 4. What to look at
 
-[demo-script.md](demo-script.md) is the ordered walkthrough, about six minutes. It **leads with
+[demo-script.md](https://github.com/daycharles/PropFlow/blob/main/docs/demo-script.md) is the ordered walkthrough, about six minutes. It **leads with
 bulk vendor assignment** — the headline feature.
 
 The short version, signed in as `tidewater-demo` / `demo-admin@tidewater.example.test`:
