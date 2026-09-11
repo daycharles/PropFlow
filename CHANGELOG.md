@@ -8,6 +8,37 @@ Every line traces to a `PF-x.yy` task id from [docs/backlog.md](docs/backlog.md)
 task source and whose ids are stable references. Per-milestone narrative lives in
 [docs/milestones.md](docs/milestones.md); open threads live in [docs/followups.md](docs/followups.md).
 
+## [1.0.0-rc.2] - 2026-09-11
+
+Adds a deployment path. `v1.0.0-rc.1` could only be run from a checkout with the .NET SDK in a
+Development posture; this release ships a self-contained executable that installs and runs the
+stack in a Production posture. The application itself is unchanged from `v1.0.0-rc.1` — every
+*Known limitations* entry below still applies.
+
+### Added
+
+- **`propflow-deploy`** (`tools/PropFlow.Deploy`) — a self-contained executable that installs and
+  runs PropFlow on one machine in a **Production** posture. `up` preflights the host (Docker
+  responding, Node 22, three ports free, bundle complete), starts PostgreSQL, applies the four
+  migration contexts, configures the restricted `propflow_app` role, seeds demo data, builds the
+  web app, starts the API and web, and waits on `/health/ready`. Also `down`, `down --reset`,
+  `status`, `up --no-seed`. Generates and persists per-install credentials and a self-signed
+  TLS certificate, and supplies the three settings Production hard-requires
+  (`DataProtection:KeyPath`, the forwarded-headers trust boundary, `Attachments:RootPath`).
+  Re-runnable: reuses credentials, certificate and build.
+- **`scripts/Publish-Deployment.ps1`** — builds per-RID bundles (`osx-arm64`, `osx-x64` by
+  default) containing the deployer as a single file plus self-contained API and admin builds, the
+  web source and `compose.yaml`. Guards the committed `packages.lock.json` files against the
+  per-RID section a self-contained restore would otherwise add, and verifies the revert.
+- **`docs/DEPLOYMENT.md`** — the production-posture install guide, including what "Production"
+  actually enforces here and the two deliberate deviations from a real deployment.
+
+### Fixed
+
+- `docs/DEPLOYMENT.md` initially claimed HSTS is sent on every response. `Program.cs:157-158`
+  calls `UseHsts()` without options, so ASP.NET's default `ExcludedHosts` suppresses the header
+  on `localhost` / `127.0.0.1` / `[::1]`. Corrected against the observed response headers.
+
 ## [1.0.0-rc.1] - 2026-09-11
 
 First named release. All seven milestones are delivered and on `main`: task issues `#6`–`#73`
@@ -174,4 +205,5 @@ database readiness) predate this changelog and are implemented.
   `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy` and
   `Content-Security-Policy: default-src 'none'`.
 
+[1.0.0-rc.2]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.1

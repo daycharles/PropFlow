@@ -8,7 +8,7 @@ Guidance for Claude Code working in this repository.
 resident communication, and an append-only operational timeline. One ASP.NET Core minimal-API
 host, one PostgreSQL database, one Next.js client in `apps/web`.
 
-Umbrella solution `PropFlow.slnx` — 8 projects: 4 `src`, 3 `tests`, 1 `tools`. SDK pinned to
+Umbrella solution `PropFlow.slnx` — 9 projects: 4 `src`, 3 `tests`, 2 `tools`. SDK pinned to
 `10.0.300` with `rollForward: latestPatch` (`global.json`); this box has 10.0.303, which the
 band accepts.
 
@@ -23,7 +23,7 @@ against the existing epics.
 tool works fine for read-only inspection (`grep`, `git log`, reading files) but run the gate in
 `pwsh`.
 
-Restore is **locked**: every one of the 8 projects has a committed `packages.lock.json`
+Restore is **locked**: every one of the 9 projects has a committed `packages.lock.json`
 (`Directory.Build.props:8` sets `RestorePackagesWithLockFile`). `--locked-mode` fails rather than
 resolving a new graph, so adding or bumping a package means regenerating the locks in the same
 commit.
@@ -131,7 +131,8 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
 | `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M7) |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree. The API port is **5001** everywhere (`.env.example`, `next.config.ts:7`, `demo-script.md`, the CI `e2e` job) |
-| `docs/RELEASE-TESTING.md` | The macOS/bash bring-up and exercise guide for a tagged release. Ported from the CI `e2e` job; the macOS-specific steps are noted there as unverified |
+| `docs/DEPLOYMENT.md` | The **production-posture** install path: a release bundle plus `propflow-deploy up`. Names the three settings Production hard-requires, and the two deliberate deviations (Kestrel-terminated TLS, loopback proxy allow-list) |
+| `docs/RELEASE-TESTING.md` | The **Development** bring-up guide — running from source with `dotnet run` / `next dev`. Ported from the CI `e2e` job; the macOS-specific steps are noted there as unverified |
 | `CHANGELOG.md` | Keep-a-Changelog, one entry per release, every line traceable to a `PF-x.yy` |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
