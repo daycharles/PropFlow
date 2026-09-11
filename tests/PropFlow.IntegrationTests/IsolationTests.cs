@@ -178,6 +178,64 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    // Coverage sweep after the FS-S13S15SecurityFix incident (above): RLS itself is now verified
+    // present on all 67 operations tables (a live pg_class + pg_policies + grant check, not a
+    // static read of the migrations), but most of FS-S08/S09/S10/S13/S15's tables still had no
+    // raw-SQL isolation test — only the aggregate readiness count, which is how the RLS gap hid
+    // in the first place. These three are one representative table per previously-unaudited
+    // area (compliance, preventive maintenance, owner budgeting); not exhaustive — see
+    // docs/followups.md for the remaining tables.
+    [Fact]
+    public async Task Rls_confines_the_violations_table_to_its_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"Violations\" (\"OrganizationId\", \"Id\", \"PropertyId\", \"Title\", \"IdentifiedOn\", \"Severity\", \"Status\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.PropertyA}, 'Missing fire extinguisher', '2026-01-01', 1, 'Open')");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"Violations\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"Violations\" (\"OrganizationId\", \"Id\", \"PropertyId\", \"Title\", \"IdentifiedOn\", \"Severity\", \"Status\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.PropertyA}, 'forged', '2026-01-01', 1, 'Open')"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
+    [Fact]
+    public async Task Rls_confines_the_preventive_maintenance_plans_table_to_its_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"PreventiveMaintenancePlans\" (\"OrganizationId\", \"Id\", \"AssetId\", \"Name\", \"Recurrence\", \"FirstDueOn\", \"IsActive\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.AssetA}, 'Quarterly HVAC filter', 'Quarterly', '2026-01-01', true)");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"PreventiveMaintenancePlans\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"PreventiveMaintenancePlans\" (\"OrganizationId\", \"Id\", \"AssetId\", \"Name\", \"Recurrence\", \"FirstDueOn\", \"IsActive\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.AssetA}, 'forged', 'Quarterly', '2026-01-01', true)"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
+    [Fact]
+    public async Task Rls_confines_the_budgets_table_to_its_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"Budgets\" (\"OrganizationId\", \"Id\", \"PropertyId\", \"Year\", \"Name\", \"Status\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.PropertyA}, 2026, '2026 plan', 'Draft', now())");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"Budgets\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"Budgets\" (\"OrganizationId\", \"Id\", \"PropertyId\", \"Year\", \"Name\", \"Status\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.PropertyA}, 2026, 'forged', 'Draft', now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
