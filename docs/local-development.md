@@ -8,7 +8,7 @@ Prerequisites: .NET 10 SDK 10.0.3xx, Docker running Linux containers, and a free
 ./scripts/Initialize-Local.ps1 -AdminEmail 'you@example.com' -OrganizationName 'Tidewater Residential Management' -AdminPassword (Read-Host 'New administrator password' -AsSecureString)
 dotnet dev-certs https --trust
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
-dotnet run --project src/PropFlow.Api --urls https://localhost:7080
+dotnet run --project src/PropFlow.Api --urls https://localhost:5001
 ```
 
 Run locally as `Development`. In `Production` or `Staging` the API refuses to start without
@@ -25,11 +25,17 @@ npm ci
 npm run dev
 ```
 
-Then set `PROPFLOW_API_ORIGIN=https://localhost:7080` in `apps/web/.env.local` and open
-`http://localhost:3000`. `.env.example` ships `https://localhost:5001` and `next.config.ts`
-falls back to the same value when the variable is unset, so the copied file must be edited to
-match the port the API is actually listening on — otherwise every `/api` call proxies nowhere. The browser talks to Next.js on the same origin; Next.js
-proxies `/api/*` to the API so secure session and antiforgery cookies remain browser-visible.
+Then open `http://127.0.0.1:3000`. `https://localhost:5001` is the API origin everything agrees
+on: `.env.example` ships it, and `next.config.ts:7` falls back to the same value when
+`PROPFLOW_API_ORIGIN` is unset — so the copied `.env.local` needs no edit as long as the API is
+started on that URL. Change the port in one place and you must change it in both. The browser
+talks to Next.js on the same origin; Next.js proxies `/api/*` to the API so secure session and
+antiforgery cookies remain browser-visible.
+
+The API host name must be `localhost`, not `127.0.0.1`: the ASP.NET dev certificate's SAN is
+`localhost`, so `127.0.0.1` fails hostname verification. The browser, conversely, reaches Next.js
+at `http://127.0.0.1:3000` — a potentially-trustworthy origin, so Chrome still accepts the
+`Secure` / `__Host-` cookies the API sets through the proxy.
 
 Use a password of at least 12 characters with uppercase, lowercase, a digit, and punctuation. The helper creates ignored `.env` credentials only if the file is absent, starts PostgreSQL, applies migrations, configures a restricted database role, and creates the first organization/admin. It prints the organization ID and slug (the slug is used for login) and sets the runtime connection in the current shell. Bootstrap refuses existing accounts and never resets a password. Keep `.env` private. The development certificate trust command is an explicit local developer step; the application does not change certificate trust itself.
 
@@ -45,7 +51,7 @@ Set environment variables in your shell or secret manager, then run the commands
 | `dotnet run --project tools/PropFlow.Admin -- configure-runtime` | `ConnectionStrings__Admin`, `Runtime__Password` (20+ characters) |
 | `dotnet run --project tools/PropFlow.Admin -- bootstrap` | `ConnectionStrings__Admin`, `Bootstrap__Organization`, `Bootstrap__Email`, `Bootstrap__Password` |
 | `dotnet run --project tools/PropFlow.Admin -- seed-demo` | `ConnectionStrings__Admin`, `Demo__Password` (12+ characters) |
-| `dotnet run --project src/PropFlow.Api --urls https://localhost:7080` | `ConnectionStrings__Database` (username `propflow_app`) |
+| `dotnet run --project src/PropFlow.Api --urls https://localhost:5001` | `ConnectionStrings__Database` (username `propflow_app`) |
 
 Migration order is Identity, then Operations, then Communications, then Integrations — four contexts with four separate histories (`src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs`). The admin command uses a privileged migration connection and never runs inside the API. `configure-runtime` creates or rotates the `propflow_app` password and grants only the current milestone's required privileges. It is intended for a dedicated PropFlow database/role, not an unrelated existing database. Runtime cannot create users/memberships or alter schema. Future provisioning and invitation APIs must use a separately reviewed boundary.
 
@@ -67,8 +73,10 @@ Cancelled) and **all four** `WorkPriority` values (Low, Normal, High, Critical),
 the active middle of the pipeline, with 30 pest-control requests and a third of the open items
 overdue. Sixteen stay in `New`, so a "filter to New, select all, assign vendor" demo always has
 work to act on. `Draft` rows are never published — `WorkItem.ChangeStatus` refuses a move back
-to `Draft`. It also seeds **3 active message templates** (`Visit scheduled` SMS + email,
-`Work completed` SMS) so the web **Assign &amp; notify** flow has something to send.
+to `Draft`. It also seeds **4 active message templates** (`Visit scheduled (SMS)`,
+`Visit scheduled (email)`, `Work completed (SMS)`, and the M5 `Technician on the way` SMS —
+`tools/PropFlow.Admin/TidewaterSeed.cs:281-292`) so the web **Assign &amp; notify** flow and the
+technician "on the way" workflow both have something to send.
 
 **The isolation tenant** (`demo-admin@isolation.example.test`, same password) keeps a minimal
 seed — one portfolio/property/building/space, one vendor, one employee, two categories, and 12

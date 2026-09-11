@@ -130,7 +130,9 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/architecture.md` | Normative for cross-cutting design and persistence |
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
 | `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M7) |
-| `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
+| `docs/local-development.md` | Accurate, PowerShell-first, matches the tree. The API port is **5001** everywhere (`.env.example`, `next.config.ts:7`, `demo-script.md`, the CI `e2e` job) |
+| `docs/RELEASE-TESTING.md` | The macOS/bash bring-up and exercise guide for a tagged release. Ported from the CI `e2e` job; the macOS-specific steps are noted there as unverified |
+| `CHANGELOG.md` | Keep-a-Changelog, one entry per release, every line traceable to a `PF-x.yy` |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
 | `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M7 reconciled to GitHub 2026-09-11 |

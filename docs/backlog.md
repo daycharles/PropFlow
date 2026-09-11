@@ -2,11 +2,13 @@
 
 Epics and tasks for the remaining roadmap (milestones 3–7 from [milestones.md](milestones.md)).
 Milestones 1 and 2 (repository/foundation, tenant-aware identity + PostgreSQL persistence) are
-implemented. **Milestones 3, 4, 5 and 6 are complete and on `main`** — every task issue
-`#6`–`#67` is closed (PF-4.06's atomicity half is carried forward as a follow-up, not an open
-issue). Milestone 6 was built in parallel with milestone 5, so milestone number is not
-milestone order. **Milestone 7 (deployment and platform hardening) is the remaining track.**
-This document is the source for GitHub milestones and issues.
+implemented. **Milestones 3, 4, 5, 6 and 7 are complete and on `main`** — every task issue
+`#6`–`#73` is closed, as is every epic issue `#1`–`#5` (PF-4.06's atomicity half is carried
+forward as a follow-up, not an open issue). Milestone 6 was built in parallel with milestone 5,
+so milestone number is not milestone order; milestone 7 is the cross-cutting deployment and
+hardening track. The roadmap in this file is therefore delivered — remaining work lives in
+[followups.md](followups.md), not here. This document is the source for GitHub milestones and
+issues.
 
 Counts here drift; re-measure with `gh issue list --state all` rather than propagating them.
 
