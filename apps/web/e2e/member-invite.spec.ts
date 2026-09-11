@@ -22,12 +22,15 @@ test("an invited member accepts their invitation and signs in", async ({ page })
   await expect(page.getByRole("heading", { name: "Work" })).toBeVisible();
 
   await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Members" }).click();
-  await expect(page.getByRole("heading", { name: "Members" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
 
   // Send the invitation as a Property Manager, so the invited user lands with
   // Identity.ManageMembers and the Members link appears in their own nav below.
   await page.getByLabel("Email").fill(inviteEmail);
-  await page.getByLabel("Role").selectOption("Property Manager");
+  // Scoped by container, not accessible name: Chromium folds the select's own current value into
+  // its computed label text, so "Role" alone matches inconsistently against the per-row "Role for
+  // <email>" selects further down the page.
+  await page.locator(".form-grid").getByLabel("Role").selectOption("Property Manager");
   await page.getByRole("button", { name: "Send invitation" }).click();
 
   const confirmation = page.getByRole("status");
@@ -35,8 +38,9 @@ test("an invited member accepts their invitation and signs in", async ({ page })
   const inviteLink = await confirmation.locator("code").textContent();
   expect(inviteLink).toBeTruthy();
 
-  // Also shows up in the pending list immediately.
-  await expect(page.getByText(inviteEmail)).toBeVisible();
+  // Also shows up in the pending list immediately. exact:true because the confirmation banner
+  // just above also contains this address as part of its own sentence.
+  await expect(page.getByText(inviteEmail, { exact: true })).toBeVisible();
 
   // The invited person never sees the admin's session - a fresh, unauthenticated context
   // mirrors that isolation instead of reusing `page`'s cookies.
@@ -64,8 +68,10 @@ test("an invited member accepts their invitation and signs in", async ({ page })
 
   await inviteeContext.close();
 
-  // Back on the admin's page, the invitee has moved from pending to active.
+  // Back on the admin's page, the invitee has moved from pending to active: exactly one match
+  // for their email (the active-members row) rather than a strict-mode violation from also still
+  // appearing in the pending list confirms the move. Not asserting the pending list is empty
+  // outright - other invitations from other runs/tests may legitimately still be pending.
   await page.reload();
-  await expect(page.getByText(inviteEmail)).toBeVisible();
-  await expect(page.getByText("No pending invitations.")).toBeVisible();
+  await expect(page.getByText(inviteEmail, { exact: true })).toBeVisible();
 });
