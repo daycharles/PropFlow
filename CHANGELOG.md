@@ -8,7 +8,12 @@ Every line traces to a `PF-x.yy` task id from [docs/backlog.md](docs/backlog.md)
 task source and whose ids are stable references. Per-milestone narrative lives in
 [docs/milestones.md](docs/milestones.md); open threads live in [docs/followups.md](docs/followups.md).
 
-## [Unreleased]
+## [1.0.0-rc.2] - 2026-09-11
+
+Adds a deployment path. `v1.0.0-rc.1` could only be run from a checkout with the .NET SDK in a
+Development posture; this release ships a self-contained executable that installs and runs the
+stack in a Production posture. The application itself is unchanged from `v1.0.0-rc.1` — every
+*Known limitations* entry below still applies.
 
 ### Added
 
@@ -200,4 +205,5 @@ database readiness) predate this changelog and are implemented.
   `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy` and
   `Content-Security-Policy: default-src 'none'`.
 
+[1.0.0-rc.2]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.1

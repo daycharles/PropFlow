@@ -46,6 +46,41 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+function Get-GnuTar {
+    <#
+        Returns a tar that supports --mode, or $null.
+
+        On Windows `tar` on PATH is bsdtar (C:\Windows\system32\tar.exe), which rejects --mode.
+        Git for Windows ships GNU tar in its usr\bin. Its install root varies by installer --
+        Program Files for the official one, but scoop, winget and chocolatey all put it
+        elsewhere -- so the location is derived from where `git` itself actually is rather than
+        guessed from a fixed list. Every candidate is confirmed by running --version; nothing is
+        assumed from the path alone.
+    #>
+    $candidates = @()
+
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($git) {
+        # ...\cmd\git.exe or ...\bin\git.exe -> ...\usr\bin\tar.exe
+        $gitRoot = Split-Path -Parent (Split-Path -Parent $git.Source)
+        $candidates += (Join-Path $gitRoot 'usr\bin\tar.exe')
+    }
+    $candidates += @(
+        "$env:ProgramFiles\Git\usr\bin\tar.exe"
+        "${env:ProgramFiles(x86)}\Git\usr\bin\tar.exe"
+        "$env:LOCALAPPDATA\Programs\Git\usr\bin\tar.exe"
+    )
+    $onPath = Get-Command tar -CommandType Application -ErrorAction SilentlyContinue
+    if ($onPath) { $candidates += $onPath.Source }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (-not $candidate -or -not (Test-Path $candidate)) { continue }
+        $banner = & $candidate --version 2>$null | Select-Object -First 1
+        if ($banner -match 'GNU tar') { return $candidate }
+    }
+    return $null
+}
 Push-Location $repoRoot
 try {
     $version = ([xml](Get-Content 'Directory.Build.props')).Project.PropertyGroup.VersionPrefix
@@ -56,13 +91,20 @@ try {
     $output = Join-Path $repoRoot $OutputDirectory
     New-Item -ItemType Directory -Force -Path $output | Out-Null
 
-    # Lock files that are clean right now. Only these get reverted afterwards, so a package bump
-    # someone is genuinely working on survives this script.
+    # A self-contained restore appends a per-RID section to every committed packages.lock.json,
+    # and this script reverts them afterwards. That revert is only safe if they start clean:
+    # refuse rather than guess, because an earlier interrupted run leaves them dirty and a
+    # "skip the dirty ones" policy would then silently leave RID sections behind. Fail fast and
+    # say exactly how to recover.
     $trackedLocks = @(git ls-files -- '*packages.lock.json')
     $dirtyBefore = @(git status --porcelain -- '*packages.lock.json' |
         ForEach-Object { $_.Substring(3).Trim('"') })
-    $cleanLocks = $trackedLocks | Where-Object { $dirtyBefore -notcontains $_ }
-    Write-Host "Guarding $($cleanLocks.Count) clean lock file(s) against the RID-specific restore."
+    if ($dirtyBefore.Count -gt 0) {
+        throw ("These lock files have uncommitted changes, so this script cannot safely revert " +
+            "what the RID-specific restore is about to add:`n  $($dirtyBefore -join "`n  ")`n" +
+            "Commit them, or discard with: git checkout -- '*packages.lock.json'")
+    }
+    Write-Host "Guarding $($trackedLocks.Count) lock file(s) against the RID-specific restore."
 
     foreach ($rid in $RuntimeIdentifier) {
         $bundleName = "propflow-$version-$rid"
@@ -130,35 +172,70 @@ try {
         Copy-Item 'docs/DEPLOYMENT.md' (Join-Path $bundle 'README.md')
         Copy-Item 'CHANGELOG.md' (Join-Path $bundle 'CHANGELOG.md')
 
-        # The published binaries must be executable on the target. Git and tar preserve the bit;
-        # a plain directory copy from Windows does not set it, so tar is what Michael should use.
+        # Windows filesystems carry no Unix execute bit, so an archive built here would unpack
+        # with propflow-deploy non-executable. GNU tar's --mode stamps one into the archive;
+        # Windows' bundled bsdtar rejects the option outright ("Option --mode=a+rx is not
+        # supported"). Git for Windows ships GNU tar, so prefer that and say so loudly when only
+        # bsdtar is available rather than shipping a bundle that cannot run.
         if (-not $SkipArchive) {
             $archive = Join-Path $output "$bundleName.tar.gz"
             if (Test-Path $archive) { Remove-Item -Force $archive }
             Write-Host "  archive -> $archive"
-            tar --create --gzip --file $archive --directory $output `
-                --mode='a+rx' $bundleName
-            if ($LASTEXITCODE -ne 0) { throw "tar failed for $bundleName." }
+
+            $gnuTar = Get-GnuTar
+            if ($gnuTar) {
+                # Two GNU-tar-on-Windows quirks, both load-bearing:
+                #   --force-local  : without it `C:\path` is parsed as a remote host spec and
+                #                    fails with "Cannot connect to C: resolve failed".
+                #   PATH           : --gzip shells out to gzip, which lives beside tar in Git's
+                #                    usr\bin and is not on PATH when invoked from PowerShell.
+                $previousPath = $env:PATH
+                try {
+                    $env:PATH = (Split-Path -Parent $gnuTar) + [IO.Path]::PathSeparator + $env:PATH
+                    & $gnuTar --create --gzip --force-local --file $archive `
+                        --directory $output --mode='a+rx' $bundleName
+                }
+                finally {
+                    $env:PATH = $previousPath
+                }
+                if ($LASTEXITCODE -ne 0) { throw "tar failed for $bundleName." }
+            }
+            else {
+                Write-Warning ("No GNU tar found; falling back to the bundled tar, which cannot " +
+                    "set the execute bit. Whoever unpacks $bundleName.tar.gz must run: " +
+                    "chmod +x propflow-deploy api/PropFlow.Api admin/PropFlow.Admin")
+                tar --create --gzip --file $archive --directory $output $bundleName
+                if ($LASTEXITCODE -ne 0) { throw "tar failed for $bundleName." }
+            }
         }
 
         Write-Host "  done: $bundle" -ForegroundColor Green
     }
 
-    Write-Host "`nReverting the per-RID sections the restore added to the lock files..." -ForegroundColor Cyan
-    if ($cleanLocks.Count -gt 0) {
-        git checkout -- @cleanLocks
-        if ($LASTEXITCODE -ne 0) { throw 'Could not revert the lock files. Check `git status` before shipping.' }
-    }
-
-    # Prove it, rather than assume the checkout did what it should.
-    $stillDirty = @(git status --porcelain -- '*packages.lock.json' |
-        ForEach-Object { $_.Substring(3).Trim('"') } |
-        Where-Object { $dirtyBefore -notcontains $_ })
-    if ($stillDirty.Count -gt 0) {
-        throw "These lock files are still modified after the revert:`n  $($stillDirty -join "`n  ")"
-    }
-    Write-Host 'Lock files are back to their committed state.' -ForegroundColor Green
+    Write-Host "`nAll bundles built." -ForegroundColor Green
 }
 finally {
+    # The revert belongs here, not at the end of the try: a publish that throws half way through
+    # has already dirtied the lock files, and leaving them that way is what makes the *next* run
+    # unsafe. Runs on success and failure alike.
+    if ($trackedLocks -and $trackedLocks.Count -gt 0) {
+        Write-Host "`nReverting the per-RID sections the restore added to the lock files..." -ForegroundColor Cyan
+        git checkout -- @trackedLocks
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Could not revert the lock files. Check `git status` before shipping.'
+        }
+        else {
+            # Prove it, rather than assume the checkout did what it should. They started clean,
+            # so anything dirty now is a failure.
+            $stillDirty = @(git status --porcelain -- '*packages.lock.json' |
+                ForEach-Object { $_.Substring(3).Trim('"') })
+            if ($stillDirty.Count -gt 0) {
+                Write-Warning "These lock files are still modified after the revert:`n  $($stillDirty -join "`n  ")"
+            }
+            else {
+                Write-Host 'Lock files are back to their committed state.' -ForegroundColor Green
+            }
+        }
+    }
     Pop-Location
 }
