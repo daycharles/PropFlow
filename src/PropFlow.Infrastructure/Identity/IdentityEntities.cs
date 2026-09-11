@@ -69,3 +69,24 @@ public sealed class RoleCapabilityOverride
     public string Capability { get; set; } = "";
     public bool IsRevocation { get; set; }
 }
+
+/// <summary>PF-S01.05: a named group of memberships within one organization (e.g. "Norfolk
+/// Turnover Crew"). Teams are a grouping/addressing construct only in this pass - narrowing work
+/// or property access by team membership is follow-up work (noted in full-suite-scope.md), not
+/// silently implied by a row existing here.</summary>
+public sealed class Team
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string Name { get; set; } = "";
+    public bool IsActive { get; set; } = true;
+}
+
+/// <summary>A membership's placement on a team. Keyed through (OrganizationId, UserId) rather
+/// than a membership surrogate id, matching <see cref="OrganizationMembership"/>'s own key.</summary>
+public sealed class TeamMembership
+{
+    public Guid TeamId { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid UserId { get; set; }
+}

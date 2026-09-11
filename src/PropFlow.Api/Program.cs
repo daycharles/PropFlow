@@ -72,6 +72,7 @@ builder.Services.AddDbContext<IntegrationStore>(options => options.UseNpgsql(con
 builder.Services.AddScoped<MembershipAccess>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<RoleCapabilityService>();
+builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
@@ -211,6 +212,7 @@ app.MapAutomationEndpoints();
 app.MapProviderCallbackEndpoints();
 app.MapInvitationEndpoints();
 app.MapRoleCapabilityEndpoints();
+app.MapTeamEndpoints();
 app.Run();
 
 public partial class Program { }

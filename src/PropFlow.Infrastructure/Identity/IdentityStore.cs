@@ -14,6 +14,8 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<MembershipPropertyBinding> MembershipPropertyBindings => Set<MembershipPropertyBinding>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<RoleCapabilityOverride> RoleCapabilityOverrides => Set<RoleCapabilityOverride>();
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -61,6 +63,20 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Capability).HasMaxLength(120).IsRequired();
             entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<Team>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<TeamMembership>(entity =>
+        {
+            entity.HasKey(x => new { x.TeamId, x.UserId });
+            entity.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<OrganizationMembership>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

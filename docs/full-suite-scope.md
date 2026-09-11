@@ -36,6 +36,15 @@ identity foundation (`IdentityStore`, `MembershipAccess`, `SessionAuthentication
 `Capabilities.ForRole` switch) rather than replacing it. Acceptance: role matrix, invitation
 flow, negative authorization tests, tenant isolation tests, audit history, browser coverage.
 
+**None of PF-S01.02–.05 below have been built or tested against a real compiler.** The agent
+session that wrote them got the .NET 10 SDK installed in its cloud sandbox, but `dotnet restore`
+there is blocked by an organizational egress policy on `api.nuget.org` (403 from the proxy,
+alongside the earlier GitHub API restriction) — it is a policy wall, not a missing tool, and the
+session correctly did not try to route around it. Before merging this branch: `dotnet ef
+migrations add AddInvitationsAndRoleMatrix --project src/PropFlow.Infrastructure --context
+IdentityStore` (one migration covers `Invitation`, `RoleCapabilityOverride`, `Team`,
+`TeamMembership` — see local-development.md), then `dotnet build` and `dotnet test`.
+
 Task breakdown (status as of this writing):
 
 | Task | Scope | Status |
@@ -44,7 +53,7 @@ Task breakdown (status as of this writing):
 | PF-S01.02 | `Invitation` entity + `IdentityStore` mapping | Entity/mapping written. **The EF migration itself is not generated** — run `dotnet ef migrations add AddInvitations --project src/PropFlow.Infrastructure --context IdentityStore` (see local-development.md) before merging; this session has no .NET SDK to run it or verify the model builds |
 | PF-S01.03 | `InvitationService` (create / list-pending / accept) + `GET`/`POST /api/organizations/current/invitations`, `POST /api/invitations/{token}/accept`, `Identity.ManageMembers` capability (granted wherever `Capabilities.All` is — see PF-S01.04) | Written, wired into `Program.cs`. **Not build-verified** — same SDK caveat as PF-S01.02. No integration test yet (needs a real Postgres + the migration above) |
 | PF-S01.04 | Configurable role → capability matrix: additive per-organization grants/revocations layered on `Capabilities.ForRole` via `RoleCapabilityMatrix.Effective` (pure logic, tested), a new `RoleCapabilityOverride` entity/table, `RoleCapabilityService` (wired into `SessionAuthentication` so login and cookie-refresh both use the effective set), and `GET /api/organizations/current/roles` / `PUT /api/organizations/current/roles/{role}/capabilities` | Written; matrix logic unit-tested. **Not build-verified** — same SDK caveat as PF-S01.02/03, and needs the same EF migration pass (one migration covering `Invitation` + `RoleCapabilityOverride` is fine — see local-development.md). `Roles.All` (the role catalog the endpoint/UI needs) is hand-kept in sync with `Capabilities.ForRole`'s switch arms; no code shares them yet |
-| PF-S01.05 | Teams (group memberships under a named team, scope work/property bindings to a team) | Not started |
+| PF-S01.05 | Teams: `Team` + `TeamMembership` entities/mapping, `TeamService` (create, list, add/remove member — requires an existing active `OrganizationMembership`), `GET`/`POST /api/organizations/current/teams`, `GET`/`POST`/`DELETE .../teams/{id}/members/{userId}` (`Identity.ManageMembers`) | Written. **Not build-verified.** Grouping/addressing only — scoping work or property access by team is explicitly deferred, not implied by this pass |
 | PF-S01.06 | Session/device management admin view (list + revoke active sessions) | Not started |
 | PF-S01.07 | Audit history beyond the Work timeline (identity/membership changes: invites sent, roles changed, members removed) | Not started |
 | PF-S01.08 | Negative-authorization + tenant-isolation integration test suite for the above | Not started |
