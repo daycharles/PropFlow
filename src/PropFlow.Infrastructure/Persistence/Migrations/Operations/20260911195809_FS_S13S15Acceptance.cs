@@ -112,15 +112,11 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 columns: new[] { "OrganizationId", "WorkItemId" });
             foreach (var table in new[] { "ComplianceEvidence", "ComplianceOccurrences", "PreventiveMaintenanceOccurrences" })
                 migrationBuilder.Sql($"DROP POLICY IF EXISTS tenant_isolation ON operations.\"{table}\"; ALTER TABLE operations.\"{table}\" ENABLE ROW LEVEL SECURITY; ALTER TABLE operations.\"{table}\" FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_isolation ON operations.\"{table}\" USING (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid) WITH CHECK (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid);");
-            foreach (var table in new[] { "ComplianceEvidence", "ComplianceOccurrences", "PreventiveMaintenanceOccurrences" })
-                migrationBuilder.Sql($"ALTER TABLE operations.\"{table}\" ENABLE ROW LEVEL SECURITY; ALTER TABLE operations.\"{table}\" FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_isolation ON operations.\"{table}\" USING (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid) WITH CHECK (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid);");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            foreach (var table in new[] { "ComplianceEvidence", "ComplianceOccurrences", "PreventiveMaintenanceOccurrences" })
-                migrationBuilder.Sql($"DROP POLICY IF EXISTS tenant_isolation ON operations.\"{table}\";");
             foreach (var table in new[] { "ComplianceEvidence", "ComplianceOccurrences", "PreventiveMaintenanceOccurrences" })
                 migrationBuilder.Sql($"DROP POLICY IF EXISTS tenant_isolation ON operations.\"{table}\";");
             migrationBuilder.DropTable(
