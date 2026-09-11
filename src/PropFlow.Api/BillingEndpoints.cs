@@ -240,6 +240,69 @@ public static class BillingEndpoints
         group.MapGet("/payments/{paymentId:guid}/refunds", async (Guid paymentId, OperationsStore store, CancellationToken ct) =>
             Results.Ok(await store.PaymentRefunds.AsNoTracking().Where(x => x.PaymentId == paymentId).OrderBy(x => x.IssuedAt).ToListAsync(ct)));
 
+        // Stored payment methods contain only provider tokens and display metadata; raw
+        // card/bank credentials never enter the OperationsStore.
+        group.MapGet("/residents/{residentId:guid}/payment-methods", async (Guid residentId, OperationsStore store, CancellationToken ct) =>
+            Results.Ok(await store.PaymentMethods.AsNoTracking().Where(x => x.ResidentId == residentId).OrderByDescending(x => x.CreatedAt).ToListAsync(ct)));
+        group.MapPost("/residents/{residentId:guid}/payment-methods", async (Guid residentId, PaymentMethodRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!await store.Residents.AnyAsync(x => x.Id == residentId, ct)) return Results.NotFound();
+            try
+            {
+                var method = new PaymentMethod(store.OrganizationId, Guid.NewGuid(), residentId, request.Type, request.Label, request.ProviderToken, request.LastFour, clock.GetUtcNow());
+                store.PaymentMethods.Add(method); await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/billing/payment-methods/{method.Id}", method);
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        });
+        group.MapPost("/payment-methods/{id:guid}/deactivate", async (Guid id, OperationsStore store, CancellationToken ct) =>
+        {
+            var method = await store.PaymentMethods.SingleOrDefaultAsync(x => x.Id == id, ct); if (method is null) return Results.NotFound();
+            method.Deactivate(); await store.SaveChangesAsync(ct); return Results.Ok(method);
+        });
+
+        group.MapPost("/payments/{paymentId:guid}/receipt", async (Guid paymentId, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
+        {
+            var payment = await store.ResidentPayments.SingleOrDefaultAsync(x => x.Id == paymentId, ct); if (payment is null) return Results.NotFound();
+            if (payment.Status != ResidentPaymentStatus.Settled) return Results.Conflict("Only settled payments can receive a receipt.");
+            var existing = await store.PaymentReceipts.SingleOrDefaultAsync(x => x.PaymentId == paymentId, ct); if (existing is not null) return Results.Ok(new { receipt = existing, duplicate = true });
+            var receipt = new PaymentReceipt(store.OrganizationId, Guid.NewGuid(), paymentId, $"R-{paymentId:N}", clock.GetUtcNow()); store.PaymentReceipts.Add(receipt); await store.SaveChangesAsync(ct);
+            return Results.Created($"/api/billing/payments/{paymentId}/receipt", new { receipt, duplicate = false });
+        });
+        group.MapGet("/payments/{paymentId:guid}/receipt", async (Guid paymentId, OperationsStore store, CancellationToken ct) =>
+            (await store.PaymentReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.PaymentId == paymentId, ct)) is { } receipt ? Results.Ok(receipt) : Results.NotFound());
+
+        group.MapPost("/reconciliation", async (ReconciliationRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
+        {
+            var reference = request.ProviderReference.Trim();
+            var existing = await store.PaymentReconciliations.SingleOrDefaultAsync(x => x.ProviderReference == reference, ct);
+            if (existing is not null) return Results.Ok(new { reconciliation = existing, duplicate = true });
+            var payment = await store.ResidentPayments.SingleOrDefaultAsync(x => x.ProviderReference == reference, ct);
+            try
+            {
+                var reconciliation = new PaymentReconciliation(store.OrganizationId, Guid.NewGuid(), reference, payment?.Id, request.Amount, request.Note, clock.GetUtcNow());
+                store.PaymentReconciliations.Add(reconciliation); await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/billing/reconciliation/{reconciliation.Id}", new { reconciliation, duplicate = false });
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        });
+        group.MapGet("/reconciliation", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.PaymentReconciliations.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync(ct)));
+        group.MapPost("/reconciliation/{id:guid}/resolve", async (Guid id, ResolveReconciliationRequest request, OperationsStore store, CancellationToken ct) =>
+        {
+            var item = await store.PaymentReconciliations.SingleOrDefaultAsync(x => x.Id == id, ct); if (item is null) return Results.NotFound(); item.Resolve(request.Note); await store.SaveChangesAsync(ct); return Results.Ok(item);
+        });
+
+        group.MapPost("/delinquency/run", async (DelinquencyRunRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) =>
+        {
+            var overdue = await store.LeaseCharges.Where(x => x.Status != LeaseChargeStatus.Voided && x.Status != LeaseChargeStatus.Paid && x.DueOn < request.AsOf).GroupBy(x => x.LeaseId).Select(x => new { LeaseId = x.Key, Balance = x.Sum(y => y.Amount - y.AmountApplied) }).Where(x => x.Balance > 0).ToListAsync(ct);
+            var created = 0;
+            foreach (var row in overdue) if (!await store.DelinquencyCases.AnyAsync(x => x.LeaseId == row.LeaseId && x.Status != DelinquencyStatus.Resolved, ct)) { store.DelinquencyCases.Add(new DelinquencyCase(store.OrganizationId, Guid.NewGuid(), row.LeaseId, row.Balance, request.AsOf, clock.GetUtcNow())); created++; }
+            await store.SaveChangesAsync(ct); return Results.Ok(new { created });
+        });
+        group.MapGet("/delinquency", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.DelinquencyCases.AsNoTracking().Where(x => x.Status != DelinquencyStatus.Resolved).OrderBy(x => x.OpenedOn).Take(500).ToListAsync(ct)));
+        group.MapPost("/delinquency/{id:guid}/contact", async (Guid id, OperationsStore store, CancellationToken ct) => await ChangeDelinquency(id, store, ct, x => x.Contact()));
+        group.MapPost("/delinquency/{id:guid}/resolve", async (Guid id, OperationsStore store, CancellationToken ct) => await ChangeDelinquency(id, store, ct, x => x.Resolve()));
+
         MapPaymentCallback(app);
     }
 
@@ -349,6 +412,9 @@ public static class BillingEndpoints
 
     private static bool IsUniqueViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    private static async Task<IResult> ChangeDelinquency(Guid id, OperationsStore store, CancellationToken ct, Action<DelinquencyCase> change)
+    { var item = await store.DelinquencyCases.SingleOrDefaultAsync(x => x.Id == id, ct); if (item is null) return Results.NotFound(); try { change(item); await store.SaveChangesAsync(ct); return Results.Ok(item); } catch (InvalidOperationException e) { return Results.Conflict(e.Message); } }
 }
 
 public enum PaymentCallbackStatus { Settled, Failed }
@@ -361,6 +427,10 @@ public sealed record LateFeeRuleRequest(Guid? PropertyId, string Name, int Grace
 public sealed record RunLateFeesRequest(DateOnly AsOf);
 public sealed record ChargePaymentRequest(decimal Amount, string? Reference);
 public sealed record RefundRequest(decimal Amount, string? Reason, string? ProviderReference);
+public sealed record PaymentMethodRequest(PaymentMethodType Type, string Label, string? ProviderToken, string? LastFour);
+public sealed record ReconciliationRequest(string ProviderReference, decimal Amount, string? Note);
+public sealed record ResolveReconciliationRequest(string? Note);
+public sealed record DelinquencyRunRequest(DateOnly AsOf);
 public sealed record PaymentCallbackPayload(Guid OrganizationId, string ProviderReference, Guid LeaseId, Guid? ChargeId,
     decimal Amount, string Status, DateOnly? DueOn, string? FailureReason, DateTimeOffset? OccurredAt);
 public sealed record LeaseBalance(Guid LeaseId, decimal Charged, decimal Applied, decimal Outstanding, decimal CreditsIssued,

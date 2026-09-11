@@ -53,6 +53,10 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Credit> Credits => Set<Credit>();
     public DbSet<LateFeeRule> LateFeeRules => Set<LateFeeRule>();
     public DbSet<PaymentRefund> PaymentRefunds => Set<PaymentRefund>();
+    public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<PaymentReceipt> PaymentReceipts => Set<PaymentReceipt>();
+    public DbSet<PaymentReconciliation> PaymentReconciliations => Set<PaymentReconciliation>();
+    public DbSet<DelinquencyCase> DelinquencyCases => Set<DelinquencyCase>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -333,6 +337,30 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.PaymentId });
             // Same idempotency contract as a payment: a replayed refund callback finds this row.
             entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
+        });
+        model.Entity<PaymentMethod>(entity =>
+        {
+            entity.ToTable("PaymentMethods"); entity.Property(x => x.Label).HasMaxLength(100).IsRequired(); entity.Property(x => x.ProviderToken).HasMaxLength(200); entity.Property(x => x.LastFour).HasMaxLength(4); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status });
+        });
+        model.Entity<PaymentReceipt>(entity =>
+        {
+            entity.ToTable("PaymentReceipts"); entity.Property(x => x.ReceiptNumber).HasMaxLength(100).IsRequired();
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PaymentId }).IsUnique(); entity.HasIndex(x => new { x.OrganizationId, x.ReceiptNumber }).IsUnique();
+        });
+        model.Entity<PaymentReconciliation>(entity =>
+        {
+            entity.ToTable("PaymentReconciliations"); entity.Property(x => x.ProviderReference).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Note).HasMaxLength(500); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
+        });
+        model.Entity<DelinquencyCase>(entity =>
+        {
+            entity.ToTable("DelinquencyCases"); entity.Property(x => x.Balance).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
         });
 
         // One convention for every business entity, including future modules.

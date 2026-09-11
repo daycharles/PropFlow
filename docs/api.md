@@ -488,3 +488,6 @@ syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy
 `Integrations.Manage` is granted to Organization Admin and Property Manager only. The
 Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
 its records never cross an organization.
+## Billing acceptance workflows (FS-S08)
+
+Billing also exposes tenant-scoped payment-method vault metadata (provider token and last four only), one immutable receipt per settled payment, idempotent provider-reference reconciliation records, and delinquency cases with run/contact/resolve transitions. Raw card or bank credentials are never stored.
