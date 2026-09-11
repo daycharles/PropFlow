@@ -28,6 +28,7 @@ public static class Capabilities
     // Accountant role in the fixed matrix, and an organization that wants the ledger off a PM
     // revokes it per-organization through RoleCapabilityOverrides (PF-S01.04).
     public const string ManageAccounting = "Accounting.Manage";
+    public const string ReadOwnerAccounting = "Accounting.OwnerRead";
     public const string ResidentPortalRead = "ResidentPortal.Read";
     public const string ResidentPortalRequest = "ResidentPortal.Request";
     // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
@@ -37,7 +38,7 @@ public static class Capabilities
     // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
     public const string ManageConfiguration = "Settings.ManageConfiguration";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
@@ -52,6 +53,7 @@ public static class Capabilities
         "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay, ManageAttachments],
         "Vendor" when vendorId is not null => [ReadWork],
         "Technician" or "Vendor" => [],
+        "Owner" => [ReadOwnerAccounting],
         "Resident" when employeeId is null && vendorId is null => [ResidentPortalRead, ResidentPortalRequest],
         _ => []
     };
