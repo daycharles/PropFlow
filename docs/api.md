@@ -514,3 +514,12 @@ Billing also exposes tenant-scoped payment-method vault metadata (provider token
 ## Accounting acceptance workflows (FS-S09)
 
 Accounting includes first-class payable and receivable invoices with settlement/void transitions, plus bank accounts linked to asset accounts and idempotent imported bank transactions that can be matched to posted journal entries. All records are tenant-scoped and journal/period controls remain enforced.
+
+## Budgets and owner accounting (FS-S10)
+
+`/api/owner-accounting` provides tenant-scoped budgets, approval transitions, monthly lines,
+actual-vs-budget variance, owner/property ownership, management fees, distributions, and
+reproducible immutable owner statements. Journal lines may carry an optional `propertyId` for
+property reporting. Managers use `Accounting.Manage`; statement reads also accept
+`Accounting.OwnerRead` (granted to the Owner role). A repeated statement request returns the
+existing snapshot, whose response includes `netOwnerAmount` and a SHA-256 `sourceHash`.

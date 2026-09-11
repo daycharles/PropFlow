@@ -2,11 +2,12 @@ namespace PropFlow.Domain.Accounting;
 
 // One side of one posting. Exactly one of Debit/Credit carries the amount; the other is zero.
 // Negative amounts are refused outright, so "balanced" cannot be reached by cancelling signs.
-public sealed class JournalLine(Guid organizationId, Guid id, Guid entryId, Guid accountId, decimal debit, decimal credit, string? memo)
+public sealed class JournalLine(Guid organizationId, Guid id, Guid entryId, Guid accountId, decimal debit, decimal credit, string? memo, Guid? propertyId = null)
     : TenantEntity(organizationId, id)
 {
     public Guid EntryId { get; private set; } = entryId == Guid.Empty ? throw new ArgumentException("Journal entry is required.", nameof(entryId)) : entryId;
     public Guid AccountId { get; private set; } = accountId == Guid.Empty ? throw new ArgumentException("Account is required.", nameof(accountId)) : accountId;
+    public Guid? PropertyId { get; private set; } = propertyId == Guid.Empty ? null : propertyId;
     public decimal Debit { get; private set; } = ValidateSides(debit, credit);
     public decimal Credit { get; private set; } = credit;
     public string? Memo { get; private set; } = string.IsNullOrWhiteSpace(memo)
@@ -98,7 +99,7 @@ public sealed class JournalEntry : TenantEntity
         if (ReversalOfId is not null) throw new InvalidOperationException("A reversing entry cannot itself be reversed.");
         if (id == Id) throw new ArgumentException("A reversing entry needs its own identifier.", nameof(id));
         var reversed = lines
-            .Select(line => new JournalLine(OrganizationId, Guid.NewGuid(), id, line.AccountId, line.Credit, line.Debit, line.Memo))
+            .Select(line => new JournalLine(OrganizationId, Guid.NewGuid(), id, line.AccountId, line.Credit, line.Debit, line.Memo, line.PropertyId))
             .ToArray();
         var reference = $"REV-{Reference}";
         return Post(OrganizationId, id, period, entryDate, reference.Length > 100 ? reference[..100] : reference,

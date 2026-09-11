@@ -125,11 +125,14 @@ public static class AccountingEndpoints
                 .Select(x => new { x.Id, x.IsActive }).ToListAsync(ct);
             if (accounts.Count != accountIds.Length) return Results.Problem(statusCode: 400, title: "One or more accounts were not found");
             if (accounts.Any(x => !x.IsActive)) return Results.Problem(statusCode: 400, title: "A journal entry cannot post to an inactive account");
+            var propertyIds = request.Lines.Where(x => x.PropertyId is not null).Select(x => x.PropertyId!.Value).Distinct().ToArray();
+            if (propertyIds.Length > 0 && await store.Properties.CountAsync(x => propertyIds.Contains(x.Id), ct) != propertyIds.Length)
+                return Results.Problem(statusCode: 400, title: "One or more journal properties were not found");
             var id = Guid.NewGuid();
             try
             {
                 var lines = request.Lines
-                    .Select(x => new JournalLine(store.OrganizationId, Guid.NewGuid(), id, x.AccountId, x.Debit, x.Credit, x.Memo)).ToArray();
+                    .Select(x => new JournalLine(store.OrganizationId, Guid.NewGuid(), id, x.AccountId, x.Debit, x.Credit, x.Memo, x.PropertyId)).ToArray();
                 var entry = JournalEntry.Post(store.OrganizationId, id, period, request.EntryDate, request.Reference,
                     request.Memo, WorkScopeAccess.Actor(user), clock.GetUtcNow(), lines);
                 store.JournalEntries.Add(entry);
@@ -260,14 +263,14 @@ public static class AccountingEndpoints
     {
         entry.Id, entry.PeriodId, entry.EntryDate, entry.Reference, entry.Memo, entry.Total,
         entry.PostedBy, entry.PostedAt, entry.ReversalOfId,
-        Lines = entry.Lines.Select(line => new { line.Id, line.AccountId, line.Debit, line.Credit, line.Memo })
+        Lines = entry.Lines.Select(line => new { line.Id, line.AccountId, line.PropertyId, line.Debit, line.Credit, line.Memo })
     };
 }
 
 public sealed record AccountRequest(string Code, string Name, AccountType Type);
 public sealed record AccountImportRequest(IReadOnlyList<AccountRequest> Accounts);
 public sealed record FiscalPeriodRequest(string Name, DateOnly StartsOn, DateOnly EndsOn);
-public sealed record JournalLineRequest(Guid AccountId, decimal Debit, decimal Credit, string? Memo);
+public sealed record JournalLineRequest(Guid AccountId, decimal Debit, decimal Credit, string? Memo, Guid? PropertyId = null);
 public sealed record JournalEntryRequest(Guid PeriodId, DateOnly EntryDate, string Reference, string? Memo, IReadOnlyList<JournalLineRequest> Lines);
 public sealed record ReverseJournalEntryRequest(Guid PeriodId, DateOnly EntryDate);
 public sealed record TrialBalanceRow(Guid AccountId, string Code, string Name, AccountType Type, decimal Debits, decimal Credits, decimal Balance);
