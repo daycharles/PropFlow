@@ -11,12 +11,17 @@ const string usage = """
           propflow-deploy up [--no-seed]   Start everything. Safe to re-run.
           propflow-deploy down [--reset]   Stop everything. --reset also drops the database volume.
           propflow-deploy status           Report ports and API health.
+          propflow-deploy credentials      Print the sign-in accounts for this deployment.
           propflow-deploy --help
 
         Options:
-          --no-seed      Bring the stack up without demo organizations or sample data.
-          --reset        With `down`, delete the database volume as well as stopping the stack.
-          --root <path>  Use a bundle directory other than the one holding this executable.
+          --no-seed       Bring the stack up without demo organizations or sample data.
+          --reset         With `down`, delete the database volume as well as stopping the stack.
+          --root <path>   Use a bundle directory other than the one holding this executable.
+          --state <path>  Put credentials, keys, attachments and logs here.
+                          Defaults to <bundle>/state when that is writable, otherwise the
+                          system application-data directory (%ProgramData%\PropFlow on Windows).
+                          PROPFLOW_STATE sets the same thing.
 
         Requires Docker Desktop (running) and Node.js 22. Does not require the .NET SDK.
         """;
@@ -28,31 +33,26 @@ if (arguments.Count == 0 || arguments.Contains("--help") || arguments.Contains("
     return arguments.Count == 0 ? 1 : 0;
 }
 
-var verb = arguments[0];
+// Strip every option before reading the verb, so flag order does not matter:
+// `up --no-seed` and `--no-seed up` are the same command.
 var noSeed = arguments.Remove("--no-seed");
 var reset = arguments.Remove("--reset");
 
-var rootIndex = arguments.IndexOf("--root");
-string? root = null;
-if (rootIndex >= 0)
-{
-    if (rootIndex + 1 >= arguments.Count)
-    {
-        Console.Error.WriteLine("--root needs a directory.");
-        return 1;
-    }
-    root = arguments[rootIndex + 1];
-    arguments.RemoveRange(rootIndex, 2);
-}
+if (!TakeOption(arguments, "--root", out var root)) return 1;
+if (!TakeOption(arguments, "--state", out var state)) return 1;
 
 if (arguments.Count != 1)
 {
-    Console.Error.WriteLine($"Unrecognized arguments: {string.Join(' ', arguments.Skip(1))}");
+    Console.Error.WriteLine(arguments.Count == 0
+        ? "No command given. Expected up, down, status, or credentials."
+        : $"Expected one command, got: {string.Join(' ', arguments)}");
     Console.Error.WriteLine(usage);
     return 1;
 }
 
-var layout = root is null ? DeploymentLayout.FromExecutableLocation() : DeploymentLayout.At(root);
+var verb = arguments[0];
+
+var layout = DeploymentLayout.Resolve(root, state);
 var controller = new StackController(layout, Console.WriteLine);
 
 // Ctrl+C cancels the in-flight step rather than leaving a half-written state directory.
@@ -72,6 +72,7 @@ try
         "up" => await controller.UpAsync(!noSeed, cancellation.Token),
         "down" => await controller.DownAsync(reset, cancellation.Token),
         "status" => await controller.StatusAsync(cancellation.Token),
+        "credentials" => controller.Credentials(),
         _ => Unknown(verb),
     };
 }
@@ -87,7 +88,24 @@ catch (Exception error)
 
 static int Unknown(string verb)
 {
-    Console.Error.WriteLine($"Unknown command '{verb}'. Expected up, down, or status.");
+    Console.Error.WriteLine($"Unknown command '{verb}'. Expected up, down, status, or credentials.");
     Console.Error.WriteLine(usage);
     return 1;
+}
+
+// Pulls "--name value" out of the argument list. Returns false only when the flag is present
+// without a value, which is a usage error rather than a missing option.
+static bool TakeOption(List<string> arguments, string name, out string? value)
+{
+    value = null;
+    var index = arguments.IndexOf(name);
+    if (index < 0) return true;
+    if (index + 1 >= arguments.Count)
+    {
+        Console.Error.WriteLine($"{name} needs a directory.");
+        return false;
+    }
+    value = arguments[index + 1];
+    arguments.RemoveRange(index, 2);
+    return true;
 }

@@ -1,4 +1,4 @@
-# Release testing — standing up `v1.0.0-rc.1` on macOS
+# Release testing — standing up `v1.0.0-rc.3` on macOS
 
 A from-scratch walkthrough for running PropFlow locally and exercising it. Written for
 **macOS / zsh**; every command is bash-compatible and ported from the CI `e2e` job
@@ -44,7 +44,7 @@ Get the source at the tag:
 ```bash
 git clone https://github.com/daycharles/PropFlow.git
 cd PropFlow
-git checkout v1.0.0-rc.1
+git checkout v1.0.0-rc.3
 ```
 
 ---
@@ -215,6 +215,12 @@ Open <http://127.0.0.1:3000>. The login form takes **organization slug + email +
 With the values in section 3 that is `tidewater-demo` /
 `demo-admin@tidewater.example.test` / `DemoPassword!123`.
 
+> **`DemoPassword!123` belongs to this document only.** It is the value *you* exported as
+> `Demo__Password` in section 3, so it is the password only because you chose it here. An install
+> made with `propflow-deploy` from a release bundle seeds a different one — see
+> [DEPLOYMENT.md](DEPLOYMENT.md), or run `propflow-deploy credentials`. Carrying this password
+> over to a bundle install is the single most common way to be locked out.
+
 The technician account is deliberately narrower: a field role is inert until its membership names
 an employee, and is then scoped to work assigned to that employee. Seeing fewer work items there
 is the feature, not a bug.
@@ -309,7 +315,7 @@ in practice, a `migrate` or `configure-runtime` that did not run or did not succ
 ## 10. Known limitations in this release candidate
 
 Carried from [CHANGELOG.md](../CHANGELOG.md) and [docs/followups.md](followups.md). None of these
-is a defect to report — they are the accepted state of `v1.0.0-rc.1`.
+is a defect to report — they are the accepted state of `v1.0.0-rc.3`.
 
 - **Resident messaging is mocked.** Messages are recorded in the outbox and shown on the
   timeline; nothing is delivered to a real phone or inbox. Real providers are configurable

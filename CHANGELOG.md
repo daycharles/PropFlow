@@ -8,6 +8,44 @@ Every line traces to a `PF-x.yy` task id from [docs/backlog.md](docs/backlog.md)
 task source and whose ids are stable references. Per-milestone narrative lives in
 [docs/milestones.md](docs/milestones.md); open threads live in [docs/followups.md](docs/followups.md).
 
+## [1.0.0-rc.3] - 2026-09-11
+
+### Fixed
+
+- **The documented demo password did not work on a bundle install, locking the first tester out.**
+  `propflow-deploy` generated a *random* demo password per install and printed it once, while
+  `docs/RELEASE-TESTING.md` — the guide linked from the release — showed `DemoPassword!123`. Miss
+  the terminal output and there was no working password anywhere. The demo accounts now use a
+  documented, deterministic password (`PropFlowDemo!2026`), overridable before the first `up` with
+  `PROPFLOW_DEMO_PASSWORD`. Database passwords stay randomly generated per install.
+- `propflow-deploy` read its verb from `args[0]` before stripping options, so `--root X status`
+  was parsed as the command `--root`. Options are now removed first and flag order is free.
+- A non-existent `--root` surfaced as `Could not start docker … The directory name is invalid`,
+  which read as though Docker were missing. The bundle check now reports the real cause, and
+  child processes fall back to a working directory that exists.
+
+### Added
+
+- `propflow-deploy credentials` prints the sign-in accounts for a deployment, and every `up`
+  writes them to `SIGN-IN.txt` in the state directory — so the credentials survive a closed
+  terminal.
+- **Windows artifacts**: an MSI that installs to `C:\Program Files\PropFlow` with Start Menu
+  shortcuts and a `PATH` entry, plus a zip for people who would rather not install. Built with
+  `./scripts/Publish-Deployment.ps1 -RuntimeIdentifier win-x64 -Installer`.
+- `propflow-deploy` now works when installed read-only. Credentials, key ring, attachments, logs
+  and the web build relocate to `%ProgramData%\PropFlow` (macOS:
+  `~/Library/Application Support/PropFlow`) when the application directory is not writable, and
+  `--state` / `PROPFLOW_STATE` override it. An unpacked archive keeps state beside the executable
+  exactly as before.
+
+### Changed
+
+- `docs/DEPLOYMENT.md` rewritten as the complete install-and-run guide, leading with the sign-in
+  credentials, and covering troubleshooting for the ways login actually fails (missing
+  organization slug, the rate limit, a Technician's deliberately narrower list).
+- `docs/RELEASE-TESTING.md` now says plainly that its `DemoPassword!123` applies only to the
+  from-source path and must not be carried over to a bundle install.
+
 ## [1.0.0-rc.2] - 2026-09-11
 
 Adds a deployment path. `v1.0.0-rc.1` could only be run from a checkout with the .NET SDK in a
@@ -205,5 +243,6 @@ database readiness) predate this changelog and are implemented.
   `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy` and
   `Content-Security-Policy: default-src 'none'`.
 
+[1.0.0-rc.3]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/daycharles/PropFlow/releases/tag/v1.0.0-rc.1
