@@ -96,9 +96,21 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /api/portal/lease-documents | ResidentPortal.Read; lists resident-visible lease document links for the authenticated resident |
 | GET/POST | /api/portal/payments | ResidentPortal.Read/Request; lists or submits a payment for the authenticated resident's own lease; optional `chargeId` requires an open charge and an exact amount match |
 | GET | /api/leasing/leases/payments | Work.Read; lists tenant-scoped resident payments |
-| POST | /api/leasing/leases/payments/{paymentId}/settle | Leasing.Manage + CSRF; settles a submitted payment and marks its linked charge paid atomically |
+| POST | /api/leasing/leases/payments/{paymentId}/settle | Leasing.Manage + CSRF; settles a submitted payment and applies its amount to the linked charge atomically |
 | GET/POST | /api/leasing/leases/{id}/charges | Read or add recurring/one-time lease charges |
 | GET | /api/portal/charges | ResidentPortal.Read; lists charges for the authenticated resident's leases |
+| GET | /api/billing/leases/{leaseId}/balance | Billing.Manage; ledger-consistent lease balance — charged, applied, outstanding, credits issued/applied/remaining, payments settled/refunded/applied |
+| GET | /api/billing/leases/{leaseId}/charges | Billing.Manage; charges for the lease including `amountApplied` and `outstanding` |
+| GET/POST | /api/billing/leases/{leaseId}/recurring-charges, POST /api/billing/recurring-charges | Billing.Manage + CSRF; reads or creates a monthly rent schedule (`dayOfMonth` 1–28) |
+| POST | /api/billing/recurring-charges/{id}/pause\|resume | Billing.Manage + CSRF; suspends or restarts generation for a schedule |
+| POST | /api/billing/recurring-charges/run | Billing.Manage + CSRF; generates charges through `through`. Idempotent — a repeat run for the same period generates nothing |
+| GET/POST | /api/billing/leases/{leaseId}/credits | Billing.Manage + CSRF; lists or issues a lease credit |
+| POST | /api/billing/credits/{creditId}/apply | Billing.Manage + CSRF; applies credit value to one charge on the same lease; 409 when the credit is exhausted |
+| GET/POST | /api/billing/late-fee-rules | Billing.Manage + CSRF; one rule per scope — `propertyId` null is the organization default; 409 on a duplicate scope |
+| POST | /api/billing/late-fees/run | Billing.Manage + CSRF; raises a `LateFee` charge for each overdue charge past its grace period. Idempotent — a charge is stamped `lateFeeAppliedOn` and never assessed twice |
+| POST | /api/billing/charges/{chargeId}/payments | Billing.Manage + CSRF; takes a full or **partial** payment against a charge. 201 accepted, 402 declined (payment recorded as failed), **503 on provider outage with nothing written**, 409 when the amount exceeds the outstanding balance |
+| GET/POST | /api/billing/payments/{paymentId}/refunds | Billing.Manage + CSRF; lists or issues a refund, reversing the amount on the linked charge. Replaying a `providerReference` returns 200 with `duplicate: true` and writes no second row |
+| POST | /api/billing/payment-callback | **Unauthenticated, HMAC-SHA256 signed** via `X-PropFlow-Signature` over the raw body with `Billing:ProviderCallbackSecret`; CSRF-exempt. 201 on first delivery, **200 with `duplicate: true` on replay** — the unique index on (`OrganizationId`, `ProviderReference`) makes a replay a no-op, never a second payment |
 | GET | /api/portal/announcements | ResidentPortal.Read; lists active published announcements for the resident's organization |
 | GET | /api/announcements | Work.Read; manager announcement records |
 | POST | /api/announcements | Leasing.Manage + CSRF; creates a draft announcement |

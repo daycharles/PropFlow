@@ -18,6 +18,8 @@ namespace PropFlow.Api;
 public static class BillingEndpoints
 {
     private const int MaxCallbackBytes = 32 * 1024;
+    // Processors are not consistent about casing; the signature, not the shape, is the control.
+    private static readonly JsonSerializerOptions CallbackJson = new() { PropertyNameCaseInsensitive = true };
 
     public static void MapBillingEndpoints(this WebApplication app)
     {
@@ -258,7 +260,7 @@ public static class BillingEndpoints
             if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(signature))) return Results.Unauthorized();
 
             PaymentCallbackPayload? payload;
-            try { payload = JsonSerializer.Deserialize<PaymentCallbackPayload>(body.ToArray()); }
+            try { payload = JsonSerializer.Deserialize<PaymentCallbackPayload>(body.ToArray(), CallbackJson); }
             catch (JsonException) { return Results.BadRequest(); }
             if (payload is null || payload.OrganizationId == Guid.Empty || string.IsNullOrWhiteSpace(payload.ProviderReference)
                 || payload.LeaseId == Guid.Empty || payload.Amount <= 0
