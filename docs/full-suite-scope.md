@@ -36,19 +36,23 @@ identity foundation (`IdentityStore`, `MembershipAccess`, `SessionAuthentication
 `Capabilities.ForRole` switch) rather than replacing it. Acceptance: role matrix, invitation
 flow, negative authorization tests, tenant isolation tests, audit history, browser coverage.
 
-**PF-S01.01–.07 are now build- and test-verified**, as of the migration/grants commit on this
-branch: `dotnet build` is clean, `PropFlow.UnitTests` is 228/228, and `PropFlow.IntegrationTests`
-is 176/176 (run locally against a real Postgres via Testcontainers — the agent session that wrote
-this code could not run any of this itself, since `dotnet restore` there is blocked by an
-organizational egress policy on `api.nuget.org`; verification happened afterward, on a real
-machine). That first real run also caught a genuine bug, not just an unverified-code gap:
-`DatabaseProvisioner.ConfigureRuntimeAsync` never granted the restricted `propflow_app` runtime
-role write access to any of the six new tables (`Invitations`, `RoleCapabilityOverrides`, `Teams`,
-`TeamMemberships`, `UserSessions`, `AuditEntries`), or to `identity.Memberships`/`AspNetUsers` for
-the new write paths invitation-acceptance and membership-management need. It had been silently
-broken since PF-S01.02/03 — nothing exercised it until PF-S01.06 made every login write a
-`UserSession` row, which turned it into every integration test's login helper 500ing. Fixed in the
-same commit as the EF migration.
+**All of PF-S01.01–.09 is now build- and test-verified**, as of the invite/accept UI + Playwright
+commits on this branch: `dotnet build` is clean, `PropFlow.UnitTests` is 228/228,
+`PropFlow.IntegrationTests` is 188/188, and the full Playwright e2e suite is 19/19 (all run locally
+against a real Postgres and a real dev stack — the agent session that wrote this code could not
+run any of this itself, since `dotnet restore` there is blocked by an organizational egress policy
+on `api.nuget.org`; verification happened afterward, on a real machine). That first real run also
+caught a genuine bug, not just an unverified-code gap: `DatabaseProvisioner.ConfigureRuntimeAsync`
+never granted the restricted `propflow_app` runtime role write access to any of the six new tables
+(`Invitations`, `RoleCapabilityOverrides`, `Teams`, `TeamMemberships`, `UserSessions`,
+`AuditEntries`), or to `identity.Memberships`/`AspNetUsers` for the new write paths
+invitation-acceptance and membership-management need. It had been silently broken since
+PF-S01.02/03 — nothing exercised it until PF-S01.06 made every login write a `UserSession` row,
+which turned it into every integration test's login helper 500ing. Fixed in the same commit as the
+EF migration. A second bug turned up while building PF-S01.09's UI: `GET
+/api/organizations/current/invitations` was returning the raw invitation `Token` in the
+pending-invitations list, contradicting its own code comment that the token is shown exactly once,
+at creation — fixed alongside the new UI.
 
 Task breakdown (status as of this writing):
 
@@ -61,8 +65,10 @@ Task breakdown (status as of this writing):
 | PF-S01.05 | Teams: `Team` + `TeamMembership` entities/mapping, `TeamService` (create, list, add/remove member — requires an existing active `OrganizationMembership`), `GET`/`POST /api/organizations/current/teams`, `GET`/`POST`/`DELETE .../teams/{id}/members/{userId}` (`Identity.ManageMembers`) | ✅ build- and test-verified. Grouping/addressing only — scoping work or property access by team is explicitly deferred, not implied by this pass |
 | PF-S01.06 | Session/device management: `UserSession` entity/mapping, `session_id` claim issued at login and carried in the cookie, `UserSessionService` (start/touch/list/revoke), `SessionAuthentication.ValidateCookieAsync` rejects a cookie whose session was revoked (additive to the existing `SecurityStamp` check — a cookie predating this feature has no `session_id` claim and is unaffected), `GET`/`DELETE /api/sessions` for self-service list/revoke of the caller's own devices | ✅ build- and test-verified. Deliberately does not touch `LogoutAsync`'s existing all-sessions revoke (bumping `SecurityStamp`); the two mechanisms are independent and both work |
 | PF-S01.07 | Audit history beyond the Work timeline: `IdentityAuditEntry` (flat, append-only, mirroring `TimelineEntry`'s "no event-specific columns" shape) + `IdentityAuditLog` (record/list), wired into invitation create/accept and role-capability overrides; new `MembershipManagementService` (change role / remove member — the only two membership writes that previously had no endpoint at all, needed so there was something to audit) with the same manager-lockout guard as PF-S01.04, `GET`/`PUT .../members/{userId}/role`/`DELETE .../members/{userId}`, and `GET /api/organizations/current/audit` | ✅ build- and test-verified |
-| PF-S01.08 | Negative-authorization + tenant-isolation integration test suite for the above | Not started |
-| PF-S01.09 | Browser (Playwright) coverage for invite → accept → login | Not started |
+| PF-S01.08 | Negative-authorization + tenant-isolation integration test suite for the above: `IdentityAdministrationTests` (12 tests covering read-only lockout, expired/already-accepted/unknown invitation tokens, tenant confinement of invitations/audit/teams/memberships, last-manager-removal refusal, and self-service session revoke) | ✅ build- and test-verified |
+| PF-S01.09 | Browser (Playwright) coverage for invite → accept → login: a minimal `/settings/members` admin page (invite form, one-time invite-link banner, pending list, active members with inline role change/remove) and a public `/accept-invite/[token]` page, plus `member-invite.spec.ts` driving the full flow in a real browser (send invite as admin → accept in a fresh unauthenticated context → sign in as the new user → confirm the admin's list reflects the move from pending to active) | ✅ build- and test-verified |
+
+**FS-S01 is now fully complete** per this task breakdown.
 
 **FS-S03 — Configuration and workflow administration (#191).** Custom fields, statuses,
 categories (categories already exist per-M3/M5; this generalizes past work categories),
