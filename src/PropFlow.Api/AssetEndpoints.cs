@@ -106,6 +106,9 @@ public static class AssetEndpoints
             try
             {
                 if (!await store.Assets.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return Results.NotFound();
+                if (request.WorkItemId is { } workItemId &&
+                    !await store.WorkItems.AsNoTracking().AnyAsync(x => x.Id == workItemId, ct))
+                    return Results.Problem(statusCode: 400, title: "Work item was not found.");
                 var cost = new AssetLifecycleCost(tenant.OrganizationId, Guid.NewGuid(), id, request.Type,
                     request.Amount, request.IncurredOn, request.Description, request.WorkItemId);
                 store.AssetLifecycleCosts.Add(cost);
