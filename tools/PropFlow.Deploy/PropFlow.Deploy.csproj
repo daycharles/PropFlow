@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>propflow-deploy</AssemblyName>
+    <RootNamespace>PropFlow.Deploy</RootNamespace>
+    <!-- Deliberately reference-free: the deployer orchestrates already-published binaries as
+         child processes, so it never links the application. That keeps its self-contained
+         publish small and its lock file trivial. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

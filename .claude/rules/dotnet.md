@@ -31,7 +31,7 @@ where any two disagree. Citations verified 2026-09-09.
 **There is no `Directory.Packages.props` here** — this repo does not use central package
 management. Versions are written inline on each `PackageReference`
 (`src/PropFlow.Infrastructure/PropFlow.Infrastructure.csproj:5-7` is the fullest example) and
-pinned by a committed `packages.lock.json` in all 8 projects.
+pinned by a committed `packages.lock.json` in all 9 projects.
 
 Consequences:
 
