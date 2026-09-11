@@ -116,9 +116,9 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/announcements | Leasing.Manage + CSRF; creates a draft announcement |
 | POST | /api/announcements/{id}/publish | Leasing.Manage + CSRF; publishes an announcement to the resident portal |
 | POST | /api/announcements/{id}/archive | Leasing.Manage + CSRF; archives an announcement |
-| GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name |
-| POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category |
-| PUT | /api/categories/{id} | Settings.ManageCategories + CSRF; renames/reorders a category |
+| GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name. `?appliesTo=` (default `WorkItem`) narrows to that entity type (FS-S03.03) |
+| POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category; optional `appliesTo` (default `WorkItem`, immutable after creation); 409 on a duplicate name for the same `appliesTo` |
+| PUT | /api/categories/{id} | Settings.ManageCategories + CSRF; renames/reorders a category — `appliesTo` cannot be changed |
 | POST | /api/categories/{id}/archive | Settings.ManageCategories + CSRF; archives a category |
 | GET | /openapi/v1.json | Authenticated generated OpenAPI contract |
 
@@ -426,7 +426,9 @@ in-process — there is no durable retry queue yet.
 
 `key` is a stable, lowercase machine identifier (`^[a-z][a-z0-9_]*$`, ≤ 50 chars), unique per
 `(organization, appliesTo)`; `name` is the display label and may change freely. `appliesTo` is a
-closed vocabulary — `WorkItem` today, the only entity type a custom field can attach to.
+closed vocabulary (`ConfigurationEntityType`) — `WorkItem` today, the only entity type a custom
+field or a `/api/categories` category can attach to; the two features share the same vocabulary
+(FS-S03.03) rather than each keeping its own.
 `fieldType` is one of `Text`, `Number`, `Date`, `Boolean`, `SingleSelect`; `options` is required
 (≥ 1, unique, ≤ 100 chars each) for `SingleSelect` and rejected for every other type. Archiving
 never deletes the row — a value already recorded against an archived definition stays readable.
