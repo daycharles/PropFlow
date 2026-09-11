@@ -6,7 +6,8 @@ using PropFlow.Application;
 namespace PropFlow.Infrastructure.Identity;
 
 public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
-    SignInManager<ApplicationUser> signIn, MembershipAccess memberships)
+    SignInManager<ApplicationUser> signIn, MembershipAccess memberships, RoleCapabilityService roleCapabilities,
+    UserSessionService sessions)
 {
     // A valid Identity password hash whose work factor VerifyHashedPassword reads from the hash
     // itself. Verifying against it for an unknown email spends the same time as a wrong-password
@@ -14,7 +15,8 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
     private static readonly PasswordHasher<ApplicationUser> DecoyHasher = new();
     private static readonly string DecoyHash = new PasswordHasher<ApplicationUser>().HashPassword(new ApplicationUser(), "decoy");
 
-    public async Task<bool> LoginAsync(string email, string password, Guid organizationId, CancellationToken ct)
+    public async Task<bool> LoginAsync(string email, string password, Guid organizationId, CancellationToken ct,
+        string? userAgent = null, string? ipAddress = null)
     {
         var user = await users.FindByEmailAsync(email);
         if (user is null) { DecoyHasher.VerifyHashedPassword(new ApplicationUser(), DecoyHash, password); return false; }
@@ -22,11 +24,13 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
         if (!result.Succeeded) return false;
         var membership = await memberships.FindActiveAsync(user.Id, organizationId, ct);
         if (membership is null) return false;
-        await signIn.SignInWithClaimsAsync(user, isPersistent: false, TenantClaims(membership));
+        var session = await sessions.StartAsync(user.Id, membership.OrganizationId, userAgent, ipAddress, ct);
+        await signIn.SignInWithClaimsAsync(user, isPersistent: false, await TenantClaimsAsync(membership, session.Id, ct));
         return true;
     }
 
-    public async Task<bool> LoginAsync(string email, string password, string organizationSlug, CancellationToken ct)
+    public async Task<bool> LoginAsync(string email, string password, string organizationSlug, CancellationToken ct,
+        string? userAgent = null, string? ipAddress = null)
     {
         var user = await users.FindByEmailAsync(email);
         if (user is null) { DecoyHasher.VerifyHashedPassword(new ApplicationUser(), DecoyHash, password); return false; }
@@ -34,7 +38,8 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
         if (!result.Succeeded) return false;
         var membership = await memberships.FindActiveBySlugAsync(user.Id, organizationSlug.Trim().ToLowerInvariant(), ct);
         if (membership is null) return false;
-        await signIn.SignInWithClaimsAsync(user, isPersistent: false, TenantClaims(membership));
+        var session = await sessions.StartAsync(user.Id, membership.OrganizationId, userAgent, ipAddress, ct);
+        await signIn.SignInWithClaimsAsync(user, isPersistent: false, await TenantClaimsAsync(membership, session.Id, ct));
         return true;
     }
 
@@ -51,11 +56,22 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
             context.RejectPrincipal();
             return;
         }
+        // PF-S01.06: a cookie predating session tracking carries no session_id claim - treated as
+        // still valid (SecurityStamp above is still the source of truth for those), but any cookie
+        // that DOES carry one must resolve to a still-active UserSession row.
+        var sessionClaim = principal!.FindFirstValue(TenantAccess.SessionClaim);
+        Guid? sessionId = Guid.TryParse(sessionClaim, out var parsedSessionId) ? parsedSessionId : null;
+        if (sessionId is not null && !await sessions.TouchAsync(sessionId.Value, context.HttpContext.RequestAborted))
+        {
+            context.RejectPrincipal();
+            return;
+        }
         var membership = await memberships.FindActiveAsync(user.Id, organizationId, context.HttpContext.RequestAborted);
         if (membership is null) { context.RejectPrincipal(); return; }
-        // Rebuild capabilities on every request so membership/role changes take effect immediately.
+        // Rebuild capabilities on every request so membership/role/override changes take effect
+        // immediately, not just at next login.
         var refreshed = await signIn.CreateUserPrincipalAsync(user);
-        ((ClaimsIdentity)refreshed.Identity!).AddClaims(TenantClaims(membership));
+        ((ClaimsIdentity)refreshed.Identity!).AddClaims(await TenantClaimsAsync(membership, sessionId, context.HttpContext.RequestAborted));
         context.ReplacePrincipal(refreshed);
     }
 
@@ -67,11 +83,17 @@ public sealed class SessionAuthentication(UserManager<ApplicationUser> users,
         await signIn.SignOutAsync();
     }
 
-    private static IEnumerable<Claim> TenantClaims(OrganizationMembership membership)
+    private async Task<IEnumerable<Claim>> TenantClaimsAsync(OrganizationMembership membership, Guid? sessionId, CancellationToken ct)
     {
-        yield return new Claim(TenantAccess.OrganizationClaim, membership.OrganizationId.ToString());
-        yield return new Claim("organization_role", membership.Role);
-        foreach (var capability in Capabilities.ForRole(membership.Role, membership.EmployeeId, membership.VendorId))
-            yield return new Claim(TenantAccess.CapabilityClaim, capability);
+        var capabilities = await roleCapabilities.EffectiveCapabilitiesAsync(
+            membership.OrganizationId, membership.Role, membership.EmployeeId, membership.VendorId, ct);
+        var claims = new List<Claim>
+        {
+            new(TenantAccess.OrganizationClaim, membership.OrganizationId.ToString()),
+            new("organization_role", membership.Role),
+        };
+        if (sessionId is Guid id) claims.Add(new Claim(TenantAccess.SessionClaim, id.ToString()));
+        claims.AddRange(capabilities.Select(capability => new Claim(TenantAccess.CapabilityClaim, capability)));
+        return claims;
     }
 }

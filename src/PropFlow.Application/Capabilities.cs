@@ -16,8 +16,11 @@ public static class Capabilities
     public const string SendResidentMessage = "Communications.SendMessage";
     public const string ManageAutomationRules = "Settings.ManageAutomationRules";
     public const string ManageAttachments = "Work.ManageAttachments";
+    // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
+    // organization-editable role -> capability matrix is PF-S01.04, not yet built.
+    public const string ManageMembers = "Identity.ManageMembers";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageMembers];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
