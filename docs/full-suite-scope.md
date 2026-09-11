@@ -15,7 +15,7 @@ propagating them by hand.
 
 | Gate | Epic | A track (milestone) | B track (milestone) |
 | --- | --- | --- | --- |
-| 1 — Core PMS | FS-E1: Core PMS foundation and administration (#184) | `FS-G1A` — Platform foundation | `FS-G1B` — Core PMS workflows |
+| 1 — Core PMS | FS-E1: Core PMS foundation and administration (#184) / FS-E2: Leasing and resident lifecycle (#185, done) | `FS-G1A` — Platform foundation | `FS-G1B` — Core PMS workflows |
 | 2 — Financial | FS-E3: Financial operations (#186) | `FS-G2A` — Financial platform | `FS-G2B` — Financial workflows |
 | 3 — Operations | FS-E4: Property operations expansion (#187) | `FS-G3A` — Operations platform | `FS-G3B` — Operations workflows |
 | 4 — Ecosystem | (integrations/engagement, split across E4/E5) | `FS-G4A` — Ecosystem platform | `FS-G4B` — Engagement and insight |
@@ -72,12 +72,52 @@ Task breakdown (status as of this writing):
 
 **FS-S03 — Configuration and workflow administration (#191).** Custom fields, statuses,
 categories (categories already exist per-M3/M5; this generalizes past work categories),
-templates, numbering, approvals, business hours, time zones, notification settings. Not yet
-broken into tasks — do that before starting PF-S03.01.
+templates, numbering, approvals, business hours, time zones, notification settings.
+
+**Two deliberate scope decisions before the task list, because both raw feature words in the
+story are bigger than they look:**
+
+- **"Statuses" does not mean configurable/custom work statuses.** `WorkStatus` is a fixed
+  domain enum threaded through invariants (`RefuseWhenTerminal`, `ChangeStatus`'s transition
+  rules, `Reopen`) and the automation engine's `WorkStatusEquals` condition. Turning it into a
+  per-organization open set is a design change on the scale of PF-5.04 (the automation engine
+  itself), not a sub-task of this story. Deferred; revisit as its own story once a second
+  workflow (leasing, maintenance-ops) needs a genuinely different status set — the same
+  "finalize the vocabulary before building" call this repo already made for automation
+  triggers/conditions/actions.
+- **Custom fields stay a closed set of field *types*, not an open schema.** A per-organization
+  definition (name, type, and — for the closed set — a controlled option list) attached to one
+  entity type at a time, validated against its type at write time. Not a JSON-schema engine,
+  not user-authored validation expressions; the same reasoning that kept `AutomationCondition`/
+  `AutomationAction` a closed vocabulary instead of a scripting surface.
+- **"Templates" here means the numbering/notification templates below, not a new document/
+  message-template system.** `MessageTemplate` (PF-4.03) already covers resident communication
+  templates; generalizing templates to documents is FS-S17 (Gate 4), not this story.
+
+| Task | Scope | Status |
+| --- | --- | --- |
+| PF-S03.01 | Custom field definitions: `CustomFieldDefinition` (org-scoped, `AppliesTo` entity-type enum starting with `WorkItem`, `FieldType` — Text/Number/Date/Boolean/SingleSelect — plus a bounded option list for `SingleSelect`), forced RLS, `GET`/`POST`/`PUT`/`POST .../archive /api/settings/custom-fields` behind a new `Settings.ManageConfiguration` capability. Pure validation logic (key format, type/option-list well-formedness, `Accepts()` for the PF-S03.02 write-time check) is unit-tested independent of persistence, mirroring `AutomationCondition.Validate()` | ✅ build- and test-verified — `CustomFieldDefinitionTests` (24 unit), `CustomFieldTests` (5 integration: CRUD, SingleSelect round-trip, 400/409 on a bad/duplicate key, read-only-denied, tenant isolation via a second login) plus a raw-SQL cross-tenant test in `IsolationTests` |
+| PF-S03.02 | Custom field values on `WorkItem`: `CustomFieldValue` (org, `CustomFieldDefinitionId`, `WorkId`, a single typed value column set matched to the definition's `FieldType`), enforced against the live definition at write time (deleting/retyping a definition never orphans a value into an invalid state — reject the write instead), exposed on `POST`/`PUT /api/work` and the work detail response | not started |
+| PF-S03.03 | Generalize categories: extend `WorkCategory`/`/api/categories` with an `AppliesTo` entity-type tag (defaulting existing rows to `WorkItem`) so a category list can be shared by a future entity type without a second CRUD surface; existing `Settings.ManageCategories` callers and the `/settings/categories` UI keep working unchanged | not started |
+| PF-S03.04 | Numbering: `NumberingSequence` (org, entity type, prefix, zero-padded width, next value), an atomic allocator (row-locked increment inside the triggering transaction — no gaps-tolerant `SELECT MAX`), applied to `WorkItem` as an optional `DisplayNumber` set at `Publish()`; existing work keeps `DisplayNumber = null` (backfill is a decision for whoever turns numbering on, not implied here). `GET`/`PUT /api/settings/numbering` behind `Settings.ManageConfiguration` | not started |
+| PF-S03.05 | Approvals: a single-step `ApprovalRequest` (subject type + id, requested by, status Pending/Approved/Rejected, decided by/at, reason), `ApprovalService` (request/decide), audited via `IdentityAuditLog` (PF-S01.07). One decision, not a chain — a multi-step approval workflow is a follow-on story if the demand appears. `GET`/`POST /api/approvals`, `POST /api/approvals/{id}/decide` behind `Settings.ManageConfiguration` for the decide step; requesting only needs the capability the subject action itself needs | not started |
+| PF-S03.06 | Business hours + org default time zone: `OrganizationSettings` (day-of-week open/close windows, nullable = closed that day, default `TimeZoneId` for properties that don't set their own — `Property.TimeZoneId`, PF-7.04, still wins when set). Store + `GET`/`PUT /api/settings/organization` behind `Settings.ManageConfiguration`. No consumer wired yet (no "closed for business" check anywhere) — storage and validation only, same as templates existed before dispatch did (PF-4.03 vs PF-4.05) | not started |
+| PF-S03.07 | Staff notification preferences: `NotificationPreference` (per-user, per-event-type opt in/out — starting with the event types that already exist: work assigned to me, automation applied, invitation received). **No delivery channel is wired to this yet** — today only residents have a messaging pipeline (`IResidentMessenger`); a staff-facing channel is out of scope here. This task is the preference model and its API only, explicitly not a promise of delivery | not started |
+| PF-S03.08 | Settings admin UI: one `/settings/configuration` page (or additions to existing `/settings/*` pages) covering custom fields, numbering, business hours, and notification preferences CRUD, gated on `Settings.ManageConfiguration` | not started |
+| PF-S03.09 | Negative-authorization + tenant-isolation integration tests for PF-S03.01–.07 (mirroring `IdentityAdministrationTests`), plus one e2e spec covering a custom field defined, set on a work item, and round-tripped through the API | not started |
 
 ### FS-G1B — Core PMS workflows
 
-Not yet broken into tasks.
+Landed directly to `develop`/`main` (PR #209, plus follow-ons in #214) while this file still
+said "not yet broken into tasks" — reconcile this section properly (task-by-task, the way
+FS-S01's is) the next time FS-G1B work resumes. For now, what shipped: FS-S02 Portfolio and
+property management (#190, done — includes `PropertyAmenity` from the #214 follow-on), FS-S04
+Marketing, listings, availability, and showings (#192, done), FS-S06 Leases, renewals, notices,
+and resident lifecycle (#194, done — includes the `ResidentPayment`↔`LeaseCharge` link from the
+#214 follow-on), FS-S07 Resident portal and service requests (#195, done), tracked under a new
+epic **FS-E2: Leasing and resident lifecycle (#185, done)** that this document had not caught
+up to. FS-S05 (Applications and screening, #193) is the one FS-E2/Gate-4-adjacent story still
+open and unbroken.
 
 ## Gates 2–5
 

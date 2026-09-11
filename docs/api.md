@@ -393,6 +393,25 @@ timeline entry fences it), runs in its own transaction, and a failing rule is lo
 skipped without affecting the work write or other rules. Evaluation is post-commit and
 in-process — there is no durable retry queue yet.
 
+## Custom field definitions (FS-S03.01)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/settings/custom-fields | `Work.Read`; the tenant's field definitions, sort-order then name |
+| POST | /api/settings/custom-fields | `Settings.ManageConfiguration` + CSRF; `{ key, name, appliesTo, fieldType, options, isRequired, sortOrder }`; 201, 400 on an invalid shape, 409 on a duplicate `(appliesTo, key)` |
+| PUT | /api/settings/custom-fields/{id} | `Settings.ManageConfiguration` + CSRF; `{ name, options, isRequired, sortOrder }` — `key`, `appliesTo` and `fieldType` are immutable after creation; 200, 400, or 404 |
+| POST | /api/settings/custom-fields/{id}/archive | `Settings.ManageConfiguration` + CSRF; 204 or 404 |
+
+`key` is a stable, lowercase machine identifier (`^[a-z][a-z0-9_]*$`, ≤ 50 chars), unique per
+`(organization, appliesTo)`; `name` is the display label and may change freely. `appliesTo` is a
+closed vocabulary — `WorkItem` today, the only entity type a custom field can attach to.
+`fieldType` is one of `Text`, `Number`, `Date`, `Boolean`, `SingleSelect`; `options` is required
+(≥ 1, unique, ≤ 100 chars each) for `SingleSelect` and rejected for every other type. Archiving
+never deletes the row — a value already recorded against an archived definition stays readable.
+
+Attaching a value to a work item (`CustomFieldValue`, validated against the live definition at
+write time) is PF-S03.02, not yet built — this is the definition CRUD only.
+
 ## Global search (milestone 6)
 
 | Method | Path | Behavior |

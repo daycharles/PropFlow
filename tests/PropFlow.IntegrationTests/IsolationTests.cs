@@ -7,6 +7,7 @@ using Npgsql;
 using PropFlow.Application;
 using PropFlow.Application.Automation;
 using PropFlow.Domain.Automation;
+using PropFlow.Domain.Configuration;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
@@ -109,6 +110,25 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         // Raw cross-tenant insert is refused by the forced RLS policy.
         var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO operations.\"Attachments\" (\"OrganizationId\", \"Id\", \"WorkId\", \"FileName\", \"ContentType\", \"Length\", \"StorageKey\", \"ResidentVisible\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.WorkA}, 'f.pdf', 'application/pdf', 1, 'k', false, now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
+    [Fact]
+    public async Task Rls_confines_custom_field_definitions_to_their_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            admin.CustomFieldDefinitions.Add(new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), "warranty_note",
+                "Warranty note", CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
+            await admin.SaveChangesAsync();
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.CustomFieldDefinitions.IgnoreQueryFilters().ToListAsync());
+        Assert.Empty(await store.CustomFieldDefinitions.FromSqlRaw("SELECT * FROM operations.\"CustomFieldDefinitions\"").IgnoreQueryFilters().ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"CustomFieldDefinitions\" (\"OrganizationId\", \"Id\", \"Key\", \"Name\", \"AppliesTo\", \"FieldType\", \"Options\", \"IsRequired\", \"SortOrder\", \"IsArchived\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, 'forged', 'Forged', 'WorkItem', 'Text', '[]', false, 0, false, now())"));
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
