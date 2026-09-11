@@ -28,7 +28,7 @@ public sealed class DatabaseReadiness(IConfiguration configuration) : IHealthChe
             command.CommandText = """
                 SELECT to_regclass('identity."AspNetUsers"') IS NOT NULL
                   AND to_regclass('identity."Memberships"') IS NOT NULL
-                  AND (SELECT count(*) >= 33
+                  AND (SELECT count(*) >= 67
                          AND count(*) FILTER (WHERE NOT (c.relrowsecurity AND c.relforcerowsecurity)) = 0
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
                        WHERE n.nspname = 'operations' AND c.relkind = 'r' AND c.relname <> '__OperationsMigrations')

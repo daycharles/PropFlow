@@ -2,9 +2,11 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
+using PropFlow.Domain.Accounting;
 using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
 using PropFlow.Domain.Configuration;
+using PropFlow.Domain.Billing;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Marketing;
@@ -31,6 +33,16 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Resident> Residents => Set<Resident>();
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<PreventiveMaintenancePlan> PreventiveMaintenancePlans => Set<PreventiveMaintenancePlan>();
+    public DbSet<PreventiveMaintenanceOccurrence> PreventiveMaintenanceOccurrences => Set<PreventiveMaintenanceOccurrence>();
+    public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<AssetLifecycleCost> AssetLifecycleCosts => Set<AssetLifecycleCost>();
+    public DbSet<ComplianceObligation> ComplianceObligations => Set<ComplianceObligation>();
+    public DbSet<Incident> Incidents => Set<Incident>();
+    public DbSet<Violation> Violations => Set<Violation>();
+    public DbSet<Remediation> Remediations => Set<Remediation>();
+    public DbSet<ComplianceEvidence> ComplianceEvidence => Set<ComplianceEvidence>();
+    public DbSet<ComplianceOccurrence> ComplianceOccurrences => Set<ComplianceOccurrence>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
@@ -51,6 +63,29 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<LeaseDocument> LeaseDocuments => Set<LeaseDocument>();
     public DbSet<ResidentPayment> ResidentPayments => Set<ResidentPayment>();
     public DbSet<LeaseCharge> LeaseCharges => Set<LeaseCharge>();
+    public DbSet<RecurringCharge> RecurringCharges => Set<RecurringCharge>();
+    public DbSet<Credit> Credits => Set<Credit>();
+    public DbSet<LateFeeRule> LateFeeRules => Set<LateFeeRule>();
+    public DbSet<PaymentRefund> PaymentRefunds => Set<PaymentRefund>();
+    public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<PaymentReceipt> PaymentReceipts => Set<PaymentReceipt>();
+    public DbSet<PaymentReconciliation> PaymentReconciliations => Set<PaymentReconciliation>();
+    public DbSet<DelinquencyCase> DelinquencyCases => Set<DelinquencyCase>();
+    public DbSet<ChartOfAccount> ChartOfAccounts => Set<ChartOfAccount>();
+    public DbSet<FiscalPeriod> FiscalPeriods => Set<FiscalPeriod>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<JournalLine> JournalLines => Set<JournalLine>();
+    public DbSet<PayableInvoice> PayableInvoices => Set<PayableInvoice>();
+    public DbSet<ReceivableInvoice> ReceivableInvoices => Set<ReceivableInvoice>();
+    public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<BankTransaction> BankTransactions => Set<BankTransaction>();
+    public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<BudgetLine> BudgetLines => Set<BudgetLine>();
+    public DbSet<Owner> Owners => Set<Owner>();
+    public DbSet<PropertyOwnership> PropertyOwnerships => Set<PropertyOwnership>();
+    public DbSet<ManagementFeeRule> ManagementFeeRules => Set<ManagementFeeRule>();
+    public DbSet<Distribution> Distributions => Set<Distribution>();
+    public DbSet<OwnerStatement> OwnerStatements => Set<OwnerStatement>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -130,6 +165,102 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId });
+        });
+        model.Entity<PreventiveMaintenancePlan>(entity =>
+        {
+            entity.ToTable("PreventiveMaintenancePlans");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Recurrence).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.IsActive });
+        });
+        model.Entity<PreventiveMaintenanceOccurrence>(entity =>
+        {
+            entity.ToTable("PreventiveMaintenanceOccurrences");
+            entity.Property(x => x.OccurrenceKey).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.GeneratedAt).IsRequired();
+            entity.HasOne<PreventiveMaintenancePlan>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PlanId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.WorkItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.OccurrenceKey }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.DueOn });
+        });
+        model.Entity<MeterReading>(entity =>
+        {
+            entity.ToTable("MeterReadings");
+            entity.Property(x => x.MeterName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Unit).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Reading).HasPrecision(18, 3).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.MeterName, x.ReadOn });
+        });
+        model.Entity<AssetLifecycleCost>(entity =>
+        {
+            entity.ToTable("AssetLifecycleCosts");
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.IncurredOn });
+        });
+        model.Entity<ComplianceObligation>(entity =>
+        {
+            entity.ToTable("ComplianceObligations");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Recurrence).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.DueOn });
+        });
+        model.Entity<Incident>(entity =>
+        {
+            entity.ToTable("Incidents");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.OwnsMany(x => x.Audit, audit =>
+            {
+                audit.ToTable("IncidentAudit");
+                audit.Property<Guid>("OrganizationId");
+                audit.Property<Guid>("IncidentId");
+                audit.Property(x => x.Action).HasConversion<string>().HasMaxLength(30).IsRequired();
+                audit.Property(x => x.FromStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+                audit.Property(x => x.ToStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+                audit.Property(x => x.Note).HasMaxLength(2000);
+                audit.HasKey("OrganizationId", "IncidentId", nameof(IncidentAuditEntry.OccurredAt), nameof(IncidentAuditEntry.Action));
+            });
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.OccurredAt });
+        });
+        model.Entity<Violation>(entity =>
+        {
+            entity.ToTable("Violations");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status });
+        });
+        model.Entity<Remediation>(entity =>
+        {
+            entity.ToTable("Remediations");
+            entity.Property(x => x.Action).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.DueOn });
         });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<CustomFieldDefinition>(entity =>
@@ -278,15 +409,159 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         model.Entity<ResidentPayment>(entity =>
         {
             entity.ToTable("ResidentPayments");
-            entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired();
+            // FS-S08 widens money to (18, 2) so it does not change precision crossing the
+            // charge -> ledger boundary. Widening is safe; narrowing is not.
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.RefundedAmount).HasPrecision(18, 2).IsRequired();
             entity.Property(x => x.Reference).HasMaxLength(200);
+            entity.Property(x => x.ProviderReference).HasMaxLength(200);
+            entity.Property(x => x.FailureReason).HasMaxLength(500);
             entity.HasOne<LeaseCharge>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ChargeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status, x.DueOn });
+            // The idempotency key for provider callbacks. PostgreSQL treats NULLs as distinct,
+            // so payments that never reached a provider are unconstrained.
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
         });
-        model.Entity<LeaseCharge>(entity => { entity.ToTable("LeaseCharges"); entity.Property(x => x.Description).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired(); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status, x.DueOn }); });
+        model.Entity<LeaseCharge>(entity =>
+        {
+            entity.ToTable("LeaseCharges");
+            entity.Property(x => x.Description).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.AmountApplied).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<RecurringCharge>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.RecurringChargeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status, x.DueOn });
+            // One generated charge per schedule per due date — this is what makes a repeated
+            // generation run a no-op at the database, not just in the application.
+            entity.HasIndex(x => new { x.OrganizationId, x.RecurringChargeId, x.DueOn }).IsUnique();
+        });
+        model.Entity<RecurringCharge>(entity =>
+        {
+            entity.ToTable("RecurringCharges");
+            entity.Property(x => x.Description).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+        model.Entity<Credit>(entity =>
+        {
+            entity.ToTable("Credits");
+            entity.Property(x => x.Reason).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.AppliedAmount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+        model.Entity<LateFeeRule>(entity =>
+        {
+            entity.ToTable("LateFeeRules");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.FlatAmount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.PercentOfOutstanding).HasPrecision(5, 2).IsRequired();
+            entity.Property(x => x.MaximumAmount).HasPrecision(18, 2);
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            // One rule per scope: at most one organization-wide default (PropertyId NULL is
+            // distinct in PostgreSQL, so the default is guarded in the endpoint instead) and
+            // at most one per property.
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId }).IsUnique();
+        });
+        model.Entity<PaymentRefund>(entity =>
+        {
+            entity.ToTable("PaymentRefunds");
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.ProviderReference).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PaymentId });
+            // Same idempotency contract as a payment: a replayed refund callback finds this row.
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
+        });
+        model.Entity<PaymentMethod>(entity =>
+        {
+            entity.ToTable("PaymentMethods"); entity.Property(x => x.Label).HasMaxLength(100).IsRequired(); entity.Property(x => x.ProviderToken).HasMaxLength(200); entity.Property(x => x.LastFour).HasMaxLength(4); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status });
+        });
+        model.Entity<PaymentReceipt>(entity =>
+        {
+            entity.ToTable("PaymentReceipts"); entity.Property(x => x.ReceiptNumber).HasMaxLength(100).IsRequired();
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PaymentId }).IsUnique(); entity.HasIndex(x => new { x.OrganizationId, x.ReceiptNumber }).IsUnique();
+        });
+        model.Entity<PaymentReconciliation>(entity =>
+        {
+            entity.ToTable("PaymentReconciliations"); entity.Property(x => x.ProviderReference).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Note).HasMaxLength(500); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
+        });
+        model.Entity<DelinquencyCase>(entity =>
+        {
+            entity.ToTable("DelinquencyCases"); entity.Property(x => x.Balance).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+
+        model.Entity<ChartOfAccount>(entity =>
+        {
+            entity.ToTable("ChartOfAccounts");
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
+        });
+        model.Entity<FiscalPeriod>(entity =>
+        {
+            entity.ToTable("FiscalPeriods");
+            entity.Property(x => x.Name).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.StartsOn, x.EndsOn });
+        });
+        model.Entity<JournalEntry>(entity =>
+        {
+            entity.ToTable("JournalEntries");
+            entity.Property(x => x.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Memo).HasMaxLength(1000);
+            // (18,2) matches WorkItem.Cost — the ledger carries balances, not a single rent figure.
+            entity.Property(x => x.Total).HasPrecision(18, 2).IsRequired();
+            entity.HasOne<FiscalPeriod>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PeriodId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ReversalOfId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.Lines).WithOne().HasForeignKey(x => new { x.OrganizationId, x.EntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            // The entry is immutable, so "already reversed" cannot be a flag on the original.
+            // PostgreSQL keeps NULLs distinct in a unique index, so ordinary entries are
+            // unconstrained while any one entry can be reversed at most once.
+            entity.Navigation(x => x.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
+            entity.HasIndex(x => new { x.OrganizationId, x.ReversalOfId }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.PeriodId, x.EntryDate });
+        });
+        model.Entity<JournalLine>(entity =>
+        {
+            entity.ToTable("JournalLines");
+            entity.Property(x => x.PropertyId);
+            entity.Property(x => x.Debit).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Credit).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Memo).HasMaxLength(500);
+            entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.AccountId });
+        });
+        model.Entity<Budget>(entity => { entity.ToTable("Budgets"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Year }).IsUnique(); });
+        model.Entity<BudgetLine>(entity => { entity.ToTable("BudgetLines"); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.HasOne<Budget>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BudgetId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.BudgetId, x.AccountId, x.Month }).IsUnique(); });
+        model.Entity<Owner>(entity => { entity.ToTable("Owners"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Email }).IsUnique(); });
+        model.Entity<PropertyOwnership>(entity => { entity.ToTable("PropertyOwnerships"); entity.Property(x => x.Percentage).HasPrecision(5, 2).IsRequired(); entity.HasOne<Owner>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.OwnerId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.OwnerId, x.PropertyId }).IsUnique(); });
+        model.Entity<ManagementFeeRule>(entity => { entity.ToTable("ManagementFeeRules"); entity.Property(x => x.Percentage).HasPrecision(5, 2).IsRequired(); entity.Property(x => x.Minimum).HasPrecision(18, 2).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.PropertyId }).IsUnique(); });
+        model.Entity<Distribution>(entity => { entity.ToTable("Distributions"); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.HasOne<Owner>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.OwnerId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<OwnerStatement>(entity => { entity.ToTable("OwnerStatements"); entity.Property(x => x.Income).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Expenses).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.ManagementFee).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Distributions).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.SourceHash).HasMaxLength(64).IsRequired(); entity.HasOne<Owner>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.OwnerId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.OwnerId, x.PropertyId, x.StartsOn, x.EndsOn }).IsUnique(); });
+        model.Entity<PayableInvoice>(entity => { entity.ToTable("PayableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.VendorId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<ReceivableInvoice>(entity => { entity.ToTable("ReceivableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<BankAccount>(entity => { entity.ToTable("BankAccounts"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.Property(x => x.Institution).HasMaxLength(100).IsRequired(); entity.Property(x => x.LastFour).HasMaxLength(4).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<BankTransaction>(entity => { entity.ToTable("BankTransactions"); entity.Property(x => x.ExternalId).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<BankAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BankAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.JournalEntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.BankAccountId, x.ExternalId }).IsUnique(); });
 
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))
@@ -324,6 +599,11 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
                 throw new TenantAccessException();
             if (entry.Entity is TimelineEntry && entry.State != EntityState.Added)
                 throw new InvalidOperationException("Timeline entries are append-only.");
+            // FS-S09: a posted journal is corrected by a reversing entry, never by an edit. This
+            // is the EF rung of the same three-level control the Timeline uses — the runtime role
+            // gets only GRANT SELECT, INSERT and a PostgreSQL trigger rejects UPDATE/DELETE.
+            if (entry.Entity is JournalEntry or JournalLine && entry.State != EntityState.Added)
+                throw new InvalidOperationException("Journal entries are append-only; post a reversing entry instead.");
         }
     }
 }

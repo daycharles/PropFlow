@@ -11,11 +11,13 @@ using PropFlow.Application;
 using PropFlow.Application.Assets;
 using PropFlow.Application.Attachments;
 using PropFlow.Application.Attention;
+using PropFlow.Application.Billing;
 using PropFlow.Application.Automation;
 using PropFlow.Application.Communications;
 using PropFlow.Application.Integrations;
 using PropFlow.Application.Search;
 using PropFlow.Application.Work;
+using PropFlow.Infrastructure.Billing;
 using PropFlow.Infrastructure.Communications;
 using PropFlow.Infrastructure.Attachments;
 using PropFlow.Infrastructure.Identity;
@@ -88,6 +90,11 @@ builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
+builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();
+builder.Services.AddScoped<IPreventiveMaintenancePlanSource, EfPreventiveMaintenancePlanSource>();
+builder.Services.AddScoped<IPreventiveWorkOccurrenceSink, EfPreventiveWorkOccurrenceSink>();
+builder.Services.AddScoped<PreventiveMaintenanceService>();
+builder.Services.AddScoped<IPreventiveMaintenanceGenerator>(sp => sp.GetRequiredService<PreventiveMaintenanceService>());
 builder.Services.AddHttpClient();
 var communicationsOptions = builder.Configuration.GetSection(CommunicationsOptions.SectionName).Get<CommunicationsOptions>() ?? new CommunicationsOptions();
 communicationsOptions.Validate(builder.Environment.IsProduction() || builder.Environment.IsStaging());
@@ -182,6 +189,9 @@ app.Use(async (context, next) =>
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!context.Request.Path.StartsWithSegments("/api/communications/provider-callback") &&
+            // FS-S08: the payment processor cannot hold a CSRF token either; the callback is
+            // HMAC-signed instead (BillingEndpoints.cs, MapPaymentCallback).
+            !context.Request.Path.StartsWithSegments("/api/billing/payment-callback") &&
             !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
             && !HttpMethods.IsOptions(context.Request.Method))
         {
@@ -205,7 +215,10 @@ app.MapWorkEndpoints();
 app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
 app.MapLeasingEndpoints();
+app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
+app.MapAccountingEndpoints();
+app.MapOwnerAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();
@@ -213,6 +226,7 @@ app.MapCategoryEndpoints();
 app.MapCustomFieldEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
+app.MapComplianceEndpoints();
 app.MapAttachmentEndpoints();
 app.MapSearchEndpoints();
 app.MapAttentionEndpoints();
