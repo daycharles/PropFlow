@@ -23,8 +23,11 @@ public static class Capabilities
     // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
     // organization-editable role -> capability matrix is PF-S01.04, not yet built.
     public const string ManageMembers = "Identity.ManageMembers";
+    // PF-S03.01: custom fields, numbering, business hours, and notification preferences.
+    // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
+    public const string ManageConfiguration = "Settings.ManageConfiguration";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ResidentPortalRead, ResidentPortalRequest, ManageMembers];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 

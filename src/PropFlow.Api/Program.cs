@@ -210,6 +210,7 @@ app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
+app.MapCustomFieldEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapAttachmentEndpoints();
