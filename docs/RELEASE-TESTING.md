@@ -18,6 +18,12 @@ A from-scratch walkthrough for running PropFlow locally and exercising it. Writt
 Every other doc in this repo uses PowerShell. This one does not, and `pwsh` is **not** required:
 the bash path below replaces `scripts/Initialize-Local.ps1` entirely.
 
+> **If you only want to run the app, use [DEPLOYMENT.md](DEPLOYMENT.md) instead.** Download a
+> release bundle and run `./propflow-deploy up` — one executable that does everything below, in
+> a Production posture, without needing the .NET SDK or a checkout. This document is the
+> **Development** path: running from source with `dotnet run` and `next dev`, which is what you
+> want for changing code, not for standing an instance up.
+
 ---
 
 ## 1. Prerequisites

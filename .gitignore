@@ -17,3 +17,6 @@
 **/playwright-report/
 **/playwright/.cache/
 *.tsbuildinfo
+
+# Deployment bundles produced by scripts/Publish-Deployment.ps1
+/artifacts/
