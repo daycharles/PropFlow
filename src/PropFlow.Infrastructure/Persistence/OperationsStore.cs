@@ -4,6 +4,7 @@ using PropFlow.Application;
 using PropFlow.Domain;
 using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
+using PropFlow.Domain.Billing;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Marketing;
@@ -48,6 +49,10 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<LeaseDocument> LeaseDocuments => Set<LeaseDocument>();
     public DbSet<ResidentPayment> ResidentPayments => Set<ResidentPayment>();
     public DbSet<LeaseCharge> LeaseCharges => Set<LeaseCharge>();
+    public DbSet<RecurringCharge> RecurringCharges => Set<RecurringCharge>();
+    public DbSet<Credit> Credits => Set<Credit>();
+    public DbSet<LateFeeRule> LateFeeRules => Set<LateFeeRule>();
+    public DbSet<PaymentRefund> PaymentRefunds => Set<PaymentRefund>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -255,15 +260,80 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         model.Entity<ResidentPayment>(entity =>
         {
             entity.ToTable("ResidentPayments");
-            entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired();
+            // FS-S08 widens money to (18, 2) so it does not change precision crossing the
+            // charge -> ledger boundary. Widening is safe; narrowing is not.
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.RefundedAmount).HasPrecision(18, 2).IsRequired();
             entity.Property(x => x.Reference).HasMaxLength(200);
+            entity.Property(x => x.ProviderReference).HasMaxLength(200);
+            entity.Property(x => x.FailureReason).HasMaxLength(500);
             entity.HasOne<LeaseCharge>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ChargeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status, x.DueOn });
+            // The idempotency key for provider callbacks. PostgreSQL treats NULLs as distinct,
+            // so payments that never reached a provider are unconstrained.
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
         });
-        model.Entity<LeaseCharge>(entity => { entity.ToTable("LeaseCharges"); entity.Property(x => x.Description).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired(); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status, x.DueOn }); });
+        model.Entity<LeaseCharge>(entity =>
+        {
+            entity.ToTable("LeaseCharges");
+            entity.Property(x => x.Description).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.AmountApplied).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<RecurringCharge>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.RecurringChargeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status, x.DueOn });
+            // One generated charge per schedule per due date — this is what makes a repeated
+            // generation run a no-op at the database, not just in the application.
+            entity.HasIndex(x => new { x.OrganizationId, x.RecurringChargeId, x.DueOn }).IsUnique();
+        });
+        model.Entity<RecurringCharge>(entity =>
+        {
+            entity.ToTable("RecurringCharges");
+            entity.Property(x => x.Description).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+        model.Entity<Credit>(entity =>
+        {
+            entity.ToTable("Credits");
+            entity.Property(x => x.Reason).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.AppliedAmount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+        model.Entity<LateFeeRule>(entity =>
+        {
+            entity.ToTable("LateFeeRules");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.FlatAmount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.PercentOfOutstanding).HasPrecision(5, 2).IsRequired();
+            entity.Property(x => x.MaximumAmount).HasPrecision(18, 2);
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            // One rule per scope: at most one organization-wide default (PropertyId NULL is
+            // distinct in PostgreSQL, so the default is guarded in the endpoint instead) and
+            // at most one per property.
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId }).IsUnique();
+        });
+        model.Entity<PaymentRefund>(entity =>
+        {
+            entity.ToTable("PaymentRefunds");
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.ProviderReference).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.HasOne<ResidentPayment>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PaymentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PaymentId });
+            // Same idempotency contract as a payment: a replayed refund callback finds this row.
+            entity.HasIndex(x => new { x.OrganizationId, x.ProviderReference }).IsUnique();
+        });
 
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))
