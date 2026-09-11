@@ -9,6 +9,7 @@ using PropFlow.Infrastructure.Identity;
 using PropFlow.Infrastructure.Persistence;
 using PropFlow.Infrastructure.Communications;
 using Microsoft.EntityFrameworkCore;
+using static PropFlow.Api.WorkScopeAccess;
 
 namespace PropFlow.Api;
 
@@ -177,24 +178,6 @@ public static class WorkEndpoints
         }
         DateTimeOffset? Local(DateTimeOffset? value) => value is { } instant && zone is not null ? TimeZoneInfo.ConvertTime(instant, zone) : value;
         return new WorkResponse(item, version, zoneId, Local(item.ScheduledStart), Local(item.ScheduledEnd));
-    }
-    private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private static async Task<(WorkAccessScope? Scope, WorkScopeSubject? Subject)> ScopeAsync(ClaimsPrincipal user, MembershipAccess memberships, CancellationToken ct)
-    {
-        var role = user.FindFirstValue("organization_role");
-        var subject = role switch
-        {
-            "Technician" => WorkScopeSubject.Technician,
-            "Vendor" => WorkScopeSubject.Vendor,
-            _ => (WorkScopeSubject?)null
-        };
-        if (subject is null) return (null, null);
-        return (await memberships.WorkScopeAsync(Actor(user), TenantAccess.Resolve(user), ct), subject);
-    }
-    private static async Task<bool> AllowsAsync(WorkItem item, ClaimsPrincipal user, MembershipAccess memberships, CancellationToken ct)
-    {
-        var (scope, subject) = await ScopeAsync(user, memberships, ct);
-        return subject is null || scope!.Allows(item.PropertyId, item.EmployeeId, item.VendorId, subject.Value);
     }
     private const string TerminalTitle = "Completed and cancelled work cannot be assigned";
     private static bool ValidBatch(List<BulkWorkVersion>? items) =>

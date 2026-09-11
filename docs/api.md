@@ -2,8 +2,9 @@
 
 The contract for every endpoint that exists today: the milestone-3 slice (auth, session, work,
 assignment, bulk vendor, reference data, saved views), the milestone-4 communications surfaces
-(residents, templates, the other bulk work actions) and the milestone-6 API-only surfaces (assets,
-global search, integrations). Section headings name the milestone each group came from.
+(residents, templates, the other bulk work actions), the milestone-5 automation rules, the
+milestone-6 API-only surfaces (assets, global search, integrations) and the milestone-7
+attachment storage. Section headings name the milestone each group came from.
 
 Use HTTPS and retain cookies. API responses are JSON except successful 204s and the minimal readiness endpoint. API session/data responses use Cache-Control: no-store. Authentication failures return 401, authorization failures return 403; no HTML login redirects are used.
 
@@ -213,6 +214,23 @@ arbitrary JSON values the client defines (they are stored verbatim and validated
 well-formed JSON; a name outside 1–100 characters or malformed JSON returns 400). Setting
 `isDefault` on a view clears the flag on the caller's other views, so at most one default
 exists per user. Listing returns the default first, then the rest by name.
+
+### Attachments (PF-7.01)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/work/{workId}/attachments | `Work.Read`; the work item's files, newest first; `{ id, fileName, contentType, length, residentVisible, createdAt, retainUntil }` |
+| GET | /api/work/{workId}/attachments/{id} | `Work.Read`; streams the file with its original name and content type, or 404 |
+| POST | /api/work/{workId}/attachments | `Work.ManageAttachments` + CSRF; `multipart/form-data` with `file` (required), `residentVisible` (`true`/`false`, default false), `retainUntil` (optional future timestamp); 201 with the record |
+| DELETE | /api/work/{workId}/attachments/{id} | `Work.ManageAttachments` + CSRF; removes the row and the stored blob; 204 or 404 |
+
+Uploads are capped at 25 MB and limited to `application/pdf`, `image/jpeg`, `image/png`,
+`image/webp`, `image/heic` (a larger file is 413, a wrong type 400). Every route resolves the
+work item through the tenant filter and then the field-role scope check, so a Technician only
+sees and manages the attachments on their own assigned work. `Work.ManageAttachments` is granted
+to Organization Admin, Property Manager, Regional Manager, Maintenance Supervisor, and a bound
+Technician. `retainUntil` is an opt-in expiry: a background sweep deletes an attachment (row and
+blob) once that time passes; a null retention never expires.
 
 There is no public registration endpoint. Use the administrative bootstrap command to create the first organization and account. The `seed-demo` command populates two organizations with a property hierarchy, vendor, employee, categories and work covering every status and priority (see [local development](local-development.md)).
 

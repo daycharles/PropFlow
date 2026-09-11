@@ -12,10 +12,10 @@ Umbrella solution `PropFlow.slnx` — 8 projects: 4 `src`, 3 `tests`, 1 `tools`.
 `10.0.300` with `rollForward: latestPatch` (`global.json`); this box has 10.0.303, which the
 band accepts.
 
-**M3, M4, M5 and M6 are all complete and on `main`** (M6 was built in parallel with M5, so
-milestone number is not milestone order). **M7** — deployment and platform hardening — is the
-remaining track. `docs/milestones.md` holds the per-milestone status; `docs/backlog.md` carries
-the tasks.
+**M3–M7 are all complete and on `main`** (M6 was built in parallel with M5, so milestone number
+is not milestone order; M7 is the cross-cutting deployment/hardening track). `docs/milestones.md`
+holds the per-milestone status; `docs/backlog.md` carries the tasks. New work is backlog top-ups
+against the existing epics.
 
 ## Build / test / run
 
@@ -129,17 +129,17 @@ baseline and `.claude/settings.local.json` stays gitignored.
 |---|---|
 | `docs/architecture.md` | Normative for cross-cutting design and persistence |
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
-| `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M6) |
+| `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M7) |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree |
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
-| `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M6 reconciled to GitHub 2026-09-10 |
+| `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M7 reconciled to GitHub 2026-09-11 |
 
 Known stale, verified 2026-09-10 — fix them if your change touches them:
 
 - `Capabilities.cs` remains the authority for the role→capability map — restate it, never
-  paraphrase from memory. `docs/architecture.md`'s enumeration of "the current capability set"
-  omits the milestone-5 additions (`Work.MarkOnTheWay`, `Settings.ManageAutomationRules`).
+  paraphrase from memory. `docs/architecture.md`'s "current capability set" paragraph names the
+  M5/M7 additions in prose but its opening list is still the M3/M4 set; treat the code as truth.
 - `DatabaseProvisioner.MigrateAsync` migrates **four** contexts (identity, operations,
   communications, integrations) — keep the `PropFlow.Admin` migrate message and any prose count
   in step when a fifth is added.
