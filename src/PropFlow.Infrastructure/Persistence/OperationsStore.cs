@@ -45,6 +45,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<ComplianceOccurrence> ComplianceOccurrences => Set<ComplianceOccurrence>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
+    public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -271,6 +272,16 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.FieldType).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.Options).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.AppliesTo, x.Key }).IsUnique();
+        });
+        model.Entity<CustomFieldValue>(entity =>
+        {
+            entity.ToTable("CustomFieldValues");
+            entity.Property(x => x.Value).HasMaxLength(2000).IsRequired();
+            entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CustomFieldDefinition>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.CustomFieldDefinitionId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.CustomFieldDefinitionId }).IsUnique();
         });
         model.Entity<SavedView>(entity =>
         {

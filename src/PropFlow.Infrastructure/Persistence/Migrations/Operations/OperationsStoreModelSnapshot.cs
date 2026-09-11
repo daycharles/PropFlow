@@ -1298,6 +1298,38 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.ToTable("CustomFieldDefinitions", "operations");
                 });
 
+            modelBuilder.Entity("PropFlow.Domain.Configuration.CustomFieldValue", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CustomFieldDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("WorkId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "CustomFieldDefinitionId");
+
+                    b.HasIndex("OrganizationId", "WorkId", "CustomFieldDefinitionId")
+                        .IsUnique();
+
+                    b.ToTable("CustomFieldValues", "operations");
+                });
+
             modelBuilder.Entity("PropFlow.Domain.Leasing.Lease", b =>
                 {
                     b.Property<Guid>("OrganizationId")
@@ -2899,6 +2931,21 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .WithMany()
                         .HasForeignKey("OrganizationId", "LeaseId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PropFlow.Domain.Configuration.CustomFieldValue", b =>
+                {
+                    b.HasOne("PropFlow.Domain.Configuration.CustomFieldDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CustomFieldDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PropFlow.Domain.Work.WorkItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "WorkId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
