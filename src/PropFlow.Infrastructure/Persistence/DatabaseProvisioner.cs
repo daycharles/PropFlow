@@ -89,6 +89,16 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE ON operations."LeaseDocuments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."ResidentPayments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."LeaseCharges" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."RecurringCharges" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Credits" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."LateFeeRules" TO propflow_app;
+            -- Append-only, matching operations."Timeline": a refund is a fact about money that
+            -- left, so the runtime role gets no UPDATE or DELETE on the refund trail.
+            GRANT SELECT, INSERT ON operations."PaymentRefunds" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."PaymentMethods" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."PaymentReceipts" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."PaymentReconciliations" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."DelinquencyCases" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."PropertyContacts" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."PropertyDocuments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."PropertyAmenities" TO propflow_app;

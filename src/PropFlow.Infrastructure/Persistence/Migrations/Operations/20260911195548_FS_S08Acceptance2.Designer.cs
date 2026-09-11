@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    partial class OperationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260911195548_FS_S08Acceptance2")]
+    partial class FS_S08Acceptance2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -511,58 +514,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "Status", "ExpiresAt");
 
                     b.ToTable("Announcements", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Configuration.CustomFieldDefinition", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AppliesTo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FieldType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<bool>("IsArchived")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsRequired")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Options")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "AppliesTo", "Key")
-                        .IsUnique();
-
-                    b.ToTable("CustomFieldDefinitions", "operations");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Leasing.Lease", b =>

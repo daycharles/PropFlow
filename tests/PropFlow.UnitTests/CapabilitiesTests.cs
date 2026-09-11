@@ -52,6 +52,23 @@ public sealed class CapabilitiesTests
     }
 
     [Fact]
+    public void Only_admin_and_property_manager_manage_billing()
+    {
+        // FS-S08 decision: ManageBilling is left to the "All minus the portal capabilities"
+        // branch of ForRole, so it reaches Organization Admin and Property Manager and nobody
+        // else. Billing is an accounting surface; the maintenance and field roles enumerate
+        // their capabilities explicitly and do not get it.
+        Assert.Contains(Capabilities.ManageBilling, Capabilities.ForRole("Organization Admin"));
+        Assert.Contains(Capabilities.ManageBilling, Capabilities.ForRole("Property Manager"));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Regional Manager"));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Maintenance Supervisor"));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Read Only"));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
+        Assert.DoesNotContain(Capabilities.ManageBilling, Capabilities.ForRole("Resident"));
+    }
+
+    [Fact]
     public void Read_only_role_can_only_read_work()
     {
         Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Read Only"));

@@ -44,15 +44,17 @@ public sealed class DatabaseFixture : IAsyncLifetime
     }
     public Task DisposeAsync() => database.DisposeAsync().AsTask();
 
-    public async Task<Scenario> CreateScenarioAsync()
+    // `configure` lets a test drive host configuration the API reads at runtime — FS-S08 uses
+    // it for the payment-provider outage mode and the callback signing secret.
+    public async Task<Scenario> CreateScenarioAsync(Action<IWebHostBuilder>? configure = null)
     {
-        var scenario = new Scenario(this);
+        var scenario = new Scenario(this, configure);
         await scenario.SeedAsync();
         return scenario;
     }
 }
 
-public sealed class ApplicationFactory(string connection) : WebApplicationFactory<Program>
+public sealed class ApplicationFactory(string connection, Action<IWebHostBuilder>? configure = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -60,6 +62,7 @@ public sealed class ApplicationFactory(string connection) : WebApplicationFactor
         builder.UseSetting("ConnectionStrings:Database", connection);
         builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureServices(services => services.AddDataProtection().UseEphemeralDataProtectionProvider());
+        configure?.Invoke(builder);
     }
 }
 
@@ -99,10 +102,10 @@ public sealed class Scenario : IAsyncDisposable
         : organization == OrganizationB ? SlugB
         : $"missing-{organization:N}"[..20];
 
-    public Scenario(DatabaseFixture fixture)
+    public Scenario(DatabaseFixture fixture, Action<IWebHostBuilder>? configure = null)
     {
         this.fixture = fixture;
-        Factory = new ApplicationFactory(fixture.RuntimeConnection);
+        Factory = new ApplicationFactory(fixture.RuntimeConnection, configure);
         Client = Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true

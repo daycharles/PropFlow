@@ -18,6 +18,10 @@ public static class Capabilities
     public const string ManageAttachments = "Work.ManageAttachments";
     public const string ManageProperties = "Properties.Manage";
     public const string ManageLeasing = "Leasing.Manage";
+    // FS-S08. One capability covers billing reads and writes: charges, credits, late-fee
+    // rules, refunds and the lease balance are one accounting surface, and a resident reaches
+    // their own charges and payments through the portal capabilities instead.
+    public const string ManageBilling = "Billing.Manage";
     public const string ResidentPortalRead = "ResidentPortal.Read";
     public const string ResidentPortalRequest = "ResidentPortal.Request";
     // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
@@ -27,7 +31,7 @@ public static class Capabilities
     // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
     public const string ManageConfiguration = "Settings.ManageConfiguration";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
