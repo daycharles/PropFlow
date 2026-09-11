@@ -33,6 +33,16 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Resident> Residents => Set<Resident>();
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<PreventiveMaintenancePlan> PreventiveMaintenancePlans => Set<PreventiveMaintenancePlan>();
+    public DbSet<PreventiveMaintenanceOccurrence> PreventiveMaintenanceOccurrences => Set<PreventiveMaintenanceOccurrence>();
+    public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<AssetLifecycleCost> AssetLifecycleCosts => Set<AssetLifecycleCost>();
+    public DbSet<ComplianceObligation> ComplianceObligations => Set<ComplianceObligation>();
+    public DbSet<Incident> Incidents => Set<Incident>();
+    public DbSet<Violation> Violations => Set<Violation>();
+    public DbSet<Remediation> Remediations => Set<Remediation>();
+    public DbSet<ComplianceEvidence> ComplianceEvidence => Set<ComplianceEvidence>();
+    public DbSet<ComplianceOccurrence> ComplianceOccurrences => Set<ComplianceOccurrence>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
@@ -147,6 +157,102 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId });
+        });
+        model.Entity<PreventiveMaintenancePlan>(entity =>
+        {
+            entity.ToTable("PreventiveMaintenancePlans");
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Recurrence).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.IsActive });
+        });
+        model.Entity<PreventiveMaintenanceOccurrence>(entity =>
+        {
+            entity.ToTable("PreventiveMaintenanceOccurrences");
+            entity.Property(x => x.OccurrenceKey).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.GeneratedAt).IsRequired();
+            entity.HasOne<PreventiveMaintenancePlan>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PlanId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.WorkItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.OccurrenceKey }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.DueOn });
+        });
+        model.Entity<MeterReading>(entity =>
+        {
+            entity.ToTable("MeterReadings");
+            entity.Property(x => x.MeterName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Unit).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Reading).HasPrecision(18, 3).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.MeterName, x.ReadOn });
+        });
+        model.Entity<AssetLifecycleCost>(entity =>
+        {
+            entity.ToTable("AssetLifecycleCosts");
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.IncurredOn });
+        });
+        model.Entity<ComplianceObligation>(entity =>
+        {
+            entity.ToTable("ComplianceObligations");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Recurrence).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.DueOn });
+        });
+        model.Entity<Incident>(entity =>
+        {
+            entity.ToTable("Incidents");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.OwnsMany(x => x.Audit, audit =>
+            {
+                audit.ToTable("IncidentAudit");
+                audit.Property<Guid>("OrganizationId");
+                audit.Property<Guid>("IncidentId");
+                audit.Property(x => x.Action).HasConversion<string>().HasMaxLength(30).IsRequired();
+                audit.Property(x => x.FromStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+                audit.Property(x => x.ToStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+                audit.Property(x => x.Note).HasMaxLength(2000);
+                audit.HasKey("OrganizationId", "IncidentId", nameof(IncidentAuditEntry.OccurredAt), nameof(IncidentAuditEntry.Action));
+            });
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.OccurredAt });
+        });
+        model.Entity<Violation>(entity =>
+        {
+            entity.ToTable("Violations");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status });
+        });
+        model.Entity<Remediation>(entity =>
+        {
+            entity.ToTable("Remediations");
+            entity.Property(x => x.Action).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.DueOn });
         });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<CustomFieldDefinition>(entity =>

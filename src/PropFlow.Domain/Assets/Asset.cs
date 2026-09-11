@@ -87,6 +87,19 @@ public sealed class Asset : TenantEntity
 
     public bool IsUnderWarranty(DateOnly asOf) => WarrantyExpiresOn is { } expiry && asOf <= expiry;
 
+    public DateOnly? ReplacementDueOn() =>
+        InstalledOn is { } installed && ExpectedServiceLifeYears is { } years
+            ? installed.AddYears(years) : null;
+
+    public bool IsReplacementDue(DateOnly asOf) =>
+        ReplacementDueOn() is { } dueOn && asOf >= dueOn;
+
+    public bool IsWarrantyExpiringWithin(DateOnly asOf, int days)
+    {
+        if (days < 0) throw new ArgumentOutOfRangeException(nameof(days));
+        return WarrantyExpiresOn is { } expiry && expiry >= asOf && expiry <= asOf.AddDays(days);
+    }
+
     public int? AgeInYears(DateOnly asOf)
     {
         if (InstalledOn is not { } installed || asOf < installed) return null;
