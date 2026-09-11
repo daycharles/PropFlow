@@ -64,21 +64,21 @@ jobs:
           POSTGRES_PASSWORD: propflow-e2e
           ConnectionStrings__Admin: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow;Password=propflow-e2e
           # At least 20 characters, or configure-runtime refuses the role
-          # (src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs:37). Keep this value
+          # (src/PropFlow.Infrastructure/Persistence/DatabaseProvisioner.cs:45). Keep this value
           # and the password in ConnectionStrings__Database below identical.
           Runtime__Password: runtime-e2e-not-a-secret-01
           Demo__Password: DemoPassword!123
           ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=propflow;Username=propflow_app;Password=runtime-e2e-not-a-secret-01
           # HTTPS, and the host must be `localhost`. The session and antiforgery cookies are
-          # `__Host-` prefixed with SecurePolicy=Always (src/PropFlow.Api/Program.cs:79-81,93-95),
+          # `__Host-` prefixed with SecurePolicy=Always (src/PropFlow.Api/Program.cs:106-108,120-122),
           # so over plain http the antiforgery system throws and GET /api/auth/csrf returns 500 —
           # login is then impossible. The ASP.NET dev cert's SAN is `localhost`, so `127.0.0.1`
           # would fail hostname verification. apps/web/.env.example says the same thing.
           ASPNETCORE_URLS: https://localhost:5001
           # Development is the intended local/CI posture (docs/local-development.md:14-17).
           # Without it the API boots as Production and throws at startup unless
-          # DataProtection:KeyPath is set (src/PropFlow.Api/Program.cs:42-47), and it would also
-          # add HSTS (Program.cs:115-116).
+          # DataProtection:KeyPath is set (src/PropFlow.Api/Program.cs:48-63), and it would also
+          # add HSTS (Program.cs:157-158).
           ASPNETCORE_ENVIRONMENT: Development
           PROPFLOW_API_ORIGIN: https://localhost:5001
           # Where the exported dev cert lands. `next dev` proxies /api through undici, which
