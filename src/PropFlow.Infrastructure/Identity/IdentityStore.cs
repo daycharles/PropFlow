@@ -12,6 +12,7 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> Memberships => Set<OrganizationMembership>();
     public DbSet<MembershipPropertyBinding> MembershipPropertyBindings => Set<MembershipPropertyBinding>();
+    public DbSet<Invitation> Invitations => Set<Invitation>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -36,6 +37,22 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.HasKey(x => new { x.OrganizationId, x.UserId, x.PropertyId });
             entity.HasOne<OrganizationMembership>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<Invitation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Token).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.Token).IsUnique();
+            // A re-invite of the same still-pending address replaces rather than duplicates:
+            // enforced by the service layer (PF-S01.03) reading this index before insert, not by
+            // a partial-unique constraint here, since "pending" depends on both AcceptedAt and
+            // ExpiresAt and Npgsql's HasFilter takes a literal predicate, not an expression.
+            entity.HasIndex(x => new { x.OrganizationId, x.Email });
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.InvitedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.AcceptedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

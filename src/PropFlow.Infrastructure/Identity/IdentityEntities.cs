@@ -33,3 +33,25 @@ public sealed class MembershipPropertyBinding
     public Guid UserId { get; set; }
     public Guid PropertyId { get; set; }
 }
+
+/// <summary>PF-S01.02: a pending grant of membership to an organization, sent to an email
+/// address rather than an existing user. <see cref="Token"/> and <see cref="Email"/> are stored
+/// in the canonical form <c>InvitationToken</c> produces; acceptance re-derives the same
+/// canonical email rather than trusting whatever case/whitespace the acceptor's client sends.
+/// A membership is created only on acceptance (<see cref="AcceptedAt"/> set) — an unaccepted or
+/// expired invitation grants nothing.</summary>
+public sealed class Invitation
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string Email { get; set; } = "";
+    public string Role { get; set; } = "Read Only";
+    public string Token { get; set; } = "";
+    public Guid InvitedByUserId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? AcceptedAt { get; set; }
+    // Set only once accepted, distinguishing "accepted by a brand-new user" from "accepted by an
+    // existing user gaining a new organization membership" without a second lookup.
+    public Guid? AcceptedByUserId { get; set; }
+}

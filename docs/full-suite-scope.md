@@ -41,8 +41,8 @@ Task breakdown (status as of this writing):
 | Task | Scope | Status |
 | --- | --- | --- |
 | PF-S01.01 | Invitation token generation, canonical-email matching, and expiry validation (pure logic, no persistence) | ✅ landed this pass |
-| PF-S01.02 | `Invitation` entity + `IdentityStore` mapping + EF migration | Drafted this pass — **needs `dotnet ef migrations add` and a build on a machine with the .NET 10 SDK before merging**, not yet verified |
-| PF-S01.03 | `InvitationService` (create / list-pending / accept) + `POST /api/organizations/{id}/invitations`, `POST /api/invitations/{token}/accept` endpoints, `Identity.ManageMembers` capability | Drafted this pass — same build caveat as PF-S01.02 |
+| PF-S01.02 | `Invitation` entity + `IdentityStore` mapping | Entity/mapping written. **The EF migration itself is not generated** — run `dotnet ef migrations add AddInvitations --project src/PropFlow.Infrastructure --context IdentityStore` (see local-development.md) before merging; this session has no .NET SDK to run it or verify the model builds |
+| PF-S01.03 | `InvitationService` (create / list-pending / accept) + `GET`/`POST /api/organizations/current/invitations`, `POST /api/invitations/{token}/accept`, `Identity.ManageMembers` capability (granted wherever `Capabilities.All` is — see PF-S01.04) | Written, wired into `Program.cs`. **Not build-verified** — same SDK caveat as PF-S01.02. No integration test yet (needs a real Postgres + the migration above) |
 | PF-S01.04 | Configurable role → capability matrix (replace the fixed `Capabilities.ForRole` switch with an organization-editable mapping) | Not started |
 | PF-S01.05 | Teams (group memberships under a named team, scope work/property bindings to a team) | Not started |
 | PF-S01.06 | Session/device management admin view (list + revoke active sessions) | Not started |
