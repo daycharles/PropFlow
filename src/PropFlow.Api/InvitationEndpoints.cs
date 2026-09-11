@@ -12,7 +12,11 @@ public static class InvitationEndpoints
     {
         var group = app.MapGroup("/api/organizations/current/invitations").RequireAuthorization(Capabilities.ManageMembers);
         group.MapGet("/", async (ClaimsPrincipal user, InvitationService invitations, CancellationToken ct) =>
-            Results.Ok(await invitations.ListPendingAsync(TenantAccess.Resolve(user), ct)));
+            // The comment on the create response below says the token is shown exactly once, at
+            // creation - this projection is what actually enforces that; ListPendingAsync itself
+            // returns the raw entity, Token included, so it must never be returned unprojected.
+            Results.Ok((await invitations.ListPendingAsync(TenantAccess.Resolve(user), ct))
+                .Select(invitation => new { invitation.Id, invitation.Email, invitation.Role, invitation.CreatedAt, invitation.ExpiresAt })));
         group.MapPost("/", async (InvitationRequest request, ClaimsPrincipal user, InvitationService invitations, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 254)

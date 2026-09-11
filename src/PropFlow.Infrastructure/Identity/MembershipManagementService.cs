@@ -11,10 +11,17 @@ public sealed class MembershipManagementService(IdentityStore store, RoleCapabil
     public enum ChangeRoleOutcome { Applied, NotFound, WouldLockOutMembership }
     public enum RemoveOutcome { Applied, NotFound, WouldLockOutMembership }
 
-    public Task<List<OrganizationMembership>> ListActiveAsync(Guid organizationId, CancellationToken ct) =>
-        store.Memberships.AsNoTracking()
-            .Where(x => x.OrganizationId == organizationId && x.IsActive)
-            .OrderBy(x => x.Role)
+    // A member-management UI needs more than a bare UserId to be usable - joining Email here
+    // (rather than the endpoint doing a second round trip) keeps ListActiveAsync the one place
+    // that assembles "a membership as an admin would want to see it".
+    public sealed record ActiveMembership(Guid UserId, string Email, string Role, Guid? EmployeeId, Guid? VendorId);
+
+    public Task<List<ActiveMembership>> ListActiveAsync(Guid organizationId, CancellationToken ct) =>
+        (from membership in store.Memberships.AsNoTracking()
+         join user in store.Users.AsNoTracking() on membership.UserId equals user.Id
+         where membership.OrganizationId == organizationId && membership.IsActive
+         orderby membership.Role, user.Email
+         select new ActiveMembership(membership.UserId, user.Email!, membership.Role, membership.EmployeeId, membership.VendorId))
             .ToListAsync(ct);
 
     public async Task<ChangeRoleOutcome> ChangeRoleAsync(Guid organizationId, Guid userId, string newRole, Guid actorUserId, CancellationToken ct)

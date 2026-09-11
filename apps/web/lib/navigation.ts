@@ -25,6 +25,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
     capability: "Settings.ManageAutomationRules",
   },
   { href: "/integrations", label: "Integrations", capability: "Integrations.Manage" },
+  { href: "/settings/members", label: "Members", capability: "Identity.ManageMembers" },
 ];
 
 export function visibleNav(session: Session): NavItem[] {

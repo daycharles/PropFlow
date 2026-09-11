@@ -13,8 +13,7 @@ public static class MembershipManagementEndpoints
         var group = app.MapGroup("/api/organizations/current/members").RequireAuthorization(Capabilities.ManageMembers);
 
         group.MapGet("/", async (ITenantContext tenant, MembershipManagementService memberships, CancellationToken ct) =>
-            Results.Ok((await memberships.ListActiveAsync(tenant.OrganizationId, ct))
-                .Select(m => new { m.UserId, m.Role, m.EmployeeId, m.VendorId })));
+            Results.Ok(await memberships.ListActiveAsync(tenant.OrganizationId, ct)));
 
         group.MapPut("/{userId:guid}/role", async (Guid userId, ChangeRoleRequest request, ITenantContext tenant,
             ClaimsPrincipal user, MembershipManagementService memberships, CancellationToken ct) =>
