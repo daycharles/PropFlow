@@ -89,6 +89,177 @@ export type Employee = {
   phone?: string | null;
   isActive: boolean;
 };
+export type Portfolio = {
+  id: string;
+  name: string;
+};
+export type PropertyReference = {
+  id: string;
+  portfolioId: string;
+  name: string;
+  timeZoneId: string;
+  isArchived?: boolean;
+};
+export type ResidentReference = {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+};
+export type PropertyDetail = {
+  property: PropertyReference;
+  buildings: { id: string; name: string; isArchived?: boolean }[];
+  spaces: {
+    id: string;
+    buildingId?: string | null;
+    code: string;
+    isArchived?: boolean;
+    isOccupied?: boolean;
+  }[];
+  contacts: {
+    id: string;
+    propertyId: string;
+    fullName: string;
+    role: string;
+    email?: string | null;
+    phone?: string | null;
+  }[];
+  documents: {
+    id: string;
+    propertyId: string;
+    title: string;
+    documentUrl: string;
+    documentType?: string | null;
+    createdAt: string;
+  }[];
+};
+export type Lease = {
+  id: string;
+  residentId: string;
+  spaceId: string;
+  startsOn: string;
+  endsOn: string;
+  monthlyRent: number;
+  securityDeposit?: number | null;
+  status: "Draft" | "Active" | "Renewed" | "NoticeGiven" | "Ended";
+  noticeDate?: string | null;
+  moveOutOn?: string | null;
+};
+export type LeaseNotice = {
+  id: string;
+  leaseId: string;
+  type: "Renewal" | "MoveOut";
+  dueOn: string;
+  notes?: string | null;
+  status: "Open" | "Completed" | "Cancelled";
+};
+export type LeaseParty = {
+  id: string;
+  leaseId: string;
+  fullName: string;
+  role: string;
+  email?: string | null;
+};
+export type ResidentPayment = {
+  id: string;
+  leaseId: string;
+  residentId: string;
+  amount: number;
+  dueOn: string;
+  reference?: string | null;
+  status: "Submitted" | "Settled" | "Failed";
+  submittedAt: string;
+  settledAt?: string | null;
+};
+export type LeaseCharge = {
+  id: string;
+  leaseId: string;
+  type: "Recurring" | "OneTime";
+  description: string;
+  amount: number;
+  dueOn: string;
+  status: "Open" | "Paid" | "Voided";
+  createdAt: string;
+};
+export type Listing = {
+  id: string;
+  propertyId: string;
+  spaceId?: string | null;
+  headline: string;
+  description?: string | null;
+  availableOn?: string | null;
+  monthlyRent?: number | null;
+  status: "Draft" | "Published" | "Archived";
+};
+export type Inquiry = {
+  id: string;
+  listingId: string;
+  prospectName: string;
+  email: string;
+  phone?: string | null;
+  message?: string | null;
+  leadSource?: string | null;
+  status: "New" | "Contacted" | "Closed";
+  createdAt: string;
+};
+export type Applicant = {
+  id: string;
+  listingId: string;
+  inquiryId: string;
+  prospectName: string;
+  email: string;
+  status: "New" | "Screening" | "Approved" | "Declined";
+  createdAt: string;
+};
+export type Showing = {
+  id: string;
+  listingId: string;
+  prospectName: string;
+  scheduledAt: string;
+  status: "Requested" | "Confirmed" | "Completed" | "Cancelled";
+};
+export type PortalSummary = {
+  resident: ResidentReference & { smsConsent: string; emailConsent: string };
+  occupancy?: { id: string; spaceId: string; movedInOn: string } | null;
+  leases: Lease[];
+  householdMembers: { id: string; fullName: string; relationship: string; email?: string | null }[];
+  requests: {
+    id: string;
+    title: string;
+    description?: string | null;
+    status: string;
+    priority: string;
+    residentVisibleNotes?: string | null;
+    createdAt: string;
+  }[];
+};
+export type PortalDocument = {
+  id: string;
+  workId: string;
+  fileName: string;
+  contentType: string;
+  length: number;
+  createdAt: string;
+  downloadUrl: string;
+};
+export type PortalLeaseDocument = {
+  id: string;
+  leaseId: string;
+  title: string;
+  documentUrl: string;
+  status: "Draft" | "Sent" | "Signed" | "Expired";
+  createdAt: string;
+  signedAt?: string | null;
+  signedBy?: string | null;
+};
+export type PortalAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  expiresAt?: string | null;
+};
+export type Announcement = PortalAnnouncement & { status: "Draft" | "Published" | "Archived" };
 export type Asset = {
   id: string;
   propertyId: string;
@@ -513,6 +684,327 @@ export const api = {
   },
   vendors: { list: () => request<Vendor[]>("/api/vendors/") },
   employees: { list: () => request<Employee[]>("/api/employees/") },
+  residents: { list: () => request<ResidentReference[]>("/api/residents/") },
+  portfolios: {
+    list: (q?: string) =>
+      request<Portfolio[]>(`/api/portfolios/${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    create: (input: { name: string }) =>
+      mutation<Portfolio>("/api/portfolios/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    rename: (id: string, input: { name: string }) =>
+      mutation<Portfolio>(`/api/portfolios/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) => mutation<void>(`/api/portfolios/${id}/archive`, { method: "POST" }),
+    restore: (id: string) => mutation<void>(`/api/portfolios/${id}/restore`, { method: "POST" }),
+  },
+  properties: {
+    list: (q?: string) =>
+      request<PropertyReference[]>(`/api/properties/${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    get: (id: string) => request<PropertyDetail>(`/api/properties/${id}`),
+    contacts: {
+      create: (
+        propertyId: string,
+        input: { fullName: string; role: string; email?: string | null; phone?: string | null },
+      ) =>
+        mutation<unknown>(`/api/properties/${propertyId}/contacts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+    },
+    documents: {
+      create: (
+        propertyId: string,
+        input: { title: string; documentUrl: string; documentType?: string | null },
+      ) =>
+        mutation<unknown>(`/api/properties/${propertyId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+    },
+    create: (input: { portfolioId: string; name: string; timeZoneId: string }) =>
+      mutation<PropertyReference>("/api/properties/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, input: { portfolioId: string; name: string; timeZoneId: string }) =>
+      mutation<PropertyReference>(`/api/properties/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) => mutation<void>(`/api/properties/${id}/archive`, { method: "POST" }),
+    restore: (id: string) => mutation<void>(`/api/properties/${id}/restore`, { method: "POST" }),
+    buildings: {
+      create: (propertyId: string, input: { name: string }) =>
+        mutation<{ id: string; propertyId: string; name: string }>(
+          `/api/properties/${propertyId}/buildings`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+        ),
+      rename: (propertyId: string, buildingId: string, input: { name: string }) =>
+        mutation<{ id: string; propertyId: string; name: string }>(
+          `/api/properties/${propertyId}/buildings/${buildingId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+        ),
+    },
+    spaces: {
+      create: (propertyId: string, input: { buildingId?: string | null; code: string }) =>
+        mutation<{ id: string; propertyId: string; buildingId?: string | null; code: string }>(
+          `/api/properties/${propertyId}/spaces`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+        ),
+      update: (
+        propertyId: string,
+        spaceId: string,
+        input: { buildingId?: string | null; code: string },
+      ) =>
+        mutation<{ id: string; propertyId: string; buildingId?: string | null; code: string }>(
+          `/api/properties/${propertyId}/spaces/${spaceId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+        ),
+    },
+  },
+  marketing: {
+    listings: {
+      list: (propertyId?: string) =>
+        request<Listing[]>(
+          `/api/marketing/listings/${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ""}`,
+        ),
+      create: (input: {
+        propertyId: string;
+        spaceId?: string | null;
+        headline: string;
+        description?: string | null;
+        availableOn?: string | null;
+        monthlyRent?: number | null;
+      }) =>
+        mutation<Listing>("/api/marketing/listings/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      publish: (id: string) =>
+        mutation<Listing>(`/api/marketing/listings/${id}/publish`, { method: "POST" }),
+      unpublish: (id: string) =>
+        mutation<Listing>(`/api/marketing/listings/${id}/unpublish`, { method: "POST" }),
+      inquiries: (id: string) => request<Inquiry[]>(`/api/marketing/listings/${id}/inquiries`),
+      applicants: (id: string) => request<Applicant[]>(`/api/marketing/listings/${id}/applicants`),
+      createApplicant: (id: string, inquiryId: string) =>
+        mutation<Applicant>(`/api/marketing/listings/${id}/applicants`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inquiryId }),
+        }),
+      applicantStatus: (id: string, applicantId: string, status: Applicant["status"]) =>
+        mutation<Applicant>(`/api/marketing/listings/${id}/applicants/${applicantId}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }),
+      createInquiry: (
+        id: string,
+        input: {
+          prospectName: string;
+          email: string;
+          phone?: string | null;
+          message?: string | null;
+          leadSource?: string | null;
+        },
+      ) =>
+        mutation<Inquiry>(`/api/marketing/listings/${id}/inquiries`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      inquiryStatus: (id: string, inquiryId: string, status: Inquiry["status"]) =>
+        mutation<Inquiry>(`/api/marketing/listings/${id}/inquiries/${inquiryId}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }),
+      showings: (id: string) => request<Showing[]>(`/api/marketing/listings/${id}/showings`),
+      createShowing: (id: string, input: { prospectName: string; scheduledAt: string }) =>
+        mutation<Showing>(`/api/marketing/listings/${id}/showings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      showingStatus: (id: string, showingId: string, status: Showing["status"]) =>
+        mutation<Showing>(`/api/marketing/listings/${id}/showings/${showingId}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }),
+    },
+  },
+  leasing: {
+    leases: {
+      list: () => request<Lease[]>("/api/leasing/leases/"),
+      create: (input: {
+        residentId: string;
+        spaceId: string;
+        startsOn: string;
+        endsOn: string;
+        monthlyRent: number;
+        securityDeposit?: number | null;
+      }) =>
+        mutation<Lease>("/api/leasing/leases/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      activate: (id: string) =>
+        mutation<Lease>(`/api/leasing/leases/${id}/activate`, { method: "POST" }),
+      renew: (id: string, input: { endsOn: string; monthlyRent: number }) =>
+        mutation<Lease>(`/api/leasing/leases/${id}/renew`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      notice: (
+        id: string,
+        input: {
+          type: "Renewal" | "MoveOut";
+          noticeDate: string;
+          moveOutOn: string;
+          notes?: string | null;
+        },
+      ) =>
+        mutation<unknown>(`/api/leasing/leases/${id}/notice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      moveOut: (id: string, moveOutOn: string) =>
+        mutation<Lease>(`/api/leasing/leases/${id}/move-out`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ moveOutOn }),
+        }),
+      transfer: (id: string, input: { residentId: string; spaceId: string; effectiveOn: string }) =>
+        mutation<Lease>(`/api/leasing/leases/${id}/transfer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      notices: (id: string) => request<LeaseNotice[]>(`/api/leasing/leases/${id}/notices`),
+      parties: (id: string) => request<LeaseParty[]>(`/api/leasing/leases/${id}/parties`),
+      addParty: (id: string, input: { fullName: string; role: string; email?: string | null }) =>
+        mutation<LeaseParty>(`/api/leasing/leases/${id}/parties`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      charges: (id: string) => request<LeaseCharge[]>(`/api/leasing/leases/${id}/charges`),
+      addCharge: (
+        id: string,
+        input: {
+          type: "Recurring" | "OneTime";
+          description: string;
+          amount: number;
+          dueOn: string;
+        },
+      ) =>
+        mutation<LeaseCharge>(`/api/leasing/leases/${id}/charges`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+    },
+  },
+  portal: {
+    me: () => request<PortalSummary>("/api/portal/me"),
+    documents: () => request<PortalDocument[]>("/api/portal/documents"),
+    leaseDocuments: () => request<PortalLeaseDocument[]>("/api/portal/lease-documents"),
+    payments: () => request<ResidentPayment[]>("/api/portal/payments"),
+    charges: () => request<LeaseCharge[]>("/api/portal/charges"),
+    submitPayment: (input: {
+      leaseId: string;
+      amount: number;
+      dueOn: string;
+      reference?: string | null;
+    }) =>
+      mutation<ResidentPayment>("/api/portal/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    announcements: () => request<PortalAnnouncement[]>("/api/portal/announcements"),
+    updateProfile: (input: { fullName: string; email?: string | null; phone?: string | null }) =>
+      mutation<PortalSummary["resident"]>("/api/portal/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    updatePreferences: (input: { emailEnabled: boolean; smsEnabled: boolean }) =>
+      mutation<{ emailEnabled: boolean; smsEnabled: boolean }>("/api/portal/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    createHouseholdMember: (input: {
+      fullName: string;
+      relationship: string;
+      email?: string | null;
+    }) =>
+      mutation<{ id: string; fullName: string; relationship: string; email?: string | null }>(
+        "/api/portal/household-members",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    createServiceRequest: (input: {
+      spaceId: string;
+      title: string;
+      description?: string | null;
+    }) =>
+      mutation<{ id: string; title: string; status: string; residentVisibleNotes?: string | null }>(
+        "/api/portal/service-requests",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+  },
+  announcements: {
+    list: () => request<Announcement[]>("/api/announcements/"),
+    create: (input: { title: string; body: string; expiresAt?: string | null }) =>
+      mutation<Announcement>("/api/announcements/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    publish: (id: string) =>
+      mutation<Announcement>(`/api/announcements/${id}/publish`, { method: "POST" }),
+    archive: (id: string) => mutation<void>(`/api/announcements/${id}/archive`, { method: "POST" }),
+  },
   assets: {
     list: (propertyId?: string) =>
       request<Asset[]>(`/api/assets/${propertyId ? `?propertyId=${propertyId}` : ""}`),

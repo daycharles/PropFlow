@@ -6,8 +6,11 @@ using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
+using PropFlow.Domain.Marketing;
+using PropFlow.Domain.Leasing;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
+using PropFlow.Domain.Communications;
 
 namespace PropFlow.Infrastructure.Persistence;
 
@@ -19,6 +22,8 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Portfolio> Portfolios => Set<Portfolio>();
     public DbSet<Property> Properties => Set<Property>();
+    public DbSet<PropertyContact> PropertyContacts => Set<PropertyContact>();
+    public DbSet<PropertyDocument> PropertyDocuments => Set<PropertyDocument>();
     public DbSet<Building> Buildings => Set<Building>();
     public DbSet<Space> Spaces => Set<Space>();
     public DbSet<Resident> Residents => Set<Resident>();
@@ -30,6 +35,18 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
     public DbSet<TimelineEntry> Timeline => Set<TimelineEntry>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<Listing> Listings => Set<Listing>();
+    public DbSet<Inquiry> Inquiries => Set<Inquiry>();
+    public DbSet<Showing> Showings => Set<Showing>();
+    public DbSet<Applicant> Applicants => Set<Applicant>();
+    public DbSet<Lease> Leases => Set<Lease>();
+    public DbSet<LeaseNotice> LeaseNotices => Set<LeaseNotice>();
+    public DbSet<Announcement> Announcements => Set<Announcement>();
+    public DbSet<HouseholdMember> HouseholdMembers => Set<HouseholdMember>();
+    public DbSet<LeaseParty> LeaseParties => Set<LeaseParty>();
+    public DbSet<LeaseDocument> LeaseDocuments => Set<LeaseDocument>();
+    public DbSet<ResidentPayment> ResidentPayments => Set<ResidentPayment>();
+    public DbSet<LeaseCharge> LeaseCharges => Set<LeaseCharge>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -69,6 +86,8 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         model.Entity<Employee>(entity => { entity.ToTable("Employees"); entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254); entity.Property(x => x.Phone).HasMaxLength(40); });
         model.Entity<Portfolio>(entity => { entity.ToTable("Portfolios"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); });
         model.Entity<Property>(entity => { entity.ToTable("Properties"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired(); entity.HasOne<Portfolio>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PortfolioId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
+        model.Entity<PropertyContact>(entity => { entity.ToTable("PropertyContacts"); entity.Property(x => x.FullName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Role).HasMaxLength(100).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254); entity.Property(x => x.Phone).HasMaxLength(40); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.PropertyId }); });
+        model.Entity<PropertyDocument>(entity => { entity.ToTable("PropertyDocuments"); entity.Property(x => x.Title).HasMaxLength(200).IsRequired(); entity.Property(x => x.DocumentUrl).HasMaxLength(1000).IsRequired(); entity.Property(x => x.DocumentType).HasMaxLength(100); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.CreatedAt }); });
         model.Entity<Building>(entity => { entity.ToTable("Buildings"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
         model.Entity<Space>(entity => { entity.ToTable("Spaces"); entity.Property(x => x.Code).HasMaxLength(50).IsRequired(); entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasOne<Building>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BuildingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); });
         model.Entity<Resident>(entity =>
@@ -157,6 +176,91 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.CreatedAt });
             entity.HasIndex(x => new { x.OrganizationId, x.RetainUntil });
         });
+        model.Entity<Listing>(entity =>
+        {
+            entity.ToTable("Listings");
+            entity.Property(x => x.Headline).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.MonthlyRent).HasPrecision(12, 2);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.AvailableOn });
+        });
+        model.Entity<Inquiry>(entity =>
+        {
+            entity.ToTable("Inquiries"); entity.Property(x => x.ProspectName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254).IsRequired(); entity.Property(x => x.Phone).HasMaxLength(40); entity.Property(x => x.Message).HasMaxLength(2000); entity.Property(x => x.LeadSource).HasMaxLength(100); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Listing>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ListingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.ListingId, x.Email, x.Status });
+        });
+        model.Entity<Showing>(entity =>
+        {
+            entity.ToTable("Showings"); entity.Property(x => x.ProspectName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Listing>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ListingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.ListingId, x.ScheduledAt });
+        });
+        model.Entity<Applicant>(entity => { entity.ToTable("Applicants"); entity.Property(x => x.ProspectName).HasMaxLength(200).IsRequired(); entity.Property(x => x.Email).HasMaxLength(254).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Listing>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ListingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<Inquiry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.InquiryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.ListingId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InquiryId }).IsUnique(); });
+        model.Entity<Lease>(entity =>
+        {
+            entity.ToTable("Leases"); entity.Property(x => x.MonthlyRent).HasPrecision(12, 2).IsRequired(); entity.Property(x => x.SecurityDeposit).HasPrecision(12, 2); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status });
+            entity.HasIndex(x => new { x.OrganizationId, x.SpaceId, x.Status });
+        });
+        model.Entity<LeaseNotice>(entity =>
+        {
+            entity.ToTable("LeaseNotices"); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DueOn });
+        });
+        model.Entity<Announcement>(entity =>
+        {
+            entity.ToTable("Announcements");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.ExpiresAt });
+        });
+        model.Entity<HouseholdMember>(entity =>
+        {
+            entity.ToTable("HouseholdMembers");
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Relationship).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(254);
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId });
+        });
+        model.Entity<LeaseParty>(entity =>
+        {
+            entity.ToTable("LeaseParties");
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(254);
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId });
+        });
+        model.Entity<LeaseDocument>(entity =>
+        {
+            entity.ToTable("LeaseDocuments");
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.DocumentUrl).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.SignedBy).HasMaxLength(200);
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
+        });
+        model.Entity<ResidentPayment>(entity =>
+        {
+            entity.ToTable("ResidentPayments");
+            entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(200);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status, x.DueOn });
+        });
+        model.Entity<LeaseCharge>(entity => { entity.ToTable("LeaseCharges"); entity.Property(x => x.Description).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(12, 2).IsRequired(); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Lease>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.LeaseId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status, x.DueOn }); });
 
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))

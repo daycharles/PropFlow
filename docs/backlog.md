@@ -191,6 +191,52 @@ earlier milestones when a feature forces the issue.
 
 ---
 
+## Full-suite expansion (FS) — the successor roadmap
+
+`PF-x.yy` closed out with milestone 7. The work that follows it is tracked under **`FS-`** ids,
+scoped in [full-suite-scope.md](full-suite-scope.md) and cut into GitHub issues `#184`-`#208`.
+`FS-` ids are stable references on the same terms as `PF-` ids: **never renumber them.**
+
+The shape differs from the `PF-` roadmap in one way worth stating, because it is what makes the
+board confusing on first contact: **each release gate is split into two GitHub milestones, an
+`A` platform track and a `B` workflow track**, so `FS-G2A` and `FS-G2B` are *milestones*, not
+issues. A title scan for them finds nothing.
+
+| Gate | Milestone | Track | Slices |
+|---|---|---|---|
+| 1 — Core PMS foundation | `FS-G1A` — Platform foundation | Developer A | `FS-S01` `#189` identity/orgs/permissions/audit, `FS-S03` `#191` configuration and workflow administration |
+| 1 | `FS-G1B` — Core PMS workflows | Developer B | `FS-S02` `#190` portfolio/property, `FS-S04` `#192` marketing/listings/showings, `FS-S06` `#194` leases/renewals/notices, `FS-S07` `#195` resident portal |
+| 2 — Financial suite | `FS-G2A` — Financial platform | Developer A | `FS-S09` `#197` general ledger, AP/AR, period close |
+| 2 | `FS-G2B` — Financial workflows | Developer B | `FS-S08` `#196` charges/rent/payments/collections, `FS-S10` `#198` budgets/owner accounting/statements |
+| 3 — Operations suite | `FS-G3A` — Operations platform | Developer A | `FS-S13` `#201` preventive maintenance/assets, `FS-S15` `#203` compliance/incidents/risk |
+| 3 | `FS-G3B` — Operations workflows | Developer B | `FS-S11` `#199` maintenance baseline, `FS-S12` `#200` inspections/turns, `FS-S14` `#202` vendor/procurement |
+| 4 — Engagement and ecosystem | `FS-G4A` — Ecosystem platform | Developer A | `FS-S05` `#193` applications/screening, `FS-S19` `#207` real integrations/reconciliation |
+| 4 | `FS-G4B` — Engagement and insight | Developer B | `FS-S16` `#204` communications/inbox/announcements, `FS-S17` `#205` documents/templates/e-signature, `FS-S18` `#206` reporting/analytics |
+| 5 — Production release | `FS-G5A` — Release engineering | — | `FS-S20` `#208` customer billing and production release hardening |
+
+Epic issues: `FS-E1` `#184`, `FS-E2` `#185`, `FS-E3` `#186`, `FS-E4` `#187`, `FS-E5` `#188`.
+
+### Delivered so far
+
+**`FS-G1B` — Core PMS workflows.** Landed as one branch, `feat/fs-gate1-core`, closing `#190`,
+`#192`, `#194`, `#195` and the `FS-E2` epic `#185`. It shipped as a single branch rather than
+four because the migration set cannot be split: `20260911160000_FS_S04S06TenantSecurity.cs:11`
+secures the `FS-S04` and `FS-S06` tables from one `Tables` array, and every generated
+`.Designer.cs` snapshot encodes the whole model at its timestamp while the timestamps of the four
+slices interleave. A per-slice split would mean regenerating all fourteen migrations in a new
+order, which is a rewrite of working code rather than a split of it.
+
+Delivered: the `Portfolio`/`Property` hierarchy with archive state, property contacts and property
+documents; `Listing`/`Inquiry`/`Showing`/`Applicant` with lead source; `Lease`/`LeaseNotice`/
+`LeaseParty`/`LeaseDocument`/`LeaseCharge`; `ResidentPayment`, `Announcement` and
+`HouseholdMember` with the resident-portal identity binding; the `/properties`, `/marketing`,
+`/leasing`, `/portal` and `/announcements` web routes and their Playwright specs.
+
+**`FS-G1A` remains open.** The board marks `FS-S01` `#189` *In progress*, but nothing for it is on
+`develop` yet; `FS-S03` `#191` is still `Backlog`.
+
+---
+
 ## Open questions / decisions needed
 
 - **SLA model** — *resolved in PF-6.06*: the attention queue uses a per-priority first-response
