@@ -47,12 +47,12 @@ Download the archive for your machine from the
 
 ```bash
 # Apple Silicon (M1/M2/M3/M4)
-tar xzf propflow-1.0.0-rc.1-osx-arm64.tar.gz
-cd propflow-1.0.0-rc.1-osx-arm64
+tar xzf propflow-1.0.0-rc.2-osx-arm64.tar.gz
+cd propflow-1.0.0-rc.2-osx-arm64
 
 # Intel Mac
-tar xzf propflow-1.0.0-rc.1-osx-x64.tar.gz
-cd propflow-1.0.0-rc.1-osx-x64
+tar xzf propflow-1.0.0-rc.2-osx-x64.tar.gz
+cd propflow-1.0.0-rc.2-osx-x64
 ```
 
 Unpack with `tar`, not by double-clicking in Finder — `tar` preserves the executable bit.
@@ -216,7 +216,22 @@ From a checkout, with the .NET SDK installed:
 ./scripts/Publish-Deployment.ps1 -RuntimeIdentifier win-x64 -SkipArchive
 ```
 
-Output lands in `artifacts/`. The script publishes self-contained, so a RID-specific restore
-would normally rewrite every committed `packages.lock.json`; it passes
-`RestorePackagesWithLockFile=false` to prevent that, and then **verifies** with `git status` that
-no lock file changed, failing the publish if one did.
+Output lands in `artifacts/` (gitignored). Two things the script handles that are easy to get
+wrong by hand:
+
+- **Lock files.** A self-contained restore appends a per-RID section (`"net10.0/osx-arm64": {}`)
+  to every committed `packages.lock.json`. `RestorePackagesWithLockFile=false` is not an escape —
+  NuGet rejects it with **NU1005** when a lock file exists. So the script refuses to start if any
+  lock file is already dirty, and reverts them in a `finally` — on failure as well as success,
+  because a half-finished publish is exactly what leaves them dirty for the next run. It then
+  verifies the revert.
+- **The executable bit.** Windows filesystems have none, so an archive built there unpacks with
+  `propflow-deploy` non-executable. The script uses **GNU tar**'s `--mode=a+rx` to stamp one in.
+  Windows' bundled `tar` is bsdtar and rejects `--mode`; Git for Windows ships GNU tar, which the
+  script locates by deriving it from wherever `git` itself is installed (not a fixed path — scoop,
+  winget and the official installer all differ). GNU tar on Windows also needs `--force-local`,
+  or `C:\...` is parsed as a remote host, and needs its own directory on `PATH` so `--gzip` can
+  find `gzip`. If no GNU tar is found the script still produces the archive but **warns** that
+  `chmod +x` will be required.
+
+Verify a built archive with `tar -tvzf …` — the binaries should read `-rwxr-xr-x`.
