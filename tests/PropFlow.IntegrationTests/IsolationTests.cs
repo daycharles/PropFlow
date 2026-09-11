@@ -132,6 +132,30 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    [Fact]
+    public async Task Rls_confines_custom_field_values_to_their_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        Guid definitionId;
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            var definition = new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), "warranty_note",
+                "Warranty note", CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow);
+            definitionId = definition.Id;
+            admin.CustomFieldDefinitions.Add(definition);
+            admin.CustomFieldValues.Add(CustomFieldValue.Create(s.OrganizationA, Guid.NewGuid(), s.WorkA, definitionId,
+                "3 years remaining", DateTimeOffset.UtcNow));
+            await admin.SaveChangesAsync();
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.CustomFieldValues.IgnoreQueryFilters().ToListAsync());
+        Assert.Empty(await store.CustomFieldValues.FromSqlRaw("SELECT * FROM operations.\"CustomFieldValues\"").IgnoreQueryFilters().ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"CustomFieldValues\" (\"OrganizationId\", \"Id\", \"WorkId\", \"CustomFieldDefinitionId\", \"Value\", \"UpdatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.WorkA}, {definitionId}, 'forged', now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

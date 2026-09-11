@@ -169,12 +169,13 @@ objects — not the entity graph — each carrying its own concurrency token:
 
 `POST /api/work/` takes `title` and `propertyId` (both required) plus the optional
 `description`, `workType`, `categoryId`, `priority`, `buildingId`, `spaceId`, `residentId`,
-`assetId`, `dueDate`, `cost`, `internalNotes` and `residentVisibleNotes`. The item is created
-and published in one step, so it comes back in `New` status with a `createdAt`, and a
-`WorkCreated` timeline entry is written in the same transaction. An empty or unknown/foreign
-`propertyId` returns 400 and 404 respectively; a domain-invariant violation (title length,
-negative cost) returns 400. An unknown/foreign `buildingId` / `spaceId` / `categoryId` /
-`residentId` / `assetId` returns 400, as does an `assetId` for an asset at a different property.
+`assetId`, `dueDate`, `cost`, `internalNotes`, `residentVisibleNotes` and `customFields`. The
+item is created and published in one step, so it comes back in `New` status with a `createdAt`,
+and a `WorkCreated` timeline entry is written in the same transaction. An empty or
+unknown/foreign `propertyId` returns 400 and 404 respectively; a domain-invariant violation
+(title length, negative cost) returns 400. An unknown/foreign `buildingId` / `spaceId` /
+`categoryId` / `residentId` / `assetId` returns 400, as does an `assetId` for an asset at a
+different property.
 
 `PUT /api/work/{id}` replaces the editable fields (including `assetId` — `null` clears the link)
 and requires the `version` read from a previous response. It also accepts an optional `status`
@@ -183,6 +184,15 @@ moving out of `Completed`/`Cancelled` or back to `Draft` is rejected with 400, a
 without a vendor or employee is rejected with 400. Title, priority, status, schedule and asset
 changes each append their own timeline entry (`WorkUpdated`, `PriorityChanged`, `StatusChanged`,
 `Scheduled`, `AssetLinked`). A stale `version` returns 409 and requires a reload.
+
+`customFields` (create and update, FS-S03.02) is `{ "<definition key>": "<value>" | null }`,
+keyed by a [custom field definition](#custom-field-definitions-fs-s0301)'s `key`, not its id.
+Every value is validated against the live definition (type, `SingleSelect` option membership,
+required-ness) before anything is written; an unrecognized key, an archived definition, or a
+value the definition rejects returns 400 and applies nothing — not even the rest of the same
+request's custom fields, and not the work item's own edits. A `null` (or blank) value clears any
+existing value for that key rather than storing an empty one. Both endpoints and `GET
+/api/work/{id}` echo the current set back as `customFields` on the response, keyed the same way.
 
 `GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
 `{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
@@ -410,7 +420,8 @@ closed vocabulary — `WorkItem` today, the only entity type a custom field can 
 never deletes the row — a value already recorded against an archived definition stays readable.
 
 Attaching a value to a work item (`CustomFieldValue`, validated against the live definition at
-write time) is PF-S03.02, not yet built — this is the definition CRUD only.
+write time) is `customFields` on [work create/update and the work detail response](#work-create-and-update)
+(FS-S03.02).
 
 ## Global search (milestone 6)
 
