@@ -4,6 +4,7 @@ using PropFlow.Application;
 using PropFlow.Domain;
 using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
+using PropFlow.Domain.Configuration;
 using PropFlow.Domain.People;
 using PropFlow.Domain.Properties;
 using PropFlow.Domain.Marketing;
@@ -31,6 +32,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<Occupancy> Occupancies => Set<Occupancy>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
+    public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -129,6 +131,16 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId });
         });
         model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<CustomFieldDefinition>(entity =>
+        {
+            entity.ToTable("CustomFieldDefinitions");
+            entity.Property(x => x.Key).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.AppliesTo).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.FieldType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Options).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.AppliesTo, x.Key }).IsUnique();
+        });
         model.Entity<SavedView>(entity =>
         {
             entity.ToTable("SavedViews");
