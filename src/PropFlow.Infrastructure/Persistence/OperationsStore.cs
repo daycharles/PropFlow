@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
+using PropFlow.Domain.Accounting;
 using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
 using PropFlow.Domain.Configuration;
@@ -59,6 +60,14 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<PaymentReceipt> PaymentReceipts => Set<PaymentReceipt>();
     public DbSet<PaymentReconciliation> PaymentReconciliations => Set<PaymentReconciliation>();
     public DbSet<DelinquencyCase> DelinquencyCases => Set<DelinquencyCase>();
+    public DbSet<ChartOfAccount> ChartOfAccounts => Set<ChartOfAccount>();
+    public DbSet<FiscalPeriod> FiscalPeriods => Set<FiscalPeriod>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<JournalLine> JournalLines => Set<JournalLine>();
+    public DbSet<PayableInvoice> PayableInvoices => Set<PayableInvoice>();
+    public DbSet<ReceivableInvoice> ReceivableInvoices => Set<ReceivableInvoice>();
+    public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<BankTransaction> BankTransactions => Set<BankTransaction>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -375,6 +384,53 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasIndex(x => new { x.OrganizationId, x.LeaseId, x.Status });
         });
 
+        model.Entity<ChartOfAccount>(entity =>
+        {
+            entity.ToTable("ChartOfAccounts");
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
+        });
+        model.Entity<FiscalPeriod>(entity =>
+        {
+            entity.ToTable("FiscalPeriods");
+            entity.Property(x => x.Name).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.StartsOn, x.EndsOn });
+        });
+        model.Entity<JournalEntry>(entity =>
+        {
+            entity.ToTable("JournalEntries");
+            entity.Property(x => x.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Memo).HasMaxLength(1000);
+            // (18,2) matches WorkItem.Cost — the ledger carries balances, not a single rent figure.
+            entity.Property(x => x.Total).HasPrecision(18, 2).IsRequired();
+            entity.HasOne<FiscalPeriod>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PeriodId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ReversalOfId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.Lines).WithOne().HasForeignKey(x => new { x.OrganizationId, x.EntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            // The entry is immutable, so "already reversed" cannot be a flag on the original.
+            // PostgreSQL keeps NULLs distinct in a unique index, so ordinary entries are
+            // unconstrained while any one entry can be reversed at most once.
+            entity.Navigation(x => x.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
+            entity.HasIndex(x => new { x.OrganizationId, x.ReversalOfId }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.PeriodId, x.EntryDate });
+        });
+        model.Entity<JournalLine>(entity =>
+        {
+            entity.ToTable("JournalLines");
+            entity.Property(x => x.Debit).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Credit).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Memo).HasMaxLength(500);
+            entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.AccountId });
+        });
+        model.Entity<PayableInvoice>(entity => { entity.ToTable("PayableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.VendorId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<ReceivableInvoice>(entity => { entity.ToTable("ReceivableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<BankAccount>(entity => { entity.ToTable("BankAccounts"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.Property(x => x.Institution).HasMaxLength(100).IsRequired(); entity.Property(x => x.LastFour).HasMaxLength(4).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<BankTransaction>(entity => { entity.ToTable("BankTransactions"); entity.Property(x => x.ExternalId).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<BankAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BankAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.JournalEntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.BankAccountId, x.ExternalId }).IsUnique(); });
+
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))
         {
@@ -411,6 +467,11 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
                 throw new TenantAccessException();
             if (entry.Entity is TimelineEntry && entry.State != EntityState.Added)
                 throw new InvalidOperationException("Timeline entries are append-only.");
+            // FS-S09: a posted journal is corrected by a reversing entry, never by an edit. This
+            // is the EF rung of the same three-level control the Timeline uses — the runtime role
+            // gets only GRANT SELECT, INSERT and a PostgreSQL trigger rejects UPDATE/DELETE.
+            if (entry.Entity is JournalEntry or JournalLine && entry.State != EntityState.Added)
+                throw new InvalidOperationException("Journal entries are append-only; post a reversing entry instead.");
         }
     }
 }

@@ -110,6 +110,17 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE ON operations."RepeatRepairPolicies" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."WorkItems" TO propflow_app;
             GRANT SELECT, INSERT ON operations."Timeline" TO propflow_app;
+            -- FS-S09 ledger. Accounts and periods are editable state (rename, activate/deactivate,
+            -- close), so they carry UPDATE. Journals do not: a posted entry is corrected by a
+            -- reversing entry, so the runtime role gets no UPDATE and no DELETE on either journal
+            -- table — the same control as operations."Timeline" above.
+            GRANT SELECT, INSERT, UPDATE ON operations."ChartOfAccounts" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."FiscalPeriods" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."JournalEntries" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."JournalLines" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."PayableInvoices", operations."ReceivableInvoices" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."BankAccounts" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."BankTransactions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Attachments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."CustomFieldDefinitions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;

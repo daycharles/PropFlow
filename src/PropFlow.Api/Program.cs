@@ -213,6 +213,7 @@ app.MapMarketingEndpoints();
 app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
+app.MapAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();

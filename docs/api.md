@@ -510,3 +510,7 @@ its records never cross an organization.
 ## Billing acceptance workflows (FS-S08)
 
 Billing also exposes tenant-scoped payment-method vault metadata (provider token and last four only), one immutable receipt per settled payment, idempotent provider-reference reconciliation records, and delinquency cases with run/contact/resolve transitions. Raw card or bank credentials are never stored.
+
+## Accounting acceptance workflows (FS-S09)
+
+Accounting includes first-class payable and receivable invoices with settlement/void transitions, plus bank accounts linked to asset accounts and idempotent imported bank transactions that can be matched to posted journal entries. All records are tenant-scoped and journal/period controls remain enforced.

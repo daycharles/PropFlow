@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    partial class OperationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260911195707_FS_S09Acceptance2")]
+    partial class FS_S09Acceptance2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -493,326 +496,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.ToTable("AutomationRules", "operations");
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Billing.Credit", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("AppliedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("IssuedOn")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("LeaseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "LeaseId", "Status");
-
-                    b.ToTable("Credits", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.DelinquencyCase", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Balance")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("LeaseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("OpenedOn")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "LeaseId", "Status");
-
-                    b.ToTable("DelinquencyCases", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.LateFeeRule", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("FlatAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<int>("GraceDays")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("MaximumAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<decimal>("PercentOfOutstanding")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<Guid?>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PropertyId")
-                        .IsUnique();
-
-                    b.ToTable("LateFeeRules", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentMethod", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("LastFour")
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
-                    b.Property<string>("ProviderToken")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("ResidentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ResidentId", "Status");
-
-                    b.ToTable("PaymentMethods", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentReceipt", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("IssuedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("PaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReceiptNumber")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PaymentId")
-                        .IsUnique();
-
-                    b.HasIndex("OrganizationId", "ReceiptNumber")
-                        .IsUnique();
-
-                    b.ToTable("PaymentReceipts", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentReconciliation", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid?>("PaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderReference")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PaymentId");
-
-                    b.HasIndex("OrganizationId", "ProviderReference")
-                        .IsUnique();
-
-                    b.ToTable("PaymentReconciliations", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentRefund", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("IssuedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("PaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderReference")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PaymentId");
-
-                    b.HasIndex("OrganizationId", "ProviderReference")
-                        .IsUnique();
-
-                    b.ToTable("PaymentRefunds", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.RecurringCharge", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DayOfMonth")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateOnly?>("EndsOn")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("GeneratedThrough")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("LeaseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("StartsOn")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "LeaseId", "Status");
-
-                    b.ToTable("RecurringCharges", "operations");
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Communications.Announcement", b =>
                 {
                     b.Property<Guid>("OrganizationId")
@@ -847,58 +530,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "Status", "ExpiresAt");
 
                     b.ToTable("Announcements", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Configuration.CustomFieldDefinition", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AppliesTo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FieldType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<bool>("IsArchived")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsRequired")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Options")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "AppliesTo", "Key")
-                        .IsUnique();
-
-                    b.ToTable("CustomFieldDefinitions", "operations");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Leasing.Lease", b =>
@@ -958,12 +589,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("AmountApplied")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -976,13 +603,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<DateOnly>("DueOn")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly?>("LateFeeAppliedOn")
-                        .HasColumnType("date");
-
                     b.Property<Guid>("LeaseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("RecurringChargeId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Status")
@@ -996,9 +617,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasColumnType("character varying(20)");
 
                     b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "RecurringChargeId", "DueOn")
-                        .IsUnique();
 
                     b.HasIndex("OrganizationId", "LeaseId", "Status", "DueOn");
 
@@ -1132,8 +750,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
 
                     b.Property<Guid?>("ChargeId")
                         .HasColumnType("uuid");
@@ -1141,24 +759,12 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.Property<DateOnly>("DueOn")
                         .HasColumnType("date");
 
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
                     b.Property<Guid>("LeaseId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Reference")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<decimal>("RefundedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
 
                     b.Property<Guid>("ResidentId")
                         .HasColumnType("uuid");
@@ -1179,9 +785,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "ChargeId");
 
                     b.HasIndex("OrganizationId", "LeaseId");
-
-                    b.HasIndex("OrganizationId", "ProviderReference")
-                        .IsUnique();
 
                     b.HasIndex("OrganizationId", "ResidentId", "Status", "DueOn");
 
@@ -2094,76 +1697,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Billing.Credit", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.Lease", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "LeaseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.DelinquencyCase", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.Lease", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "LeaseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.LateFeeRule", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Properties.Property", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PropertyId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentMethod", b =>
-                {
-                    b.HasOne("PropFlow.Domain.People.Resident", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ResidentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentReceipt", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.ResidentPayment", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PaymentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentReconciliation", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.ResidentPayment", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PaymentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.PaymentRefund", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.ResidentPayment", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PaymentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Billing.RecurringCharge", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Leasing.Lease", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "LeaseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Leasing.Lease", b =>
                 {
                     b.HasOne("PropFlow.Domain.People.Resident", null)
@@ -2186,11 +1719,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .HasForeignKey("OrganizationId", "LeaseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Billing.RecurringCharge", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "RecurringChargeId")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Leasing.LeaseDocument", b =>
