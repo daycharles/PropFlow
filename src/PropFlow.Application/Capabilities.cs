@@ -18,13 +18,18 @@ public static class Capabilities
     public const string ManageAttachments = "Work.ManageAttachments";
     public const string ManageProperties = "Properties.Manage";
     public const string ManageLeasing = "Leasing.Manage";
+    // FS-S09: one capability covers reading and posting to the ledger. It reaches Property
+    // Manager through the Admin/PM branch of ForRole below, deliberately - there is no
+    // Accountant role in the fixed matrix, and an organization that wants the ledger off a PM
+    // revokes it per-organization through RoleCapabilityOverrides (PF-S01.04).
+    public const string ManageAccounting = "Accounting.Manage";
     public const string ResidentPortalRead = "ResidentPortal.Read";
     public const string ResidentPortalRequest = "ResidentPortal.Request";
     // PF-S01.03: coarse-grained for now (granted wherever "All" is granted) - a real
     // organization-editable role -> capability matrix is PF-S01.04, not yet built.
     public const string ManageMembers = "Identity.ManageMembers";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ResidentPortalRead, ResidentPortalRequest, ManageMembers];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
