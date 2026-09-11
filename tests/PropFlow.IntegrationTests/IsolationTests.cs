@@ -120,7 +120,7 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         await using (var admin = s.AdminStore(s.OrganizationA))
         {
             admin.CustomFieldDefinitions.Add(new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), "warranty_note",
-                "Warranty note", CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
+                "Warranty note", ConfigurationEntityType.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
             await admin.SaveChangesAsync();
         }
 
@@ -140,7 +140,7 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         await using (var admin = s.AdminStore(s.OrganizationA))
         {
             var definition = new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), "warranty_note",
-                "Warranty note", CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow);
+                "Warranty note", ConfigurationEntityType.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow);
             definitionId = definition.Id;
             admin.CustomFieldDefinitions.Add(definition);
             admin.CustomFieldValues.Add(CustomFieldValue.Create(s.OrganizationA, Guid.NewGuid(), s.WorkA, definitionId,

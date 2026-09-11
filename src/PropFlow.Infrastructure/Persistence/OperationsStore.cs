@@ -262,7 +262,13 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.DueOn });
         });
-        model.Entity<WorkCategory>(entity => { entity.ToTable("WorkCategories"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<WorkCategory>(entity =>
+        {
+            entity.ToTable("WorkCategories");
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.AppliesTo).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(ConfigurationEntityType.WorkItem);
+            entity.HasIndex(x => new { x.OrganizationId, x.AppliesTo, x.Name }).IsUnique();
+        });
         model.Entity<CustomFieldDefinition>(entity =>
         {
             entity.ToTable("CustomFieldDefinitions");

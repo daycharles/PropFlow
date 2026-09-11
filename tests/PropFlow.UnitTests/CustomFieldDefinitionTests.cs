@@ -6,7 +6,7 @@ namespace PropFlow.UnitTests;
 public sealed class CustomFieldDefinitionTests
 {
     private static CustomFieldDefinition Text(bool required = false) =>
-        new(Guid.NewGuid(), Guid.NewGuid(), "warranty_note", "Warranty note", CustomFieldAppliesTo.WorkItem,
+        new(Guid.NewGuid(), Guid.NewGuid(), "warranty_note", "Warranty note", ConfigurationEntityType.WorkItem,
             CustomFieldType.Text, null, required, 0, DateTimeOffset.UtcNow);
 
     [Fact]
@@ -15,7 +15,7 @@ public sealed class CustomFieldDefinitionTests
         var field = Text();
         Assert.Equal("warranty_note", field.Key);
         Assert.Equal("Warranty note", field.Name);
-        Assert.Equal(CustomFieldAppliesTo.WorkItem, field.AppliesTo);
+        Assert.Equal(ConfigurationEntityType.WorkItem, field.AppliesTo);
         Assert.Equal(CustomFieldType.Text, field.FieldType);
         Assert.False(field.IsArchived);
     }
@@ -30,44 +30,44 @@ public sealed class CustomFieldDefinitionTests
     public void A_malformed_key_is_rejected(string key)
     {
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), key, "Name",
-            CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
+            ConfigurationEntityType.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
     }
 
     [Fact]
     public void A_key_over_fifty_characters_is_rejected()
     {
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(),
-            new string('a', 51), "Name", CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
+            new string('a', 51), "Name", ConfigurationEntityType.WorkItem, CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
     }
 
     [Fact]
     public void SingleSelect_requires_at_least_one_option()
     {
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "priority_tier",
-            "Priority tier", CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, [], false, 0, DateTimeOffset.UtcNow));
+            "Priority tier", ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, [], false, 0, DateTimeOffset.UtcNow));
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "priority_tier",
-            "Priority tier", CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, null, false, 0, DateTimeOffset.UtcNow));
+            "Priority tier", ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, null, false, 0, DateTimeOffset.UtcNow));
     }
 
     [Fact]
     public void SingleSelect_rejects_duplicate_options()
     {
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "priority_tier",
-            "Priority tier", CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, ["Gold", "gold"], false, 0, DateTimeOffset.UtcNow));
+            "Priority tier", ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, ["Gold", "gold"], false, 0, DateTimeOffset.UtcNow));
     }
 
     [Fact]
     public void A_non_SingleSelect_field_rejects_options()
     {
         Assert.Throws<ArgumentException>(() => new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "note", "Note",
-            CustomFieldAppliesTo.WorkItem, CustomFieldType.Text, ["a"], false, 0, DateTimeOffset.UtcNow));
+            ConfigurationEntityType.WorkItem, CustomFieldType.Text, ["a"], false, 0, DateTimeOffset.UtcNow));
     }
 
     [Fact]
     public void SingleSelect_round_trips_its_options()
     {
         var field = new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "priority_tier", "Priority tier",
-            CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, ["Gold", "Silver"], false, 0, DateTimeOffset.UtcNow);
+            ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, ["Gold", "Silver"], false, 0, DateTimeOffset.UtcNow);
         Assert.Equal(["Gold", "Silver"], field.ReadOptions());
     }
 
@@ -82,7 +82,7 @@ public sealed class CustomFieldDefinitionTests
     public void Accepts_validates_by_field_type(CustomFieldType type, string raw, bool expected)
     {
         var field = new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "field", "Field",
-            CustomFieldAppliesTo.WorkItem, type, null, false, 0, DateTimeOffset.UtcNow);
+            ConfigurationEntityType.WorkItem, type, null, false, 0, DateTimeOffset.UtcNow);
         Assert.Equal(expected, field.Accepts(raw));
     }
 
@@ -90,7 +90,7 @@ public sealed class CustomFieldDefinitionTests
     public void SingleSelect_only_accepts_a_listed_option()
     {
         var field = new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "tier", "Tier",
-            CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, ["Gold", "Silver"], false, 0, DateTimeOffset.UtcNow);
+            ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, ["Gold", "Silver"], false, 0, DateTimeOffset.UtcNow);
         Assert.True(field.Accepts("Gold"));
         Assert.False(field.Accepts("Bronze"));
     }
@@ -129,7 +129,7 @@ public sealed class CustomFieldDefinitionTests
     public void ReplaceOptions_on_a_SingleSelect_field_revalidates()
     {
         var field = new CustomFieldDefinition(Guid.NewGuid(), Guid.NewGuid(), "tier", "Tier",
-            CustomFieldAppliesTo.WorkItem, CustomFieldType.SingleSelect, ["Gold"], false, 0, DateTimeOffset.UtcNow);
+            ConfigurationEntityType.WorkItem, CustomFieldType.SingleSelect, ["Gold"], false, 0, DateTimeOffset.UtcNow);
         field.ReplaceOptions(["Gold", "Platinum"]);
         Assert.Equal(["Gold", "Platinum"], field.ReadOptions());
         Assert.Throws<ArgumentException>(() => field.ReplaceOptions([]));

@@ -64,8 +64,8 @@ public static class CustomFieldEndpoints
         x.FieldType, x.ReadOptions(), x.IsRequired, x.SortOrder, x.IsArchived, x.CreatedAt);
 }
 
-public sealed record CustomFieldRequest(string Key, string Name, CustomFieldAppliesTo AppliesTo,
+public sealed record CustomFieldRequest(string Key, string Name, ConfigurationEntityType AppliesTo,
     CustomFieldType FieldType, IReadOnlyList<string>? Options, bool IsRequired, int SortOrder);
 public sealed record CustomFieldUpdateRequest(string Name, IReadOnlyList<string>? Options, bool IsRequired, int SortOrder);
-public sealed record CustomFieldResponse(Guid Id, string Key, string Name, CustomFieldAppliesTo AppliesTo,
+public sealed record CustomFieldResponse(Guid Id, string Key, string Name, ConfigurationEntityType AppliesTo,
     CustomFieldType FieldType, IReadOnlyList<string> Options, bool IsRequired, int SortOrder, bool IsArchived, DateTimeOffset CreatedAt);
