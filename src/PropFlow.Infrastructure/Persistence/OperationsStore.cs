@@ -53,6 +53,10 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<FiscalPeriod> FiscalPeriods => Set<FiscalPeriod>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<JournalLine> JournalLines => Set<JournalLine>();
+    public DbSet<PayableInvoice> PayableInvoices => Set<PayableInvoice>();
+    public DbSet<ReceivableInvoice> ReceivableInvoices => Set<ReceivableInvoice>();
+    public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<BankTransaction> BankTransactions => Set<BankTransaction>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -312,6 +316,10 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.AccountId });
         });
+        model.Entity<PayableInvoice>(entity => { entity.ToTable("PayableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.VendorId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<ReceivableInvoice>(entity => { entity.ToTable("ReceivableInvoices"); entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.AmountPaid).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<Resident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ResidentId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.ResidentId, x.Status }); entity.HasIndex(x => new { x.OrganizationId, x.InvoiceNumber }).IsUnique(); });
+        model.Entity<BankAccount>(entity => { entity.ToTable("BankAccounts"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.Property(x => x.Institution).HasMaxLength(100).IsRequired(); entity.Property(x => x.LastFour).HasMaxLength(4).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
+        model.Entity<BankTransaction>(entity => { entity.ToTable("BankTransactions"); entity.Property(x => x.ExternalId).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<BankAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BankAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.JournalEntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.BankAccountId, x.ExternalId }).IsUnique(); });
 
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))

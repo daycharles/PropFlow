@@ -197,6 +197,22 @@ public static class AccountingEndpoints
                 isBalanced = rows.Sum(x => x.Debits) == rows.Sum(x => x.Credits)
             });
         });
+
+        // AP/AR are first-class documents. Account types alone cannot carry invoice identity,
+        // due dates, settlement state, or tenant-scoped operational workflow.
+        group.MapGet("/payables", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.PayableInvoices.AsNoTracking().OrderBy(x => x.DueOn).Take(500).ToListAsync(ct)));
+        group.MapPost("/payables", async (PayableRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) => { if (!await store.Vendors.AnyAsync(x => x.Id == request.VendorId, ct)) return Results.NotFound(); try { var item = new PayableInvoice(store.OrganizationId, Guid.NewGuid(), request.VendorId, request.InvoiceNumber, request.Amount, request.DueOn, clock.GetUtcNow()); store.PayableInvoices.Add(item); await store.SaveChangesAsync(ct); return Results.Created($"/api/accounting/payables/{item.Id}", item); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } });
+        group.MapPost("/payables/{id:guid}/pay", async (Guid id, InvoicePaymentRequest request, OperationsStore store, CancellationToken ct) => await ChangeInvoice(id, store, ct, x => x.Pay(request.Amount)));
+        group.MapPost("/payables/{id:guid}/void", async (Guid id, OperationsStore store, CancellationToken ct) => await ChangeInvoice(id, store, ct, x => x.Void()));
+        group.MapGet("/receivables", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.ReceivableInvoices.AsNoTracking().OrderBy(x => x.DueOn).Take(500).ToListAsync(ct)));
+        group.MapPost("/receivables", async (ReceivableRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) => { if (!await store.Residents.AnyAsync(x => x.Id == request.ResidentId, ct)) return Results.NotFound(); try { var item = new ReceivableInvoice(store.OrganizationId, Guid.NewGuid(), request.ResidentId, request.InvoiceNumber, request.Amount, request.DueOn, clock.GetUtcNow()); store.ReceivableInvoices.Add(item); await store.SaveChangesAsync(ct); return Results.Created($"/api/accounting/receivables/{item.Id}", item); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } });
+        group.MapPost("/receivables/{id:guid}/receive", async (Guid id, InvoicePaymentRequest request, OperationsStore store, CancellationToken ct) => await ChangeReceivable(id, store, ct, x => x.Receive(request.Amount)));
+        group.MapPost("/receivables/{id:guid}/void", async (Guid id, OperationsStore store, CancellationToken ct) => await ChangeReceivable(id, store, ct, x => x.Void()));
+        group.MapGet("/bank-accounts", async (OperationsStore store, CancellationToken ct) => Results.Ok(await store.BankAccounts.AsNoTracking().OrderBy(x => x.Name).ToListAsync(ct)));
+        group.MapPost("/bank-accounts", async (BankAccountRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) => { if (!await store.ChartOfAccounts.AnyAsync(x => x.Id == request.AssetAccountId && x.Type == AccountType.Asset, ct)) return Results.Problem(statusCode: 400, title: "An active asset account is required."); try { var item = new BankAccount(store.OrganizationId, Guid.NewGuid(), request.Name, request.Institution, request.LastFour, request.AssetAccountId, clock.GetUtcNow()); store.BankAccounts.Add(item); await store.SaveChangesAsync(ct); return Results.Created($"/api/accounting/bank-accounts/{item.Id}", item); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } });
+        group.MapGet("/bank-accounts/{id:guid}/transactions", async (Guid id, OperationsStore store, CancellationToken ct) => Results.Ok(await store.BankTransactions.AsNoTracking().Where(x => x.BankAccountId == id).OrderByDescending(x => x.PostedOn).Take(500).ToListAsync(ct)));
+        group.MapPost("/bank-accounts/{id:guid}/transactions", async (Guid id, BankTransactionRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct) => { if (!await store.BankAccounts.AnyAsync(x => x.Id == id, ct)) return Results.NotFound(); try { var item = new BankTransaction(store.OrganizationId, Guid.NewGuid(), id, request.ExternalId, request.Amount, request.PostedOn, clock.GetUtcNow()); store.BankTransactions.Add(item); await store.SaveChangesAsync(ct); return Results.Created($"/api/accounting/bank-accounts/{id}/transactions/{item.Id}", item); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } });
+        group.MapPost("/bank-transactions/{id:guid}/match", async (Guid id, MatchBankTransactionRequest request, OperationsStore store, CancellationToken ct) => { var item = await store.BankTransactions.SingleOrDefaultAsync(x => x.Id == id, ct); if (item is null) return Results.NotFound(); if (!await store.JournalEntries.AnyAsync(x => x.Id == request.JournalEntryId, ct)) return Results.BadRequest(); item.Match(request.JournalEntryId); await store.SaveChangesAsync(ct); return Results.Ok(item); });
     }
 
     private static async Task<IResult> ChangeAccount(Guid id, OperationsStore store, CancellationToken ct, Action<ChartOfAccount> change)
@@ -207,6 +223,9 @@ public static class AccountingEndpoints
         catch (InvalidOperationException exception) { return Results.Problem(statusCode: 409, title: exception.Message); }
         catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
     }
+
+    private static async Task<IResult> ChangeInvoice(Guid id, OperationsStore store, CancellationToken ct, Action<PayableInvoice> change) { var item = await store.PayableInvoices.SingleOrDefaultAsync(x => x.Id == id, ct); if (item is null) return Results.NotFound(); try { change(item); await store.SaveChangesAsync(ct); return Results.Ok(item); } catch (InvalidOperationException e) { return Results.Conflict(e.Message); } catch (ArgumentOutOfRangeException e) { return Results.Problem(statusCode: 400, title: e.Message); } }
+    private static async Task<IResult> ChangeReceivable(Guid id, OperationsStore store, CancellationToken ct, Action<ReceivableInvoice> change) { var item = await store.ReceivableInvoices.SingleOrDefaultAsync(x => x.Id == id, ct); if (item is null) return Results.NotFound(); try { change(item); await store.SaveChangesAsync(ct); return Results.Ok(item); } catch (InvalidOperationException e) { return Results.Conflict(e.Message); } catch (ArgumentOutOfRangeException e) { return Results.Problem(statusCode: 400, title: e.Message); } }
 
     private static async Task<List<TrialBalanceRow>> TrialBalanceAsync(Guid? periodId, OperationsStore store, CancellationToken ct)
     {
@@ -252,3 +271,9 @@ public sealed record JournalLineRequest(Guid AccountId, decimal Debit, decimal C
 public sealed record JournalEntryRequest(Guid PeriodId, DateOnly EntryDate, string Reference, string? Memo, IReadOnlyList<JournalLineRequest> Lines);
 public sealed record ReverseJournalEntryRequest(Guid PeriodId, DateOnly EntryDate);
 public sealed record TrialBalanceRow(Guid AccountId, string Code, string Name, AccountType Type, decimal Debits, decimal Credits, decimal Balance);
+public sealed record PayableRequest(Guid VendorId, string InvoiceNumber, decimal Amount, DateOnly DueOn);
+public sealed record ReceivableRequest(Guid ResidentId, string InvoiceNumber, decimal Amount, DateOnly DueOn);
+public sealed record InvoicePaymentRequest(decimal Amount);
+public sealed record BankAccountRequest(string Name, string Institution, string LastFour, Guid AssetAccountId);
+public sealed record BankTransactionRequest(string ExternalId, decimal Amount, DateOnly PostedOn);
+public sealed record MatchBankTransactionRequest(Guid JournalEntryId);

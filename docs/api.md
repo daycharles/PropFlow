@@ -476,3 +476,6 @@ syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy
 `Integrations.Manage` is granted to Organization Admin and Property Manager only. The
 Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
 its records never cross an organization.
+## Accounting acceptance workflows (FS-S09)
+
+Accounting includes first-class payable and receivable invoices with settlement/void transitions, plus bank accounts linked to asset accounts and idempotent imported bank transactions that can be matched to posted journal entries. All records are tenant-scoped and journal/period controls remain enforced.

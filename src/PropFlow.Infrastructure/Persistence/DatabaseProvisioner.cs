@@ -108,6 +108,9 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE ON operations."FiscalPeriods" TO propflow_app;
             GRANT SELECT, INSERT ON operations."JournalEntries" TO propflow_app;
             GRANT SELECT, INSERT ON operations."JournalLines" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."PayableInvoices", operations."ReceivableInvoices" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."BankAccounts" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."BankTransactions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Attachments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."OutboxMessages" TO propflow_app;
