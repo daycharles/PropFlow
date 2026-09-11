@@ -125,6 +125,9 @@ public static class AccountingEndpoints
                 .Select(x => new { x.Id, x.IsActive }).ToListAsync(ct);
             if (accounts.Count != accountIds.Length) return Results.Problem(statusCode: 400, title: "One or more accounts were not found");
             if (accounts.Any(x => !x.IsActive)) return Results.Problem(statusCode: 400, title: "A journal entry cannot post to an inactive account");
+            var propertyIds = request.Lines.Where(x => x.PropertyId is not null).Select(x => x.PropertyId!.Value).Distinct().ToArray();
+            if (propertyIds.Length > 0 && await store.Properties.CountAsync(x => propertyIds.Contains(x.Id), ct) != propertyIds.Length)
+                return Results.Problem(statusCode: 400, title: "One or more journal properties were not found");
             var id = Guid.NewGuid();
             try
             {

@@ -36,4 +36,15 @@ public sealed class OwnerAccountingEndpointsTests(DatabaseFixture fixture)
         await using var s = await fixture.CreateScenarioAsync(); await s.LoginAsync(reader: true);
         using var response = await s.Client.GetAsync("/api/owner-accounting/budgets"); Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Invalid_statement_range_is_rejected()
+    {
+        await using var s = await fixture.CreateScenarioAsync(); await s.LoginAsync();
+        using var ownerResponse = await s.Client.PostAsJsonAsync("/api/owner-accounting/owners", new { name = "Range Owner", email = $"owner-{Guid.NewGuid():N}@example.test" });
+        var owner = (await ownerResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        using var ownership = await s.Client.PostAsJsonAsync("/api/owner-accounting/ownerships", new { ownerId = owner, propertyId = s.PropertyA, percentage = 100m });
+        using var response = await s.Client.PostAsJsonAsync("/api/owner-accounting/statements", new { ownerId = owner, propertyId = s.PropertyA, startsOn = "2026-02-01", endsOn = "2026-01-01" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

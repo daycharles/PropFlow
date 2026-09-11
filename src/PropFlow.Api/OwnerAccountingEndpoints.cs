@@ -41,12 +41,35 @@ public static class OwnerAccountingEndpoints
         admin.MapPost("/distributions", async (DistributionRequest r, OperationsStore s, TimeProvider clock, CancellationToken ct) => { if (!await s.PropertyOwnerships.AnyAsync(x => x.OwnerId == r.OwnerId && x.PropertyId == r.PropertyId, ct)) return Results.BadRequest("Owner is not assigned to the property."); try { var d = new Distribution(s.OrganizationId, Guid.NewGuid(), r.OwnerId, r.PropertyId, r.Amount, r.PaidOn, clock.GetUtcNow()); s.Distributions.Add(d); await s.SaveChangesAsync(ct); return Results.Created($"/api/owner-accounting/distributions/{d.Id}", d); } catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); } });
         admin.MapPost("/statements", GenerateStatement);
         var reader = app.MapGroup("/api/owner-accounting").RequireAuthorization(Capabilities.ReadOwnerAccounting);
-        reader.MapGet("/statements", async (Guid? ownerId, Guid? propertyId, OperationsStore s, CancellationToken ct) => Results.Ok(await s.OwnerStatements.AsNoTracking().Where(x => ownerId == null || x.OwnerId == ownerId).Where(x => propertyId == null || x.PropertyId == propertyId).OrderByDescending(x => x.EndsOn).ToListAsync(ct)));
-        reader.MapGet("/statements/{id:guid}", async (Guid id, OperationsStore s, CancellationToken ct) => { var x = await s.OwnerStatements.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct); return x is null ? Results.NotFound() : Results.Ok(x); });
+        reader.MapGet("/statements", async (Guid? ownerId, Guid? propertyId, ClaimsPrincipal user, OperationsStore s, CancellationToken ct) =>
+        {
+            var query = s.OwnerStatements.AsNoTracking();
+            if (!user.HasClaim(TenantAccess.CapabilityClaim, Capabilities.ManageAccounting))
+            {
+                var email = user.FindFirstValue(ClaimTypes.Email);
+                if (string.IsNullOrWhiteSpace(email)) return Results.Forbid();
+                var ownerIds = s.Owners.Where(x => x.Email == email).Select(x => x.Id);
+                query = query.Where(x => ownerIds.Contains(x.OwnerId));
+            }
+            return Results.Ok(await query.Where(x => ownerId == null || x.OwnerId == ownerId).Where(x => propertyId == null || x.PropertyId == propertyId).OrderByDescending(x => x.EndsOn).ToListAsync(ct));
+        });
+        reader.MapGet("/statements/{id:guid}", async (Guid id, ClaimsPrincipal user, OperationsStore s, CancellationToken ct) =>
+        {
+            var query = s.OwnerStatements.AsNoTracking();
+            if (!user.HasClaim(TenantAccess.CapabilityClaim, Capabilities.ManageAccounting))
+            {
+                var email = user.FindFirstValue(ClaimTypes.Email);
+                if (string.IsNullOrWhiteSpace(email)) return Results.Forbid();
+                query = query.Where(x => s.Owners.Any(o => o.Id == x.OwnerId && o.Email == email));
+            }
+            var x = await query.SingleOrDefaultAsync(x => x.Id == id, ct);
+            return x is null ? Results.NotFound() : Results.Ok(x);
+        });
     }
 
     private static async Task<IResult> GenerateStatement(StatementRequest r, OperationsStore s, TimeProvider clock, CancellationToken ct)
     {
+        if (r.StartsOn > r.EndsOn) return Results.BadRequest("Statement end date must be on or after the start date.");
         var ownership = await s.PropertyOwnerships.AsNoTracking().SingleOrDefaultAsync(x => x.OwnerId == r.OwnerId && x.PropertyId == r.PropertyId, ct); if (ownership is null) return Results.BadRequest("Owner is not assigned to the property.");
         var existing = await s.OwnerStatements.SingleOrDefaultAsync(x => x.OwnerId == r.OwnerId && x.PropertyId == r.PropertyId && x.StartsOn == r.StartsOn && x.EndsOn == r.EndsOn, ct); if (existing is not null) return Results.Ok(existing);
         var rows = await (from l in s.JournalLines.AsNoTracking() join e in s.JournalEntries.AsNoTracking() on new { l.OrganizationId, Id = l.EntryId } equals new { e.OrganizationId, e.Id } join a in s.ChartOfAccounts.AsNoTracking() on new { l.OrganizationId, Id = l.AccountId } equals new { a.OrganizationId, a.Id } where l.PropertyId == r.PropertyId && e.EntryDate >= r.StartsOn && e.EntryDate <= r.EndsOn select new { EntryId = e.Id, LineId = l.Id, l.Debit, l.Credit, a.Type }).ToListAsync(ct);
