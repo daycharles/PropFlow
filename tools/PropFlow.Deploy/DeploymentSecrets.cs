@@ -25,9 +25,24 @@ internal sealed record DeploymentSecrets
     [JsonPropertyName("runtimePassword")]
     public required string RuntimePassword { get; init; }
 
-    /// <summary>Password for all three seeded demo accounts. 12-character floor.</summary>
+    /// <summary>
+    /// Password for all three seeded demo accounts. 12-character floor.
+    ///
+    /// Unlike the database passwords this one is <b>deterministic and documented</b>
+    /// (<see cref="DefaultDemoPassword"/>), because a person has to type it. A per-install random
+    /// value meant the printed credentials were the only copy: miss the terminal output and the
+    /// documented password did not work, which is precisely how the first tester got locked out.
+    ///
+    /// These are demo accounts in a loopback-only install holding generated sample data, so a
+    /// known password is the same posture <c>docs/local-development.md</c> already documents. Set
+    /// <c>PROPFLOW_DEMO_PASSWORD</c> before the first <c>up</c> to choose your own; it must satisfy
+    /// the ASP.NET Identity rules (12+ characters with upper, lower, digit and punctuation).
+    /// </summary>
     [JsonPropertyName("demoPassword")]
     public required string DemoPassword { get; init; }
+
+    /// <summary>The documented default. Changing it invalidates every guide that prints it.</summary>
+    public const string DefaultDemoPassword = "PropFlowDemo!2026";
 
     /// <summary>Protects the PFX on disk. Not a transport secret.</summary>
     [JsonPropertyName("certificatePassword")]
@@ -58,13 +73,13 @@ internal sealed record DeploymentSecrets
             // ASP.NET Identity complexity rules the seeder applies.
             PostgresPassword = Generate(32),
             RuntimePassword = Generate(32),
-            DemoPassword = "Demo!" + Generate(16) + "9aZ",
+            DemoPassword = DemoPasswordOverride() ?? DefaultDemoPassword,
             CertificatePassword = Generate(32),
             ProviderCallbackSecret = Generate(48),
         };
         created.Validate();
 
-        Directory.CreateDirectory(layout.StateDirectory);
+        Directory.CreateDirectory(layout.StateRoot);
         File.WriteAllText(layout.SecretsFile, JsonSerializer.Serialize(created, Json));
         RestrictToOwner(layout.SecretsFile);
         log($"Generated new credentials and wrote them to {layout.SecretsFile}.");
@@ -97,6 +112,16 @@ internal sealed record DeploymentSecrets
         {
             // A restrictive umask or an exotic filesystem is not a reason to abort a deployment.
         }
+    }
+
+    private static string? DemoPasswordOverride()
+    {
+        var chosen = Environment.GetEnvironmentVariable("PROPFLOW_DEMO_PASSWORD");
+        if (string.IsNullOrWhiteSpace(chosen)) return null;
+        if (chosen.Length < 12)
+            throw new InvalidOperationException(
+                "PROPFLOW_DEMO_PASSWORD must be at least 12 characters, with upper, lower, digit and punctuation.");
+        return chosen;
     }
 
     /// <summary>URL-safe, no ambiguous characters, and safe to paste into a connection string.</summary>

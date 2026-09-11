@@ -83,7 +83,10 @@ internal static class ProcessRunner
         var info = new ProcessStartInfo
         {
             FileName = fileName,
-            WorkingDirectory = workingDirectory,
+            // A non-existent working directory fails with "The directory name is invalid",
+            // which reads as though the *program* were missing. Fall back to somewhere real so
+            // the actual problem is the one reported.
+            WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : Environment.CurrentDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
