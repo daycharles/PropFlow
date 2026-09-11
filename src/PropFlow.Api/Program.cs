@@ -74,6 +74,8 @@ builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<RoleCapabilityService>();
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<UserSessionService>();
+builder.Services.AddScoped<IdentityAuditLog>();
+builder.Services.AddScoped<MembershipManagementService>();
 builder.Services.AddScoped<SessionAuthentication>();
 builder.Services.AddScoped<IWorkOperations, EfWorkOperations>();
 builder.Services.AddScoped<IResidentMessenger, EfResidentMessenger>();
@@ -215,6 +217,8 @@ app.MapProviderCallbackEndpoints();
 app.MapInvitationEndpoints();
 app.MapRoleCapabilityEndpoints();
 app.MapTeamEndpoints();
+app.MapMembershipManagementEndpoints();
+app.MapAuditEndpoints();
 app.Run();
 
 public partial class Program { }

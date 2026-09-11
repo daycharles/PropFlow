@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using PropFlow.Application;
 using PropFlow.Infrastructure.Identity;
 
@@ -31,11 +32,12 @@ public static class RoleCapabilityEndpoints
         });
 
         group.MapPut("/{role}/capabilities", async (string role, RoleCapabilityRequest request,
-            ITenantContext tenant, RoleCapabilityService roleCapabilities, CancellationToken ct) =>
+            ITenantContext tenant, ClaimsPrincipal user, RoleCapabilityService roleCapabilities, CancellationToken ct) =>
         {
             if (!Roles.All.Contains(role)) return Results.Problem(statusCode: 404, title: "Unknown role");
+            var actorUserId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var outcome = await roleCapabilities.SetOverridesAsync(
-                tenant.OrganizationId, role, request.Grants ?? [], request.Revocations ?? [], ct);
+                tenant.OrganizationId, role, request.Grants ?? [], request.Revocations ?? [], actorUserId, ct);
             return outcome switch
             {
                 RoleCapabilityService.SetOutcome.Applied => Results.Ok(

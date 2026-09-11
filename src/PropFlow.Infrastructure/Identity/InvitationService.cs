@@ -6,7 +6,7 @@ namespace PropFlow.Infrastructure.Identity;
 // PF-S01.03: creates and accepts organization invitations. Kept separate from MembershipAccess
 // (read-only membership lookups) and SessionAuthentication (login/logout) since this is the one
 // place a new ApplicationUser or OrganizationMembership gets written outside of seeding.
-public sealed class InvitationService(IdentityStore store, UserManager<ApplicationUser> users, TimeProvider clock)
+public sealed class InvitationService(IdentityStore store, UserManager<ApplicationUser> users, TimeProvider clock, IdentityAuditLog audit)
 {
     // Re-inviting a still-pending address replaces its token/role/expiry rather than creating a
     // second row: only one invitation per (organization, email) is ever live at a time.
@@ -24,6 +24,7 @@ public sealed class InvitationService(IdentityStore store, UserManager<Applicati
             pending.InvitedByUserId = invitedByUserId;
             pending.CreatedAt = now;
             pending.ExpiresAt = InvitationToken.ExpiryFrom(now);
+            audit.Record(organizationId, IdentityAuditLog.EventTypes.InvitationSent, invitedByUserId, null, canonicalEmail, null, role);
             await store.SaveChangesAsync(ct);
             return pending;
         }
@@ -40,6 +41,7 @@ public sealed class InvitationService(IdentityStore store, UserManager<Applicati
             ExpiresAt = InvitationToken.ExpiryFrom(now)
         };
         store.Invitations.Add(invitation);
+        audit.Record(organizationId, IdentityAuditLog.EventTypes.InvitationSent, invitedByUserId, null, canonicalEmail, null, role);
         await store.SaveChangesAsync(ct);
         return invitation;
     }
@@ -90,6 +92,10 @@ public sealed class InvitationService(IdentityStore store, UserManager<Applicati
 
         invitation.AcceptedAt = clock.GetUtcNow();
         invitation.AcceptedByUserId = user.Id;
+        // No authenticated actor here - the acceptor has no session yet (this endpoint is
+        // anonymous). The audit trail still names who was affected via TargetUserId/TargetEmail.
+        audit.Record(invitation.OrganizationId, IdentityAuditLog.EventTypes.InvitationAccepted,
+            actorUserId: null, targetUserId: user.Id, targetLabel: invitation.Email, oldValue: null, newValue: invitation.Role);
         await store.SaveChangesAsync(ct);
         return (AcceptOutcome.Accepted, []);
     }

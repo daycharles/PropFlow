@@ -6,7 +6,7 @@ namespace PropFlow.Infrastructure.Identity;
 // PF-S01.04: reads/writes RoleCapabilityOverride rows and layers them onto Capabilities.ForRole
 // via RoleCapabilityMatrix.Effective. An organization with no override rows sees exactly today's
 // fixed behavior - this is additive, not a replacement of the default matrix.
-public sealed class RoleCapabilityService(IdentityStore store)
+public sealed class RoleCapabilityService(IdentityStore store, IdentityAuditLog audit)
 {
     public async Task<IReadOnlyList<string>> EffectiveCapabilitiesAsync(
         Guid organizationId, string role, Guid? employeeId, Guid? vendorId, CancellationToken ct)
@@ -32,8 +32,8 @@ public sealed class RoleCapabilityService(IdentityStore store)
     // Refuses only when the result would leave no *currently occupied* role in this organization
     // able to manage members - not a check on every possible role, which would forbid an
     // org from ever running with a single-role structure that never touched ManageMembers.
-    public async Task<SetOutcome> SetOverridesAsync(
-        Guid organizationId, string role, IReadOnlyCollection<string> grants, IReadOnlyCollection<string> revocations, CancellationToken ct)
+    public async Task<SetOutcome> SetOverridesAsync(Guid organizationId, string role,
+        IReadOnlyCollection<string> grants, IReadOnlyCollection<string> revocations, Guid actorUserId, CancellationToken ct)
     {
         var occupiedRoles = await store.Memberships.AsNoTracking()
             .Where(x => x.OrganizationId == organizationId && x.IsActive)
@@ -60,6 +60,8 @@ public sealed class RoleCapabilityService(IdentityStore store)
             store.RoleCapabilityOverrides.Add(new RoleCapabilityOverride { OrganizationId = organizationId, Role = role, Capability = capability, IsRevocation = false });
         foreach (var capability in revocations)
             store.RoleCapabilityOverrides.Add(new RoleCapabilityOverride { OrganizationId = organizationId, Role = role, Capability = capability, IsRevocation = true });
+        audit.Record(organizationId, IdentityAuditLog.EventTypes.RoleCapabilitiesChanged, actorUserId, null, role,
+            oldValue: null, newValue: $"grants=[{string.Join(',', grants)}] revocations=[{string.Join(',', revocations)}]");
         await store.SaveChangesAsync(ct);
         return SetOutcome.Applied;
     }

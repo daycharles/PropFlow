@@ -17,6 +17,7 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<IdentityAuditEntry> AuditEntries => Set<IdentityAuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -87,6 +88,20 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.HasIndex(x => new { x.UserId, x.OrganizationId });
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<IdentityAuditEntry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.TargetLabel).HasMaxLength(254);
+            entity.Property(x => x.OldValue).HasMaxLength(4000);
+            entity.Property(x => x.NewValue).HasMaxLength(4000);
+            entity.HasIndex(x => new { x.OrganizationId, x.OccurredAt });
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict (not cascade) on both user FKs: the audit trail must outlive the account it
+            // names, the same reasoning as Invitation.InvitedByUserId/AcceptedByUserId.
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.TargetUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

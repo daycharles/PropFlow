@@ -108,3 +108,26 @@ public sealed class UserSession
     public string? UserAgent { get; set; }
     public string? IpAddress { get; set; }
 }
+
+/// <summary>PF-S01.07: one append-only identity/membership-administration event - invitations
+/// sent, invitations accepted, a membership's role changed, a membership removed, or a role's
+/// capability overrides changed. Deliberately a single flat shape (mirroring
+/// <c>PropFlow.Domain.Timeline.TimelineEntry</c>'s "no event-specific columns" approach for the
+/// Work module) rather than one table per event type, since this is a control-plane audit trail
+/// read as a list, not a source of business logic. <see cref="ActorUserId"/> is null for the one
+/// action with no authenticated actor: a brand-new user accepting their own invitation.
+/// <see cref="TargetLabel"/> is free text identifying what changed when it isn't
+/// <see cref="TargetUserId"/> - an invited email address, or the role name for a
+/// <c>RoleCapabilitiesChanged</c> entry.</summary>
+public sealed class IdentityAuditEntry
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public string EventType { get; set; } = "";
+    public Guid? ActorUserId { get; set; }
+    public Guid? TargetUserId { get; set; }
+    public string? TargetLabel { get; set; }
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
