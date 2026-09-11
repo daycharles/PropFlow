@@ -27,6 +27,39 @@ public sealed class AuthenticationTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Password_recovery_queues_token_without_disclosing_account_and_resets_once()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.RefreshCsrfAsync();
+        var missing = await s.Client.PostAsJsonAsync("/api/auth/password-recovery/request",
+            new { organizationSlug = s.SlugA, email = "missing@example.test" });
+        Assert.Equal(HttpStatusCode.Accepted, missing.StatusCode);
+
+        var request = await s.Client.PostAsJsonAsync("/api/auth/password-recovery/request",
+            new { organizationSlug = s.SlugA, email = s.EmailA });
+        Assert.Equal(HttpStatusCode.Accepted, request.StatusCode);
+        using var comms = s.CommsAsAdmin(s.OrganizationA);
+        var message = await comms.OutboxMessages.OrderByDescending(x => x.CreatedAt).FirstAsync();
+        Assert.Equal(s.EmailA, message.RecipientAddress);
+        Assert.DoesNotContain("token", (await request.Content.ReadAsStringAsync()), StringComparison.OrdinalIgnoreCase);
+        var token = message.Body.Split("Reset token: ", StringSplitOptions.None)[1].Split('\n')[0];
+
+        var reset = await s.Client.PostAsJsonAsync("/api/auth/password-recovery/reset", new
+        {
+            organizationSlug = s.SlugA, email = s.EmailA, token, newPassword = "New!Password9999"
+        });
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+        await s.RefreshCsrfAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await s.AttemptLoginAsync(s.EmailA, s.OrganizationA, "New!Password9999")).StatusCode);
+        await s.RefreshCsrfAsync();
+        var reused = await s.Client.PostAsJsonAsync("/api/auth/password-recovery/reset", new
+        {
+            organizationSlug = s.SlugA, email = s.EmailA, token, newPassword = "Another!Password9999"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, reused.StatusCode);
+    }
+
+    [Fact]
     public async Task Anonymous_and_spoofed_header_requests_are_unauthorized()
     {
         await using var s = await fixture.CreateScenarioAsync();

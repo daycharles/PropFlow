@@ -14,6 +14,8 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /health/ready | 200 when database security/schema checks pass, otherwise 503 |
 | GET | /api/auth/csrf | Public; returns `{ "token": "..." }` and secure antiforgery cookie |
 | POST | /api/auth/login | CSRF required; organizationSlug/email/password; 204 success, 400 invalid input/CSRF, 401 rejected credentials or membership, 429 rate limit (10/min/IP; raised to 200/min under the Development posture so the e2e suite is not throttled — Testing and Production keep 10) |
+| POST | /api/auth/password-recovery/request | CSRF required; accepts organizationSlug/email and always returns 202; matching active members receive an expiring reset token through the tenant communications outbox |
+| POST | /api/auth/password-recovery/reset | CSRF required; accepts organizationSlug/email/token/newPassword; 204 on success or 400 for an invalid/expired/used token |
 | POST | /api/auth/logout | Auth + CSRF; 204; revokes all sessions for the current user |
 | GET | /api/session | Auth; userId, organizationId, role and capabilities |
 | GET | /api/work/ | Work.Read; filtered, sorted, paginated tenant-scoped work list (see below) |
@@ -37,8 +39,68 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | GET | /api/vendors/ | Work.Read; tenant-scoped vendor lookup; optional `?q=` name filter; flat array capped at 500 |
 | GET | /api/vendors/{id} | Work.Read; vendor lookup, or 404 |
 | GET | /api/employees/ | Work.Read; tenant-scoped employee lookup; optional `?q=` name filter; capped at 500 |
+| GET | /api/portfolios/ | Work.Read; tenant-scoped portfolio lookup; optional `?q=` name filter; flat array capped at 500 |
+| POST | /api/portfolios/ | Properties.Manage + CSRF; creates a tenant-scoped portfolio |
+| PUT | /api/portfolios/{id} | Properties.Manage + CSRF; renames a tenant-scoped portfolio |
+| POST | /api/portfolios/{id}/archive | Properties.Manage + CSRF; archives a portfolio from active lookups |
+| POST | /api/portfolios/{id}/restore | Properties.Manage + CSRF; restores an archived portfolio |
 | GET | /api/properties/ | Work.Read; tenant-scoped property lookup; optional `?q=` name filter; capped at 500 |
 | GET | /api/properties/{id} | Work.Read; property with its buildings and spaces, or 404 |
+| POST | /api/properties/ | Properties.Manage + CSRF; creates a property under a tenant-scoped portfolio |
+| PUT | /api/properties/{id} | Properties.Manage + CSRF; updates a property's name and IANA time zone |
+| POST | /api/properties/{id}/archive | Properties.Manage + CSRF; archives a property from active lookups |
+| POST | /api/properties/{id}/restore | Properties.Manage + CSRF; restores an archived property |
+| POST | /api/properties/{propertyId}/buildings | Properties.Manage + CSRF; creates a building in a property |
+| PUT | /api/properties/{propertyId}/buildings/{buildingId} | Properties.Manage + CSRF; renames a building in a property |
+| POST | /api/properties/{propertyId}/buildings/{buildingId}/archive | Properties.Manage + CSRF; archives a building from property detail |
+| POST | /api/properties/{propertyId}/buildings/{buildingId}/restore | Properties.Manage + CSRF; restores an archived building |
+| POST | /api/properties/{propertyId}/spaces | Properties.Manage + CSRF; creates a space, optionally under a building |
+| PUT | /api/properties/{propertyId}/spaces/{spaceId} | Properties.Manage + CSRF; updates a space code and building assignment |
+| GET/POST | /api/properties/{propertyId}/contacts | Read or add tenant-scoped property contacts |
+| GET/POST | /api/properties/{propertyId}/documents | Read or add tenant-scoped property document links |
+| POST | /api/properties/{propertyId}/spaces/{spaceId}/archive | Properties.Manage + CSRF; archives a space from property detail |
+| POST | /api/properties/{propertyId}/spaces/{spaceId}/restore | Properties.Manage + CSRF; restores an archived space |
+| GET | /api/marketing/listings/ | Work.Read; tenant-scoped listings, optionally filtered by property or status |
+| GET | /api/marketing/listings/{id} | Work.Read; listing detail, or 404 |
+| POST | /api/marketing/listings/ | Leasing.Manage + CSRF; creates a draft listing with availability and rent |
+| PUT | /api/marketing/listings/{id} | Leasing.Manage + CSRF; updates listing content and availability |
+| POST | /api/marketing/listings/{id}/publish | Leasing.Manage + CSRF; publishes a listing |
+| POST | /api/marketing/listings/{id}/unpublish | Leasing.Manage + CSRF; returns a published listing to draft |
+| GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry with optional lead-source attribution; active duplicate email inquiries return 409 |
+| PUT | /api/marketing/listings/{id}/inquiries/{inquiryId}/status | Leasing.Manage + CSRF; advances inquiry status |
+| GET/POST | /api/marketing/listings/{id}/showings | Read or request a showing for a published listing |
+| PUT | /api/marketing/listings/{id}/showings/{showingId}/status | Leasing.Manage + CSRF; updates showing status |
+| GET | /api/leasing/leases/ | Work.Read; tenant-scoped leases, optionally filtered by resident or space |
+| GET | /api/leasing/leases/{id} | Work.Read; lease detail, or 404 |
+| POST | /api/leasing/leases/ | Leasing.Manage + CSRF; creates a draft lease with resident, space, dates, and rent |
+| POST | /api/leasing/leases/{id}/activate | Leasing.Manage + CSRF; activates a draft lease |
+| POST | /api/leasing/leases/{id}/renew | Leasing.Manage + CSRF; records a renewal term and rent |
+| POST | /api/leasing/leases/{id}/notice | Leasing.Manage + CSRF; records renewal/move-out notice and due date |
+| POST | /api/leasing/leases/{id}/move-out | Leasing.Manage + CSRF; ends the lease on the supplied date |
+| POST | /api/leasing/leases/{id}/transfer | Leasing.Manage + CSRF; transfers an active lease and moves its occupancy |
+| GET | /api/leasing/leases/{id}/notices | Work.Read; notices attached to the lease |
+| GET/POST | /api/leasing/leases/{id}/parties | Read or add additional tenant-scoped lease parties |
+| GET/POST | /api/leasing/leases/{id}/documents | Read or add lease document links |
+| POST | /api/leasing/leases/{id}/documents/{documentId}/send | Leasing.Manage + CSRF; sends a draft lease document |
+| POST | /api/leasing/leases/{id}/documents/{documentId}/sign | Leasing.Manage + CSRF; records a signature and timestamp |
+| GET | /api/portal/me | ResidentPortal.Read; the bound resident, current occupancy, leases, and resident-visible requests |
+| POST | /api/portal/service-requests | ResidentPortal.Request + CSRF; creates a maintenance request only for the resident's current space |
+| PUT | /api/portal/profile | ResidentPortal.Request + CSRF; updates the authenticated resident's own contact profile |
+| PUT | /api/portal/preferences | ResidentPortal.Request + CSRF; updates the authenticated resident's email/SMS consent choices |
+| POST | /api/portal/household-members | ResidentPortal.Request + CSRF; adds a household member to the authenticated resident's profile |
+| GET | /api/portal/documents | ResidentPortal.Read; lists resident-visible documents attached to the resident's work |
+| GET | /api/portal/documents/{attachmentId} | ResidentPortal.Read; downloads a document only when it belongs to the authenticated resident |
+| GET | /api/portal/lease-documents | ResidentPortal.Read; lists resident-visible lease document links for the authenticated resident |
+| GET/POST | /api/portal/payments | ResidentPortal.Read/Request; lists or submits a payment for the authenticated resident's own lease |
+| GET | /api/leasing/leases/payments | Work.Read; lists tenant-scoped resident payments |
+| POST | /api/leasing/leases/payments/{paymentId}/settle | Leasing.Manage + CSRF; settles a submitted payment |
+| GET/POST | /api/leasing/leases/{id}/charges | Read or add recurring/one-time lease charges |
+| GET | /api/portal/charges | ResidentPortal.Read; lists charges for the authenticated resident's leases |
+| GET | /api/portal/announcements | ResidentPortal.Read; lists active published announcements for the resident's organization |
+| GET | /api/announcements | Work.Read; manager announcement records |
+| POST | /api/announcements | Leasing.Manage + CSRF; creates a draft announcement |
+| POST | /api/announcements/{id}/publish | Leasing.Manage + CSRF; publishes an announcement to the resident portal |
+| POST | /api/announcements/{id}/archive | Leasing.Manage + CSRF; archives an announcement |
 | GET | /api/categories/ | Work.Read; tenant-scoped categories ordered by sort order/name |
 | POST | /api/categories/ | Settings.ManageCategories + CSRF; creates a category |
 | PUT | /api/categories/{id} | Settings.ManageCategories + CSRF; renames/reorders a category |

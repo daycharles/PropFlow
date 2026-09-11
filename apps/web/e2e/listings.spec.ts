@@ -1,0 +1,43 @@
+import { expect, test } from "@playwright/test";
+
+const password = process.env.PLAYWRIGHT_DEMO_PASSWORD ?? "DemoPassword!123";
+
+test("leasing user creates and publishes a listing", async ({ page }) => {
+  const headline = `Browser Listing ${Date.now()}`;
+  await page.goto("/");
+  await page.getByLabel("Organization slug").fill("tidewater-demo");
+  await page.getByLabel("Email").fill("demo-admin@tidewater.example.test");
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Listings" }).click();
+  await page.getByLabel("Listing property").selectOption({ label: "Harbor View Apartments" });
+  await page.getByLabel("Listing headline").fill(headline);
+  await page.getByLabel("Monthly rent").fill("1850");
+  await page.getByRole("button", { name: "Create listing" }).click();
+  await expect(page.getByText("Listing created.")).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: headline });
+  await expect(row).toContainText("Draft");
+  await row.getByRole("button", { name: "Publish" }).click();
+  await expect(row).toContainText("Published");
+  await row.getByRole("button", { name: "Activity" }).click();
+  await page.getByLabel("Prospect name").fill("Taylor Prospect");
+  await page.getByLabel("Prospect email").fill(`taylor-${Date.now()}@example.test`);
+  await page.getByLabel("Inquiry message").fill("I would like to learn more.");
+  await page.getByLabel("Inquiry lead source").fill("Website");
+  await page.getByRole("button", { name: "Record inquiry" }).click();
+  await expect(page.getByText("Inquiry recorded.")).toBeVisible();
+  await page.getByRole("button", { name: "Convert to applicant" }).click();
+  await expect(page.getByText(/Taylor Prospect.*New/)).toBeVisible();
+  await page.getByRole("button", { name: "Start screening" }).click();
+  await expect(page.getByText(/Taylor Prospect.*Screening/)).toBeVisible();
+  await expect(page.getByText(/Taylor Prospect .*New .*source: Website/)).toBeVisible();
+  await page.getByRole("button", { name: "Mark contacted" }).click();
+  await expect(page.getByText(/Taylor Prospect .*Contacted/)).toBeVisible();
+  await page.getByLabel("Showing prospect").fill("Taylor Prospect");
+  await page.getByLabel("Showing date").fill("2027-01-15T10:00");
+  await page.getByRole("button", { name: "Request showing" }).click();
+  await expect(page.getByText("Showing requested.")).toBeVisible();
+  await expect(page.getByText(/Taylor Prospect .*Requested/)).toBeVisible();
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText(/Taylor Prospect .*Confirmed/)).toBeVisible();
+});

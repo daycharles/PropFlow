@@ -106,7 +106,35 @@ internal static class DemoSeeder
             "demo-admin@isolation.example.test", password);
         await PropFlow.Admin.TidewaterSeed.SeedAsync(adminConnection, primary.OrganizationId, primary.UserId);
         await EnsureTechnicianAsync(identity, users, adminConnection, primary.OrganizationId, password);
+        await EnsureResidentPortalUserAsync(identity, users, adminConnection, primary.OrganizationId, password);
         await SeedOperationsAsync(adminConnection, secondary.OrganizationId, secondary.UserId, "Isolation", "Private Place", "A1");
+    }
+
+    private static async Task EnsureResidentPortalUserAsync(IdentityStore identity, UserManager<ApplicationUser> users,
+        string adminConnection, Guid organizationId, string password)
+    {
+        const string email = "demo-resident@tidewater.example.test";
+        await using var operations = DatabaseProvisioner.CreateOperationsStore(adminConnection, organizationId);
+        var residentId = await (from resident in operations.Residents
+                                join occupancy in operations.Occupancies on resident.Id equals occupancy.ResidentId
+                                where occupancy.MovedOutOn == null
+                                orderby resident.FullName
+                                select resident.Id).FirstAsync();
+        var user = await users.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, LockoutEnabled = true };
+            var created = await users.CreateAsync(user, password);
+            if (!created.Succeeded) throw new ArgumentException(string.Join("; ", created.Errors.Select(x => x.Code)));
+        }
+        var membership = await identity.Memberships.SingleOrDefaultAsync(x => x.OrganizationId == organizationId && x.UserId == user.Id);
+        if (membership is null)
+            identity.Memberships.Add(new OrganizationMembership { OrganizationId = organizationId, UserId = user.Id, Role = "Resident", ResidentId = residentId });
+        else
+        {
+            membership.Role = "Resident"; membership.ResidentId = residentId; membership.EmployeeId = null; membership.VendorId = null; membership.IsActive = true;
+        }
+        await identity.SaveChangesAsync();
     }
 
     private static async Task EnsureTechnicianAsync(IdentityStore identity, UserManager<ApplicationUser> users,
