@@ -19,6 +19,17 @@ public sealed class ComplianceRiskTests
     }
 
     [Fact]
+    public void Non_recurring_obligation_with_max_date_cutoff_returns_once()
+    {
+        var obligation = new ComplianceObligation(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "One-time inspection", DateOnly.MaxValue, 0);
+
+        var occurrences = ComplianceRecurrenceGenerator.DueThrough(obligation, DateOnly.MaxValue);
+
+        var occurrence = Assert.Single(occurrences);
+        Assert.Equal(DateOnly.MaxValue, occurrence.DueOn);
+    }
+
+    [Fact]
     public void Incident_transitions_are_append_only_and_audited()
     {
         var actor = Guid.NewGuid();

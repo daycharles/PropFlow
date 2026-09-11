@@ -13,9 +13,10 @@ public static class ComplianceRecurrenceGenerator
         while (due <= through)
         {
             results.Add(new(obligation.Id, due, ComplianceObligation.OccurrenceKey(obligation.Id, due)));
-            due = obligation.Recurrence == ComplianceRecurrence.None
-                ? DateOnly.MaxValue
-                : obligation.Advance(due);
+            if (obligation.Recurrence == ComplianceRecurrence.None)
+                break;
+
+            due = obligation.Advance(due);
             if (obligation.RecurrenceEndOn is { } end && due > end) break;
         }
         return results;
