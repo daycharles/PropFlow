@@ -37,6 +37,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddSingleton<IAttachmentStorage, LocalAttachmentStorage>();
+builder.Services.AddSingleton<AttachmentRetentionSweep>();
+// The retention sweep is off under integration tests, which drive AttachmentRetentionSweep directly.
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<AttachmentRetentionService>();
 
 // Data Protection secures the auth and antiforgery cookies. In a real deployment the key ring
 // must persist and be shared across instances (and encrypted at rest); Development/Testing keep

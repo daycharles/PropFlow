@@ -9,6 +9,7 @@ import {
   api,
   ApiError,
   type Asset,
+  type Attachment,
   type Employee,
   type Session,
   type TimelineEntry,
@@ -73,6 +74,8 @@ function Detail({ session, id }: { session: Session; id: string }) {
   const [confirm, setConfirm] = useState<"status" | "schedule" | "vendor" | "employee" | null>(
     null,
   );
+  const [attachmentsNonce, setAttachmentsNonce] = useState(0);
+  const canManageAttachments = hasCapability(session, "Work.ManageAttachments");
 
   async function load() {
     setError("");
@@ -182,6 +185,19 @@ function Detail({ session, id }: { session: Session; id: string }) {
     setWork((current) => (current ? { ...current, [key]: value } : current));
     setNotice("");
   }
+  async function uploadPhoto(file: File) {
+    setSaving(true);
+    setError("");
+    try {
+      await api.work.attachments.upload(id, file, { residentVisible: false });
+      setNotice("Photo attached");
+      setAttachmentsNonce((value) => value + 1);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "The photo could not be uploaded.");
+    } finally {
+      setSaving(false);
+    }
+  }
   if (error && !work)
     return (
       <section className="panel">
@@ -221,7 +237,13 @@ function Detail({ session, id }: { session: Session; id: string }) {
         </p>
       )}
       {isTechnician && (
-        <TechnicianQuickActions work={work} saving={saving} onChange={change} onSave={save} />
+        <TechnicianQuickActions
+          work={work}
+          saving={saving}
+          onChange={change}
+          onSave={save}
+          onUploadPhoto={canManageAttachments ? uploadPhoto : undefined}
+        />
       )}
       <form className="detail-grid" onSubmit={save}>
         <section className="panel">
@@ -431,6 +453,7 @@ function Detail({ session, id }: { session: Session; id: string }) {
           </label>
         </section>
       </form>
+      <Attachments key={attachmentsNonce} workId={id} canManage={canManageAttachments} />
       <section className="panel timeline">
         <h2>Timeline</h2>
         {timeline.length ? (
@@ -503,11 +526,13 @@ function TechnicianQuickActions({
   saving,
   onChange,
   onSave,
+  onUploadPhoto,
 }: {
   work: WorkDetail;
   saving: boolean;
   onChange: <K extends keyof WorkDetail>(key: K, value: WorkDetail[K]) => void;
   onSave: () => Promise<void>;
+  onUploadPhoto?: (file: File) => Promise<void>;
 }) {
   return (
     <section className="panel technician-quick-actions" aria-label="Technician actions">
@@ -540,14 +565,147 @@ function TechnicianQuickActions({
         <button type="button" disabled={saving} onClick={() => void onSave()}>
           {saving ? "Saving…" : "Save update"}
         </button>
-        <label className="photo-action">
-          <span>Add photo</span>
-          <input type="file" accept="image/*" capture="environment" disabled />
-        </label>
+        {onUploadPhoto && (
+          <label className="photo-action">
+            <span>{saving ? "Working…" : "Add photo"}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic"
+              capture="environment"
+              disabled={saving}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void onUploadPhoto(file);
+              }}
+            />
+          </label>
+        )}
       </div>
       <p className="hint photo-note">
-        Photo attachments will be available when work-media storage is enabled.
+        Photos are attached to this work order as internal files. Manage them in the Attachments
+        section below.
       </p>
+    </section>
+  );
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Attachments({ workId, canManage }: { workId: string; canManage: boolean }) {
+  const [items, setItems] = useState<Attachment[] | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [residentVisible, setResidentVisible] = useState(false);
+
+  const load = () =>
+    api.work.attachments
+      .list(workId)
+      .then(setItems)
+      .catch(() => setError("Unable to load attachments."));
+  useEffect(() => {
+    void load();
+    // load uses workId from this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workId]);
+
+  async function upload(file: File) {
+    setError("");
+    setBusy(true);
+    try {
+      await api.work.attachments.upload(workId, file, { residentVisible });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "The file could not be uploaded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setError("");
+    setBusy(true);
+    try {
+      await api.work.attachments.remove(workId, id);
+      setItems((current) => current?.filter((item) => item.id !== id) ?? null);
+    } catch {
+      setError("The file could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel attachments">
+      <h2>Attachments</h2>
+      <p className="hint">
+        Photos and documents for this work order. Mark a file resident-visible only if it is safe to
+        share externally.
+      </p>
+      {error && (
+        <p className="message" role="alert">
+          {error}
+        </p>
+      )}
+      {items === null ? (
+        <p>Loading attachments…</p>
+      ) : items.length === 0 ? (
+        <p>No files attached yet.</p>
+      ) : (
+        <ul className="attachment-list">
+          {items.map((item) => (
+            <li key={item.id}>
+              <a href={api.work.attachments.downloadUrl(workId, item.id)}>{item.fileName}</a>
+              <span className="attachment-meta">
+                {formatBytes(item.length)}
+                {item.residentVisible ? (
+                  <span className="visibility-marker">Resident-visible</span>
+                ) : null}
+              </span>
+              {canManage && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  aria-label={`Remove ${item.fileName}`}
+                  onClick={() => void remove(item.id)}
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canManage && (
+        <div className="attachment-upload">
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={residentVisible}
+              onChange={(event) => setResidentVisible(event.target.checked)}
+            />
+            Resident-visible
+          </label>
+          <label className="photo-action">
+            <span>{busy ? "Uploading…" : "Add file"}</span>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/heic"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+        </div>
+      )}
     </section>
   );
 }

@@ -283,6 +283,54 @@ td small {
 .photo-note {
   margin-bottom: 0;
 }
+.photo-action {
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  background: var(--surface, #fff);
+  font-weight: 600;
+}
+.photo-action:has(input:disabled) {
+  opacity: 0.6;
+  cursor: progress;
+}
+.attachments .hint {
+  margin-top: 0;
+}
+.attachment-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.attachment-list li a {
+  font-weight: 600;
+}
+.attachment-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+}
+.attachment-list li button {
+  margin-left: auto;
+}
+.attachment-upload {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
 .bulk-toolbar {
   flex-wrap: wrap;
   margin: 14px 0;

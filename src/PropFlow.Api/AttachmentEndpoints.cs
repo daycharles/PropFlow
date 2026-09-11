@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Application.Attachments;
 using PropFlow.Domain.Work;
+using PropFlow.Infrastructure.Identity;
 using PropFlow.Infrastructure.Persistence;
+using static PropFlow.Api.WorkScopeAccess;
 
 namespace PropFlow.Api;
 
@@ -20,17 +23,29 @@ public static class AttachmentEndpoints
     {
         var group = app.MapGroup("/api/work/{workId:guid}/attachments").RequireAuthorization(Capabilities.ReadWork);
 
-        group.MapGet("/", async (Guid workId, OperationsStore store, CancellationToken ct) =>
+        // The work item is resolved through the tenant query filter, then narrowed to the caller's
+        // assigned work when they are a field role — a technician only sees and touches the
+        // attachments on their own jobs, same rule as GET /api/work/{id}.
+        static async Task<WorkItem?> ReachableWorkAsync(Guid workId, ClaimsPrincipal user,
+            MembershipAccess memberships, OperationsStore store, CancellationToken ct)
         {
-            if (!await store.WorkItems.AnyAsync(x => x.Id == workId, ct)) return Results.NotFound();
+            var work = await store.WorkItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == workId, ct);
+            return work is not null && await AllowsAsync(work, user, memberships, ct) ? work : null;
+        }
+
+        group.MapGet("/", async (Guid workId, ClaimsPrincipal user, MembershipAccess memberships,
+            OperationsStore store, CancellationToken ct) =>
+        {
+            if (await ReachableWorkAsync(workId, user, memberships, store, ct) is null) return Results.NotFound();
             var attachments = await store.Attachments.AsNoTracking().Where(x => x.WorkId == workId)
                 .OrderByDescending(x => x.CreatedAt).Select(x => ToResponse(x)).ToListAsync(ct);
             return Results.Ok(attachments);
         });
 
-        group.MapGet("/{attachmentId:guid}", async (Guid workId, Guid attachmentId, OperationsStore store,
-            IAttachmentStorage storage, CancellationToken ct) =>
+        group.MapGet("/{attachmentId:guid}", async (Guid workId, Guid attachmentId, ClaimsPrincipal user,
+            MembershipAccess memberships, OperationsStore store, IAttachmentStorage storage, CancellationToken ct) =>
         {
+            if (await ReachableWorkAsync(workId, user, memberships, store, ct) is null) return Results.NotFound();
             var attachment = await store.Attachments.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == attachmentId && x.WorkId == workId, ct);
             if (attachment is null) return Results.NotFound();
@@ -38,10 +53,11 @@ public static class AttachmentEndpoints
             return content is null ? Results.NotFound() : Results.File(content, attachment.ContentType, attachment.FileName);
         });
 
-        group.MapPost("/", async (Guid workId, HttpRequest request, OperationsStore store,
-            IAttachmentStorage storage, ITenantContext tenant, TimeProvider clock, CancellationToken ct) =>
+        group.MapPost("/", async (Guid workId, HttpRequest request, ClaimsPrincipal user,
+            MembershipAccess memberships, OperationsStore store, IAttachmentStorage storage, ITenantContext tenant,
+            TimeProvider clock, CancellationToken ct) =>
         {
-            if (!await store.WorkItems.AnyAsync(x => x.Id == workId, ct)) return Results.NotFound();
+            if (await ReachableWorkAsync(workId, user, memberships, store, ct) is null) return Results.NotFound();
             if (!request.HasFormContentType) return Results.Problem(statusCode: 400, title: "Multipart form data is required");
             var form = await request.ReadFormAsync(ct);
             var file = form.Files.GetFile("file");
@@ -69,7 +85,7 @@ public static class AttachmentEndpoints
                 await using var input = file.OpenReadStream();
                 await storage.StoreAsync(storageKey, input, ct);
                 attachment = Attachment.Create(tenant.OrganizationId, id, workId, fileName, contentType,
-                file.Length, storageKey, residentVisible, clock.GetUtcNow(), retainUntil);
+                    file.Length, storageKey, residentVisible, clock.GetUtcNow(), retainUntil);
                 store.Attachments.Add(attachment);
                 await store.SaveChangesAsync(ct);
             }
@@ -81,9 +97,10 @@ public static class AttachmentEndpoints
             return Results.Created($"/api/work/{workId}/attachments/{id}", ToResponse(attachment));
         }).RequireAuthorization(Capabilities.ManageAttachments);
 
-        group.MapDelete("/{attachmentId:guid}", async (Guid workId, Guid attachmentId, OperationsStore store,
-            IAttachmentStorage storage, CancellationToken ct) =>
+        group.MapDelete("/{attachmentId:guid}", async (Guid workId, Guid attachmentId, ClaimsPrincipal user,
+            MembershipAccess memberships, OperationsStore store, IAttachmentStorage storage, CancellationToken ct) =>
         {
+            if (await ReachableWorkAsync(workId, user, memberships, store, ct) is null) return Results.NotFound();
             var attachment = await store.Attachments.SingleOrDefaultAsync(x => x.Id == attachmentId && x.WorkId == workId, ct);
             if (attachment is null) return Results.NotFound();
             store.Attachments.Remove(attachment);

@@ -36,6 +36,15 @@ export type WorkDetail = WorkItem & {
   residentVisibleNotes?: string | null;
   version: number;
 };
+export type Attachment = {
+  id: string;
+  fileName: string;
+  contentType: string;
+  length: number;
+  residentVisible: boolean;
+  createdAt: string;
+  retainUntil?: string | null;
+};
 export type TimelineEntry = {
   id: string;
   eventType?: string | null;
@@ -467,6 +476,37 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId }),
       }),
+    // Attachments (PF-7.01). Upload is multipart — no Content-Type header, fetch sets the
+    // boundary. Download is a plain GET the browser handles; `downloadUrl` is a same-origin
+    // href, cookies carry the session, no CSRF needed for the read.
+    attachments: {
+      list: (workId: string) => request<Attachment[]>(`/api/work/${workId}/attachments/`),
+      upload: async (
+        workId: string,
+        file: File,
+        options: { residentVisible: boolean; retainUntil?: string },
+      ) => {
+        const token = csrfToken ?? (await csrf());
+        const form = new FormData();
+        form.append("file", file);
+        form.append("residentVisible", String(options.residentVisible));
+        if (options.retainUntil) form.append("retainUntil", options.retainUntil);
+        return request<Attachment>(`/api/work/${workId}/attachments/`, {
+          method: "POST",
+          headers: { "X-CSRF-TOKEN": token },
+          body: form,
+        });
+      },
+      remove: async (workId: string, attachmentId: string) => {
+        const token = csrfToken ?? (await csrf());
+        return request<void>(`/api/work/${workId}/attachments/${attachmentId}`, {
+          method: "DELETE",
+          headers: { "X-CSRF-TOKEN": token },
+        });
+      },
+      downloadUrl: (workId: string, attachmentId: string) =>
+        `/api/work/${workId}/attachments/${attachmentId}`,
+    },
   },
   communication: {
     templates: { list: () => request<MessageTemplate[]>("/api/communication/templates/") },

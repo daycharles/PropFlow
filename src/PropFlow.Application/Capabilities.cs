@@ -18,8 +18,8 @@ public static class Capabilities
     public const string ManageAttachments = "Work.ManageAttachments";
 
     public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments];
-    private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets];
-    private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets];
+    private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
+    private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
     public static IReadOnlyList<string> ForRole(string role, Guid? employeeId = null, Guid? vendorId = null) => role switch
     {
@@ -29,7 +29,7 @@ public static class Capabilities
         "Read Only" => [ReadWork],
         // A field role is not usable until the control-plane membership names the employee/vendor
         // it represents. Endpoint scope checks then narrow this capability to assigned work.
-        "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay],
+        "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay, ManageAttachments],
         "Vendor" when vendorId is not null => [ReadWork],
         "Technician" or "Vendor" => [],
         _ => []

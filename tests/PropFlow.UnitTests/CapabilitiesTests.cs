@@ -58,12 +58,24 @@ public sealed class CapabilitiesTests
     }
 
     [Fact]
-    public void Field_roles_receive_read_only_when_bound_to_their_field_identity()
+    public void Field_roles_receive_a_narrow_set_when_bound_to_their_field_identity()
     {
-        Assert.Equal([Capabilities.ReadWork, Capabilities.MarkOnTheWay], Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
+        // A bound technician can read, mark on the way, and attach photos to their own work; the
+        // endpoint scope check narrows all three to assigned work. A vendor stays read-only.
+        Assert.Equal([Capabilities.ReadWork, Capabilities.MarkOnTheWay, Capabilities.ManageAttachments],
+            Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
         Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
         Assert.Empty(Capabilities.ForRole("Technician", vendorId: Guid.NewGuid()));
         Assert.Empty(Capabilities.ForRole("Vendor", employeeId: Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void Attachment_management_reaches_the_hands_on_work_roles_but_not_read_only()
+    {
+        foreach (var role in new[] { "Organization Admin", "Property Manager", "Regional Manager", "Maintenance Supervisor" })
+            Assert.Contains(Capabilities.ManageAttachments, Capabilities.ForRole(role));
+        Assert.DoesNotContain(Capabilities.ManageAttachments, Capabilities.ForRole("Read Only"));
+        Assert.DoesNotContain(Capabilities.ManageAttachments, Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
     }
 
     [Fact]
