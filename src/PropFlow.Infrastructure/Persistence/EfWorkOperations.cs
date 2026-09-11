@@ -359,7 +359,7 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
     {
         if (fields is null || fields.Count == 0) return;
         var definitions = await store.CustomFieldDefinitions
-            .Where(x => x.AppliesTo == CustomFieldAppliesTo.WorkItem)
+            .Where(x => x.AppliesTo == ConfigurationEntityType.WorkItem)
             .ToDictionaryAsync(x => x.Key, ct);
         var existing = await store.CustomFieldValues.Where(x => x.WorkId == workId)
             .ToDictionaryAsync(x => x.CustomFieldDefinitionId, ct);

@@ -109,7 +109,7 @@ public sealed class CustomFieldTests(DatabaseFixture fixture)
         await using (var admin = s.AdminStore(s.OrganizationA))
         {
             admin.CustomFieldDefinitions.Add(new PropFlow.Domain.Configuration.CustomFieldDefinition(
-                s.OrganizationA, Guid.NewGuid(), "org_a_only", "Org A only", PropFlow.Domain.Configuration.CustomFieldAppliesTo.WorkItem,
+                s.OrganizationA, Guid.NewGuid(), "org_a_only", "Org A only", PropFlow.Domain.Configuration.ConfigurationEntityType.WorkItem,
                 PropFlow.Domain.Configuration.CustomFieldType.Text, null, false, 0, DateTimeOffset.UtcNow));
             await admin.SaveChangesAsync();
         }

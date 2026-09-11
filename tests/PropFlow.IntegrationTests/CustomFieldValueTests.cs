@@ -15,7 +15,7 @@ public sealed class CustomFieldValueTests(DatabaseFixture fixture)
         IReadOnlyList<string>? options = null, bool isRequired = false)
     {
         await using var store = s.AdminStore(s.OrganizationA);
-        var definition = new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), key, key, CustomFieldAppliesTo.WorkItem,
+        var definition = new CustomFieldDefinition(s.OrganizationA, Guid.NewGuid(), key, key, ConfigurationEntityType.WorkItem,
             type, options, isRequired, 0, DateTimeOffset.UtcNow);
         store.CustomFieldDefinitions.Add(definition);
         await store.SaveChangesAsync();

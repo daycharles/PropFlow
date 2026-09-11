@@ -5,9 +5,8 @@ namespace PropFlow.Domain.Configuration;
 // PF-S03.01. v1 is deliberately closed, the same call the automation engine's condition/action
 // vocabulary made (PropFlow.Domain.Automation.AutomationRule): an organization picks from a
 // fixed set of field types rather than authoring a schema or an expression, so a custom field
-// can never become an executable surface. AppliesTo starts with WorkItem only; a second entity
-// type is a vocabulary addition here, not a redesign.
-public enum CustomFieldAppliesTo { WorkItem }
+// can never become an executable surface. AppliesTo (ConfigurationEntityType) starts with
+// WorkItem only; a second entity type is a vocabulary addition, not a redesign.
 public enum CustomFieldType { Text, Number, Date, Boolean, SingleSelect }
 
 public sealed class CustomFieldDefinition : TenantEntity
@@ -15,7 +14,7 @@ public sealed class CustomFieldDefinition : TenantEntity
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public CustomFieldDefinition(Guid organizationId, Guid id, string key, string name,
-        CustomFieldAppliesTo appliesTo, CustomFieldType fieldType, IReadOnlyList<string>? options,
+        ConfigurationEntityType appliesTo, CustomFieldType fieldType, IReadOnlyList<string>? options,
         bool isRequired, int sortOrder, DateTimeOffset createdAt)
         : base(organizationId, id)
     {
@@ -38,7 +37,7 @@ public sealed class CustomFieldDefinition : TenantEntity
 
     public string Key { get; private set; } = "";
     public string Name { get; private set; } = "";
-    public CustomFieldAppliesTo AppliesTo { get; private set; }
+    public ConfigurationEntityType AppliesTo { get; private set; }
     public CustomFieldType FieldType { get; private set; }
     public string Options { get; private set; } = "[]";
     public bool IsRequired { get; private set; }

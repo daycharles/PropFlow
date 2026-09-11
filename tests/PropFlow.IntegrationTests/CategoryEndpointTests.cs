@@ -66,4 +66,32 @@ public sealed class CategoryEndpointTests(DatabaseFixture fixture)
         var response = await s.Client.PostAsJsonAsync("/api/categories", new { name = "Nope", sortOrder = 0 });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    // PF-S03.03: AppliesTo defaults to WorkItem, so every test above (all written before this
+    // field existed) still passes unchanged; these cover the field itself.
+    [Fact]
+    public async Task A_category_created_without_appliesTo_defaults_to_WorkItem()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+
+        var created = await (await s.Client.PostAsJsonAsync("/api/categories", new { name = "Legacy caller", sortOrder = 0 }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("WorkItem", created.GetProperty("appliesTo").GetString());
+
+        var list = await s.Client.GetFromJsonAsync<JsonElement[]>("/api/categories");
+        Assert.Contains(list!, c => c.GetProperty("name").GetString() == "Legacy caller" && c.GetProperty("appliesTo").GetString() == "WorkItem");
+    }
+
+    [Fact]
+    public async Task A_duplicate_name_for_the_same_entity_type_is_a_409()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await s.LoginAsync();
+
+        var first = await s.Client.PostAsJsonAsync("/api/categories", new { name = "Dup", sortOrder = 0, appliesTo = "WorkItem" });
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var second = await s.Client.PostAsJsonAsync("/api/categories", new { name = "Dup", sortOrder = 1, appliesTo = "WorkItem" });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
 }
