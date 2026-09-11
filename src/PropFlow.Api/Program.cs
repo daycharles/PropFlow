@@ -206,6 +206,7 @@ app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
 app.MapLeasingEndpoints();
 app.MapResidentPortalEndpoints();
+app.MapAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();

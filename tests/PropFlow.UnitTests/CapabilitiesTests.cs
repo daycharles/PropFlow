@@ -51,6 +51,23 @@ public sealed class CapabilitiesTests
         Assert.DoesNotContain(Capabilities.ManageMembers, Capabilities.ForRole("Read Only"));
     }
 
+    // FS-S09. The decision this pins: the ledger reaches Property Manager as well as Organization
+    // Admin, and nobody else. There is no Accountant/Controller role in the fixed matrix, so
+    // excluding PM would leave Organization Admin as the only role that can post a journal at all;
+    // an organization that wants accounting off its PMs revokes Accounting.Manage for that role
+    // through RoleCapabilityOverrides (PF-S01.04) rather than through a code change.
+    [Fact]
+    public void Only_admin_and_property_manager_reach_the_general_ledger()
+    {
+        Assert.Contains(Capabilities.ManageAccounting, Capabilities.ForRole("Organization Admin"));
+        Assert.Contains(Capabilities.ManageAccounting, Capabilities.ForRole("Property Manager"));
+        foreach (var role in new[] { "Regional Manager", "Maintenance Supervisor", "Read Only" })
+            Assert.DoesNotContain(Capabilities.ManageAccounting, Capabilities.ForRole(role));
+        Assert.DoesNotContain(Capabilities.ManageAccounting, Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()));
+        Assert.DoesNotContain(Capabilities.ManageAccounting, Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
+        Assert.DoesNotContain(Capabilities.ManageAccounting, Capabilities.ForRole("Resident"));
+    }
+
     [Fact]
     public void Read_only_role_can_only_read_work()
     {
