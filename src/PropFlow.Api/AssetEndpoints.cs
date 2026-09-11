@@ -48,6 +48,73 @@ public static class AssetEndpoints
                 history.Count, history.Sum(x => x.Cost ?? 0m), history));
         });
 
+        group.MapGet("/{id:guid}/lifecycle", async (Guid id, int? warrantyAlertDays, OperationsStore store,
+            TimeProvider clock, CancellationToken ct) =>
+        {
+            var asset = await store.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (asset is null) return Results.NotFound();
+            var costs = await store.AssetLifecycleCosts.AsNoTracking().Where(x => x.AssetId == id).ToListAsync(ct);
+            var asOf = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.Date);
+            return Results.Ok(AssetLifecycleService.PlanReplacement(asset, asOf, warrantyAlertDays ?? 90, costs));
+        });
+
+        group.MapGet("/{id:guid}/maintenance-plans", async (Guid id, OperationsStore store, CancellationToken ct) =>
+            Results.Ok(await store.PreventiveMaintenancePlans.AsNoTracking().Where(x => x.AssetId == id)
+                .OrderBy(x => x.Name).ToListAsync(ct)));
+
+        group.MapPost("/{id:guid}/maintenance-plans", async (Guid id, MaintenancePlanRequest request,
+            OperationsStore store, ITenantContext tenant, CancellationToken ct) =>
+        {
+            try
+            {
+                if (!await store.Assets.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return Results.NotFound();
+                var plan = new PreventiveMaintenancePlan(tenant.OrganizationId, Guid.NewGuid(), id, request.Name,
+                    request.Recurrence, request.FirstDueOn);
+                store.PreventiveMaintenancePlans.Add(plan);
+                await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/assets/{id}/maintenance-plans/{plan.Id}", plan);
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageAssets);
+
+        group.MapGet("/{id:guid}/meters", async (Guid id, OperationsStore store, CancellationToken ct) =>
+            Results.Ok(await store.MeterReadings.AsNoTracking().Where(x => x.AssetId == id)
+                .OrderByDescending(x => x.ReadOn).ThenBy(x => x.MeterName).Take(500).ToListAsync(ct)));
+
+        group.MapPost("/{id:guid}/meters", async (Guid id, MeterReadingRequest request, OperationsStore store,
+            ITenantContext tenant, CancellationToken ct) =>
+        {
+            try
+            {
+                if (!await store.Assets.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return Results.NotFound();
+                var reading = new MeterReading(tenant.OrganizationId, Guid.NewGuid(), id, request.MeterName,
+                    request.Unit, request.Reading, request.ReadOn);
+                store.MeterReadings.Add(reading);
+                await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/assets/{id}/meters/{reading.Id}", reading);
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageAssets);
+
+        group.MapGet("/{id:guid}/lifecycle-costs", async (Guid id, OperationsStore store, CancellationToken ct) =>
+            Results.Ok(await store.AssetLifecycleCosts.AsNoTracking().Where(x => x.AssetId == id)
+                .OrderByDescending(x => x.IncurredOn).ToListAsync(ct)));
+
+        group.MapPost("/{id:guid}/lifecycle-costs", async (Guid id, LifecycleCostRequest request,
+            OperationsStore store, ITenantContext tenant, CancellationToken ct) =>
+        {
+            try
+            {
+                if (!await store.Assets.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return Results.NotFound();
+                var cost = new AssetLifecycleCost(tenant.OrganizationId, Guid.NewGuid(), id, request.Type,
+                    request.Amount, request.IncurredOn, request.Description, request.WorkItemId);
+                store.AssetLifecycleCosts.Add(cost);
+                await store.SaveChangesAsync(ct);
+                return Results.Created($"/api/assets/{id}/lifecycle-costs/{cost.Id}", cost);
+            }
+            catch (ArgumentException exception) { return Results.Problem(statusCode: 400, title: exception.Message); }
+        }).RequireAuthorization(Capabilities.ManageAssets);
+
         // The organization's repeat-repair thresholds (PF-6.04). The defaults apply until one is set.
         group.MapGet("/repeat-repair-policy", async (IRepeatRepairDetector detector, CancellationToken ct) =>
             Results.Ok(await detector.GetPolicyAsync(ct)));
@@ -130,6 +197,9 @@ public sealed record AssetHistoryResponse(Asset Asset, int? AgeInYears, bool Und
     int WorkOrderCount, decimal TotalCost, IReadOnlyList<AssetWorkHistoryItem> History);
 
 public sealed record RepeatRepairPolicyRequest(int RepairThreshold, int WindowDays, bool MatchByCategory);
+public sealed record MaintenancePlanRequest(string Name, MaintenanceRecurrence Recurrence, DateOnly FirstDueOn);
+public sealed record MeterReadingRequest(string MeterName, MeterUnit Unit, decimal Reading, DateOnly ReadOn);
+public sealed record LifecycleCostRequest(AssetCostType Type, decimal Amount, DateOnly IncurredOn, string Description, Guid? WorkItemId);
 
 // Tenant comes from the verified session.
 public sealed record AssetRequest(

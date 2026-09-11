@@ -81,6 +81,37 @@ Not yet broken into tasks.
 
 ## Gates 2–5
 
-Not yet broken into tasks. Break each gate's stories down here, epic by epic, before starting
-code — the same discipline `docs/backlog.md` used for M3–M7 — so the task list in this file
-stays the source GitHub issues are cut from, not the other way around.
+### FS-G3A — Operations platform (#187 epic, #201 FS-S13, #203 FS-S15)
+
+**FS-S13 — Preventive maintenance and asset lifecycle (#201).** The platform slice is split
+into service-plan definition, recurrence calculation, generated work, meter readings, lifecycle
+costs, replacement planning, warranty/compliance dates, tenant security, and role/browser tests.
+The recurrence engine must be deterministic and idempotent: a plan can be evaluated repeatedly
+for the same property/asset/date without duplicate generated work. Generated work retains the
+plan occurrence key so retries are safe. Date-only rules are evaluated in the property's IANA
+zone and persisted work schedules remain UTC instants.
+
+| Task | Scope | Status |
+| --- | --- | --- |
+| PF-S13.01 | Service-plan and recurrence domain model; deterministic occurrence keys and next-due calculation | 🔄 in progress |
+| PF-S13.02 | Tenant-scoped persistence, RLS/grants, asset/plan relationship, and idempotent generation transaction | ⏳ queued |
+| PF-S13.03 | Meter readings, lifecycle-cost rollups, replacement candidates, warranty/compliance alerts | ⏳ queued |
+| PF-S13.04 | Manager/supervisor API and role-negative integration tests | ⏳ queued |
+| PF-S13.05 | Preventive-maintenance calendar/detail UI and browser coverage | ⏳ queued |
+
+**FS-S15 — Compliance, incidents, and risk (#203).** The platform slice is split into recurring
+obligations, licenses/inspections/safety checks, violation and incident records, remediation,
+evidence and retention, escalation, tenant security, and dashboard/browser tests. Evidence access
+must use the existing attachment permission/retention controls; incident history is append-only
+and every status transition is auditable.
+
+| Task | Scope | Status |
+| --- | --- | --- |
+| PF-S15.01 | Obligation and incident domain model; due/overdue/escalation rules and audit transitions | 🔄 in progress |
+| PF-S15.02 | Tenant-scoped persistence, RLS/grants, evidence links, and retention enforcement | ⏳ queued |
+| PF-S15.03 | Remediation/violation workflows and recurring-obligation generation | ⏳ queued |
+| PF-S15.04 | Compliance API, risk dashboard queries, and role-negative integration tests | ⏳ queued |
+| PF-S15.05 | Compliance dashboard/detail UI and browser coverage | ⏳ queued |
+
+The two stories remain In progress until all tasks above are build-, integration-, and
+browser-verified. This breakdown is the source of truth for follow-on task issues.

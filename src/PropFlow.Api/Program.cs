@@ -212,6 +212,7 @@ app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
+app.MapComplianceEndpoints();
 app.MapAttachmentEndpoints();
 app.MapSearchEndpoints();
 app.MapAttentionEndpoints();
