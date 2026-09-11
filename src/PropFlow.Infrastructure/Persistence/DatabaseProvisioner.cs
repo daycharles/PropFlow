@@ -63,6 +63,21 @@ public static class DatabaseProvisioner
             GRANT USAGE ON SCHEMA identity, operations, communications, integrations TO propflow_app;
             GRANT SELECT ON ALL TABLES IN SCHEMA identity TO propflow_app;
             GRANT UPDATE ON identity."AspNetUsers" TO propflow_app;
+            -- Account creation previously only happened out of band (seeding/admin tooling on the
+            -- admin connection). InvitationService.AcceptAsync (PF-S01.03) now calls
+            -- UserManager.CreateAsync at runtime for a brand-new invitee.
+            GRANT INSERT ON identity."AspNetUsers" TO propflow_app;
+            -- Previously read-only at runtime (MembershipAccess only reads); InvitationService's
+            -- acceptance flow and MembershipManagementService (PF-S01.03/.07) now write here too.
+            GRANT INSERT, UPDATE ON identity."Memberships" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON identity."Invitations" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON identity."RoleCapabilityOverrides" TO propflow_app;
+            GRANT SELECT, INSERT ON identity."Teams" TO propflow_app;
+            GRANT SELECT, INSERT, DELETE ON identity."TeamMemberships" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON identity."UserSessions" TO propflow_app;
+            -- Append-only, matching operations."Timeline" below: no UPDATE/DELETE grant, so the
+            -- audit trail cannot be altered or erased by the application role itself.
+            GRANT SELECT, INSERT ON identity."AuditEntries" TO propflow_app;
             GRANT SELECT ON operations."Vendors" TO propflow_app;
             GRANT SELECT ON operations."Employees" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."Buildings", operations."Spaces" TO propflow_app;

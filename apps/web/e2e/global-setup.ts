@@ -34,6 +34,7 @@ export default async function warmRoutes(config: FullConfig) {
       ...PRIMARY_NAV.map((item) => item.href),
       `/work/${placeholderId}`,
       `/assets/${placeholderId}`,
+      `/accept-invite/${placeholderId}`,
     ]),
   ];
 

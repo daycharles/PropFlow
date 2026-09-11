@@ -1,129 +1,86 @@
-# PropFlow full-suite scope
+# Full-suite scope
 
-## Purpose
+PropFlow's Milestone-1-through-7 roadmap (see [milestones.md](milestones.md) and
+[backlog.md](backlog.md)) delivered the first usable release: login, work orders, bulk
+actions, automation, assets, and integrations, now at `v1.0.0-rc.2`. This document tracks the
+larger, full-suite roadmap that sits on top of that release — the "build it in sections, end up
+comparable in scope to Yardi/AppFolio/Buildium" plan — as GitHub epics (`FS-Ex`) and stories
+(`FS-Sxx`), organized into five **Gates**, each split into an **A** (platform/backend) and
+**B** (workflows/UX) track so two developers can work a gate in parallel.
 
-PropFlow currently ships a maintenance and property-operations vertical slice. This document
-defines the broader property-management suite so that future work can be implemented and tested
-against a deliberate target rather than being treated as part of an undefined "full suite".
+Counts and status here drift; re-measure with `gh issue list --state all` rather than
+propagating them by hand.
 
-The target suite is multi-tenant, portfolio-aware, and suitable for property managers, owners,
-residents, vendors, and staff. Existing maintenance functionality remains a core module; it is
-not the whole product.
+## Gate → epic → milestone map
 
-## Module inventory
+| Gate | Epic | A track (milestone) | B track (milestone) |
+| --- | --- | --- | --- |
+| 1 — Core PMS | FS-E1: Core PMS foundation and administration (#184) | `FS-G1A` — Platform foundation | `FS-G1B` — Core PMS workflows |
+| 2 — Financial | FS-E3: Financial operations (#186) | `FS-G2A` — Financial platform | `FS-G2B` — Financial workflows |
+| 3 — Operations | FS-E4: Property operations expansion (#187) | `FS-G3A` — Operations platform | `FS-G3B` — Operations workflows |
+| 4 — Ecosystem | (integrations/engagement, split across E4/E5) | `FS-G4A` — Ecosystem platform | `FS-G4B` — Engagement and insight |
+| 5 — Release | FS-E5: Engagement, insight, integrations, and release hardening (#188) | `FS-G5A` — Release engineering | `FS-G5B` — Full-suite acceptance |
 
-### Foundation and administration
+Story issues (`FS-S01`–`FS-S20`) hang off these epics; each is assigned to the `A` or `B`
+milestone that matches its platform-vs-workflow split. A story becomes a set of task issues
+(`PF-Sxx.NN`) the same way `docs/backlog.md` turned each M3–M7 epic into `PF-x.xx` tasks — write
+the task breakdown into this file as each story starts, and cut the GitHub issues from it.
 
-1. **Identity, organizations, and permissions** — users, teams, roles, capability policies,
-   invitations, MFA/SSO hooks, session management, audit log, and tenant isolation.
-2. **Portfolio and property management** — portfolios, properties, buildings, units/spaces,
-   amenities, occupancy status, contacts, documents, and property settings.
-3. **Configuration and workflow administration** — custom fields, statuses, categories,
-   templates, numbering, approval rules, business hours, time zones, and notification settings.
+## Gate 1 — Core PMS
 
-### Leasing and resident lifecycle
+### FS-G1A — Platform foundation (#184 epic, #189 FS-S01, #191 FS-S03)
 
-4. **Marketing and availability** — listings, availability, inquiries, showing appointments,
-   applicants, and lead-source tracking.
-5. **Applications and screening** — application workflow, applicant consent, screening provider
-   adapter, review/approval/denial, and immutable decision history.
-6. **Leases and renewals** — lease parties, terms, charges, deposits, documents, signatures,
-   renewals, notices, transfers, move-in, and move-out.
-7. **Resident portal and service** — resident profile, household members, requests, announcements,
-   documents, payments, communication preferences, and portal access controls.
+**FS-S01 — Identity, organizations, permissions, and audit (#189).** Extends the Milestone-2
+identity foundation (`IdentityStore`, `MembershipAccess`, `SessionAuthentication`,
+`OrganizationSlug` — plain string `Role` per membership, capabilities derived from a fixed
+`Capabilities.ForRole` switch) rather than replacing it. Acceptance: role matrix, invitation
+flow, negative authorization tests, tenant isolation tests, audit history, browser coverage.
 
-### Financial operations
+**All of PF-S01.01–.09 is now build- and test-verified**, as of the invite/accept UI + Playwright
+commits on this branch: `dotnet build` is clean, `PropFlow.UnitTests` is 228/228,
+`PropFlow.IntegrationTests` is 188/188, and the full Playwright e2e suite is 19/19 (all run locally
+against a real Postgres and a real dev stack — the agent session that wrote this code could not
+run any of this itself, since `dotnet restore` there is blocked by an organizational egress policy
+on `api.nuget.org`; verification happened afterward, on a real machine). That first real run also
+caught a genuine bug, not just an unverified-code gap: `DatabaseProvisioner.ConfigureRuntimeAsync`
+never granted the restricted `propflow_app` runtime role write access to any of the six new tables
+(`Invitations`, `RoleCapabilityOverrides`, `Teams`, `TeamMemberships`, `UserSessions`,
+`AuditEntries`), or to `identity.Memberships`/`AspNetUsers` for the new write paths
+invitation-acceptance and membership-management need. It had been silently broken since
+PF-S01.02/03 — nothing exercised it until PF-S01.06 made every login write a `UserSession` row,
+which turned it into every integration test's login helper 500ing. Fixed in the same commit as the
+EF migration. A second bug turned up while building PF-S01.09's UI: `GET
+/api/organizations/current/invitations` was returning the raw invitation `Token` in the
+pending-invitations list, contradicting its own code comment that the token is shown exactly once,
+at creation — fixed alongside the new UI.
 
-8. **Charges, rent, and payments** — recurring charges, one-time charges, credits, late fees,
-   payment methods, receipts, refunds, failed payments, reconciliation, and delinquency workflow.
-9. **Accounting** — chart of accounts, journal entries, accounts payable, accounts receivable,
-   bank/cash accounts, period close, reversals, and export to an accounting system.
-10. **Budgeting and owner accounting** — property budgets, approvals, actual-vs-budget reporting,
-    owner statements, distributions, management fees, and owner portal access.
+Task breakdown (status as of this writing):
 
-### Property operations
+| Task | Scope | Status |
+| --- | --- | --- |
+| PF-S01.01 | Invitation token generation, canonical-email matching, and expiry validation (pure logic, no persistence) | ✅ landed this pass |
+| PF-S01.02 | `Invitation` entity + `IdentityStore` mapping | ✅ build- and test-verified |
+| PF-S01.03 | `InvitationService` (create / list-pending / accept) + `GET`/`POST /api/organizations/current/invitations`, `POST /api/invitations/{token}/accept`, `Identity.ManageMembers` capability (granted wherever `Capabilities.All` is — see PF-S01.04) | ✅ build- and test-verified |
+| PF-S01.04 | Configurable role → capability matrix: additive per-organization grants/revocations layered on `Capabilities.ForRole` via `RoleCapabilityMatrix.Effective` (pure logic, tested), a new `RoleCapabilityOverride` entity/table, `RoleCapabilityService` (wired into `SessionAuthentication` so login and cookie-refresh both use the effective set), and `GET /api/organizations/current/roles` / `PUT /api/organizations/current/roles/{role}/capabilities` | ✅ build- and test-verified. `Roles.All` (the role catalog the endpoint/UI needs) is hand-kept in sync with `Capabilities.ForRole`'s switch arms; no code shares them yet |
+| PF-S01.05 | Teams: `Team` + `TeamMembership` entities/mapping, `TeamService` (create, list, add/remove member — requires an existing active `OrganizationMembership`), `GET`/`POST /api/organizations/current/teams`, `GET`/`POST`/`DELETE .../teams/{id}/members/{userId}` (`Identity.ManageMembers`) | ✅ build- and test-verified. Grouping/addressing only — scoping work or property access by team is explicitly deferred, not implied by this pass |
+| PF-S01.06 | Session/device management: `UserSession` entity/mapping, `session_id` claim issued at login and carried in the cookie, `UserSessionService` (start/touch/list/revoke), `SessionAuthentication.ValidateCookieAsync` rejects a cookie whose session was revoked (additive to the existing `SecurityStamp` check — a cookie predating this feature has no `session_id` claim and is unaffected), `GET`/`DELETE /api/sessions` for self-service list/revoke of the caller's own devices | ✅ build- and test-verified. Deliberately does not touch `LogoutAsync`'s existing all-sessions revoke (bumping `SecurityStamp`); the two mechanisms are independent and both work |
+| PF-S01.07 | Audit history beyond the Work timeline: `IdentityAuditEntry` (flat, append-only, mirroring `TimelineEntry`'s "no event-specific columns" shape) + `IdentityAuditLog` (record/list), wired into invitation create/accept and role-capability overrides; new `MembershipManagementService` (change role / remove member — the only two membership writes that previously had no endpoint at all, needed so there was something to audit) with the same manager-lockout guard as PF-S01.04, `GET`/`PUT .../members/{userId}/role`/`DELETE .../members/{userId}`, and `GET /api/organizations/current/audit` | ✅ build- and test-verified |
+| PF-S01.08 | Negative-authorization + tenant-isolation integration test suite for the above: `IdentityAdministrationTests` (12 tests covering read-only lockout, expired/already-accepted/unknown invitation tokens, tenant confinement of invitations/audit/teams/memberships, last-manager-removal refusal, and self-service session revoke) | ✅ build- and test-verified |
+| PF-S01.09 | Browser (Playwright) coverage for invite → accept → login: a minimal `/settings/members` admin page (invite form, one-time invite-link banner, pending list, active members with inline role change/remove) and a public `/accept-invite/[token]` page, plus `member-invite.spec.ts` driving the full flow in a real browser (send invite as admin → accept in a fresh unauthenticated context → sign in as the new user → confirm the admin's list reflects the move from pending to active) | ✅ build- and test-verified |
 
-11. **Maintenance and work orders** — the existing work, vendor, employee, resident messaging,
-    timeline, automation, asset, attachment, scheduling, and attention-queue capabilities.
-12. **Inspections and turns** — inspection templates, checklists, findings, photos, move-in/out
-    comparisons, unit turns, make-ready tasks, approvals, and charges.
-13. **Preventive maintenance and assets** — asset registry, warranties, service plans, recurring
-    work, meter readings, lifecycle costs, replacement planning, and compliance dates.
-14. **Vendor and procurement management** — vendor onboarding, insurance/licenses, contracts,
-    rate cards, bids, purchase orders, work authorization, invoices, and performance history.
-15. **Compliance and risk** — required inspections, licenses, safety checks, violations, incidents,
-    notices, remediation, evidence, retention, and escalation.
+**FS-S01 is now fully complete** per this task breakdown.
 
-### Communications, insight, and platform
+**FS-S03 — Configuration and workflow administration (#191).** Custom fields, statuses,
+categories (categories already exist per-M3/M5; this generalizes past work categories),
+templates, numbering, approvals, business hours, time zones, notification settings. Not yet
+broken into tasks — do that before starting PF-S03.01.
 
-16. **Communications** — existing consent-aware email/SMS/outbox foundation expanded with inbox,
-    campaigns, announcements, delivery tracking, provider callbacks, and message retention.
-17. **Documents and e-signature** — document templates, generated lease/notice packets, versioning,
-    access rules, signatures, expiration, and retention.
-18. **Reporting and analytics** — operational, leasing, financial, occupancy, maintenance, vendor,
-    and portfolio reports with filters, exports, scheduled delivery, and role-based visibility.
-19. **Integrations** — real PMS, accounting, screening, payment, banking, messaging, calendar,
-    e-signature, and utility adapters with mapping, reconciliation, retries, and sync health.
-20. **Billing and subscription administration** — customer plan, active-door metering, invoices,
-    entitlements, usage limits, trials, and administrator billing access.
+### FS-G1B — Core PMS workflows
 
-## Definition of full-suite tested
+Not yet broken into tasks.
 
-The suite is not release-ready until every module has:
+## Gates 2–5
 
-- tenant-isolated persistence and authorization tests;
-- API contract tests for successful, invalid, duplicate, stale, and unauthorized requests;
-- audit/history coverage for material changes;
-- browser workflow tests for its primary user journeys;
-- role-based tests for manager, leasing agent, accountant, maintenance coordinator, technician,
-  vendor, owner, and resident access where applicable;
-- failure and retry tests for external providers and asynchronous work;
-- seeded demo data that exercises the happy path and at least one exception path;
-- documented retention, export, and deletion behavior for regulated or financial data.
-
-## Release gates
-
-### Gate 1 — Core PMS foundation
-
-Foundation, administration, portfolio/property management, configuration, residents, leases,
-and documents. Test login, invitations, role boundaries, property setup, unit occupancy, lease
-creation, renewal, move-in, move-out, and tenant isolation.
-
-### Gate 2 — Financial suite
-
-Charges, payments, accounting, budgeting, owner accounting, and billing administration. Test
-double-entry balancing, idempotent payment callbacks, refunds, reconciliation, period close,
-owner statements, and financial-data permissions.
-
-### Gate 3 — Operations suite
-
-Maintenance, inspections/turns, preventive maintenance/assets, vendors/procurement, and
-compliance. Test request-to-resolution, inspection-to-turn, recurring work, vendor approval,
-invoice matching, compliance escalation, and cross-module audit history.
-
-### Gate 4 — Engagement and ecosystem
-
-Resident portal, communications, reporting/analytics, e-signature, and real integrations. Test
-resident self-service, consent, document signing, report visibility, bidirectional sync,
-reconciliation, retries, and provider outage recovery.
-
-### Gate 5 — Production release
-
-Run the complete regression suite against a clean seeded environment, verify migrations from the
-previous release, exercise backup/restore, check observability and security headers, validate
-retention jobs, and complete a role-by-module navigation audit. Publish only after every gate is
-green.
-
-## Initial implementation order
-
-Build in dependency order:
-
-1. Foundation/admin and portfolio configuration.
-2. Resident lifecycle, leasing, leases, documents, and resident portal.
-3. Charges/payments, accounting, budgeting, and owner accounting.
-4. Inspections/turns, preventive maintenance, vendor/procurement, and compliance.
-5. Communications expansion, reporting, e-signature, and real integrations.
-6. Billing administration and final cross-module regression/release hardening.
-
-The current release should be renamed internally as the **Operations/Maintenance release** until
-Gates 1–5 are actually implemented and tested.
+Not yet broken into tasks. Break each gate's stories down here, epic by epic, before starting
+code — the same discipline `docs/backlog.md` used for M3–M7 — so the task list in this file
+stays the source GitHub issues are cut from, not the other way around.

@@ -12,6 +12,12 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> Memberships => Set<OrganizationMembership>();
     public DbSet<MembershipPropertyBinding> MembershipPropertyBindings => Set<MembershipPropertyBinding>();
+    public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<RoleCapabilityOverride> RoleCapabilityOverrides => Set<RoleCapabilityOverride>();
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<IdentityAuditEntry> AuditEntries => Set<IdentityAuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -36,6 +42,66 @@ public sealed class IdentityStore(DbContextOptions<IdentityStore> options)
             entity.HasKey(x => new { x.OrganizationId, x.UserId, x.PropertyId });
             entity.HasOne<OrganizationMembership>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<Invitation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Token).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.Token).IsUnique();
+            // A re-invite of the same still-pending address replaces rather than duplicates:
+            // enforced by the service layer (PF-S01.03) reading this index before insert, not by
+            // a partial-unique constraint here, since "pending" depends on both AcceptedAt and
+            // ExpiresAt and Npgsql's HasFilter takes a literal predicate, not an expression.
+            entity.HasIndex(x => new { x.OrganizationId, x.Email });
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.InvitedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.AcceptedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<RoleCapabilityOverride>(entity =>
+        {
+            entity.HasKey(x => new { x.OrganizationId, x.Role, x.Capability });
+            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Capability).HasMaxLength(120).IsRequired();
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<Team>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<TeamMembership>(entity =>
+        {
+            entity.HasKey(x => new { x.TeamId, x.UserId });
+            entity.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<OrganizationMembership>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.UserId }).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<UserSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.HasIndex(x => new { x.UserId, x.OrganizationId });
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<IdentityAuditEntry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.TargetLabel).HasMaxLength(254);
+            entity.Property(x => x.OldValue).HasMaxLength(4000);
+            entity.Property(x => x.NewValue).HasMaxLength(4000);
+            entity.HasIndex(x => new { x.OrganizationId, x.OccurredAt });
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict (not cascade) on both user FKs: the audit trail must outlive the account it
+            // names, the same reasoning as Invitation.InvitedByUserId/AcceptedByUserId.
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.TargetUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

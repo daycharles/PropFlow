@@ -12,6 +12,9 @@ public static class TenantAccess
     public const string OrganizationClaim = "organization_id";
     public const string CapabilityClaim = "capability";
     public const string AssignVendor = "Work.AssignVendor";
+    // PF-S01.06: identifies the UserSession row backing this cookie, so a specific device/session
+    // can be revoked without bumping SecurityStamp (which would sign every session out at once).
+    public const string SessionClaim = "session_id";
 
     public static Guid Resolve(ClaimsPrincipal principal)
     {
