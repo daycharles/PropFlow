@@ -270,6 +270,23 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    [Fact]
+    public async Task Rls_confines_organization_settings_to_their_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"OrganizationSettings\" (\"OrganizationId\", \"Id\", \"DefaultTimeZoneId\", \"BusinessHours\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, 'America/New_York', '[]', now())");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"OrganizationSettings\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"OrganizationSettings\" (\"OrganizationId\", \"Id\", \"DefaultTimeZoneId\", \"BusinessHours\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, 'forged', '[]', now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
