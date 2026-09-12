@@ -129,7 +129,7 @@ public sealed class ApplicationPersistenceTests(DatabaseFixture fixture)
         await using var store = s.Store(s.OrganizationA);
         Assert.Equal(a.ApplicationId, Assert.Single(await store.RentalApplications.IgnoreQueryFilters().ToListAsync()).Id);
         Assert.Equal(a.ApplicationId, Assert.Single(await store.RentalApplications
-            .FromSqlRaw("SELECT * FROM operations.\"RentalApplications\"").IgnoreQueryFilters().ToListAsync()).Id);
+            .FromSqlRaw("SELECT *, xmin FROM operations.\"RentalApplications\"").IgnoreQueryFilters().ToListAsync()).Id);
         Assert.Equal(a.ConsentId, Assert.Single(await store.ApplicationConsents
             .FromSqlRaw("SELECT * FROM operations.\"ApplicationConsents\"").IgnoreQueryFilters().ToListAsync()).Id);
         Assert.Equal(a.ResultId, Assert.Single(await store.ScreeningResults.IgnoreQueryFilters().ToListAsync()).Id);

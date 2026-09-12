@@ -24,15 +24,23 @@ public sealed class ScreeningRequest : TenantEntity
         IdempotencyKey = ApplicationText.RequireSingleLine(idempotencyKey, nameof(idempotencyKey), IdempotencyKeyMaxLength);
     }
 
-    // The canonical key for "screening this applicant on this application". It lives here rather
-    // than in the endpoint so the request path, a retry and any later background sweep all derive
-    // the same key — the unique index on (OrganizationId, IdempotencyKey) only makes a replay
-    // safe if every caller spells the key identically.
-    public static string KeyFor(Guid applicationId, Guid applicantId)
+    // The canonical key for "the nth screening attempt-cycle for this applicant on this
+    // application". It lives here rather than in the endpoint so the request path, a retry and
+    // any later background sweep all derive the same key — the unique index on
+    // (OrganizationId, IdempotencyKey) only makes a replay safe if every caller spells the key
+    // identically.
+    //
+    // The cycle is what makes AbandonScreening's promise ("a fresh screening request can be
+    // raised") actually reachable. Without it the key would be fixed per (application, applicant)
+    // and the unique index would refuse a second request forever, so an applicant whose provider
+    // was down for its whole retry budget could never be screened again. Cycle 1 is the first
+    // request; a request is only minted for the next cycle once every earlier one is Abandoned.
+    public static string KeyFor(Guid applicationId, Guid applicantId, int cycle)
     {
         if (applicationId == Guid.Empty) throw new ArgumentException("Application is required.", nameof(applicationId));
         if (applicantId == Guid.Empty) throw new ArgumentException("Applicant is required.", nameof(applicantId));
-        return $"application:{applicationId:N}:applicant:{applicantId:N}";
+        if (cycle < 1) throw new ArgumentOutOfRangeException(nameof(cycle));
+        return $"application:{applicationId:N}:applicant:{applicantId:N}:cycle:{cycle}";
     }
 
     public Guid ApplicationId { get; private set; }

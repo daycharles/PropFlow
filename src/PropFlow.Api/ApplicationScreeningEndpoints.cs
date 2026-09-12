@@ -55,28 +55,47 @@ public static class ApplicationScreeningEndpoints
             if (subjects.Count == 0)
                 return Results.Problem(statusCode: 409, title: "No applicant on this application holds consent to be screened.");
 
-            try { application.BeginScreening(ApplicationEndpoints.Actor(user)); }
-            catch (InvalidOperationException exception) { return ApplicationEndpoints.Conflict(exception); }
+            // Idempotent by design, and the consent gate is untouched by that: ENTERING Screening
+            // still requires ConsentGranted, which is the gate. Re-posting while already in
+            // Screening re-attempts the requests that are still pending instead of answering 409,
+            // because a client that just received a 503 retries the URL it posted to. Without
+            // this the only way forward after an outage was the retry route, and the replay path
+            // below was unreachable.
+            if (application.Status != ApplicationStatus.Screening)
+            {
+                try { application.BeginScreening(ApplicationEndpoints.Actor(user)); }
+                catch (InvalidOperationException exception) { return ApplicationEndpoints.Conflict(exception); }
+            }
 
-            // Get-or-create is what makes a replayed POST safe: the key is derived, not generated.
+            // Get-or-create, per applicant and in this priority order:
+            //   live (Pending/InFlight)    -> reuse it. That is what makes a replayed POST safe,
+            //     and it is why the row is found by applicant rather than by a guessed key.
+            //   already Completed          -> leave it alone. Re-screening a completed applicant
+            //     would be a second credit pull at the organization's expense.
+            //   nothing, or only Abandoned -> mint the next attempt cycle. This is the path
+            //     AbandonScreening promises, and a key fixed per (application, applicant) made it
+            //     unreachable: the unique index would have refused a second request forever.
             var existing = await store.ScreeningRequests.Where(x => x.ApplicationId == id).ToListAsync(ct);
-            var requests = new List<ScreeningRequest>();
+            var pending = new List<ScreeningRequest>();
             foreach (var applicant in subjects)
             {
-                var key = ScreeningRequest.KeyFor(id, applicant.ApplicantId);
-                var request = existing.SingleOrDefault(x => x.IdempotencyKey == key);
-                if (request is null)
-                {
-                    request = new ScreeningRequest(store.OrganizationId, Guid.NewGuid(), id, applicant.ApplicantId, key);
-                    store.ScreeningRequests.Add(request);
-                }
-                requests.Add(request);
+                var mine = existing.Where(x => x.ApplicantId == applicant.ApplicantId).ToList();
+                var live = mine.Find(x => x.Status is ScreeningRequestStatus.Pending or ScreeningRequestStatus.InFlight);
+                if (live is not null) { if (live.Status == ScreeningRequestStatus.Pending) pending.Add(live); continue; }
+                if (mine.Exists(x => x.Status == ScreeningRequestStatus.Completed)) continue;
+                var request = new ScreeningRequest(store.OrganizationId, Guid.NewGuid(), id, applicant.ApplicantId,
+                    ScreeningRequest.KeyFor(id, applicant.ApplicantId, mine.Count + 1));
+                store.ScreeningRequests.Add(request);
+                pending.Add(request);
             }
             try { await store.SaveChangesAsync(ct); }
             catch (DbUpdateConcurrencyException) { return ApplicationEndpoints.Stale(); }
+            // Two callers racing the same application both compute the same next cycle; the unique
+            // index turns the loser into a conflict rather than a duplicate credit pull.
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            { return Results.Problem(statusCode: 409, title: "Screening is already being requested for this application; reload and try again."); }
 
-            return await AttemptAsync(application, [.. requests.Where(x => x.Status == ScreeningRequestStatus.Pending)],
-                consents, store, provider, options, clock, user, ct);
+            return await AttemptAsync(application, pending, consents, store, provider, options, clock, user, ct);
         });
 
         group.MapPost("/{id:guid}/screening/{requestId:guid}/retry", async (Guid id, Guid requestId, ClaimsPrincipal user,
@@ -136,15 +155,19 @@ public static class ApplicationScreeningEndpoints
             request.Complete(now);
         }
 
-        // Every request abandoned means the retry budget is spent for this application: back to
-        // ConsentGranted, from which a fresh request can be raised without re-collecting consent.
+        // Judged per applicant, not per row. Once an abandoned cycle can be followed by a fresh
+        // one, "every request is Completed" is the wrong question — an applicant whose cycle 1
+        // was abandoned and whose cycle 2 passed would never reach it, and the application would
+        // sit in Screening forever. The state of an applicant is the best outcome they hold:
+        // still in flight beats completed beats abandoned.
         var all = await store.ScreeningRequests.Where(x => x.ApplicationId == application.Id).ToListAsync(ct);
-        var abandoned = all.Count > 0 && all.TrueForAll(x => x.Status == ScreeningRequestStatus.Abandoned);
+        var perApplicant = all.GroupBy(x => x.ApplicantId).Select(StateOf).ToList();
+        var abandoned = perApplicant.Count > 0 && perApplicant.TrueForAll(x => x == ScreeningRequestStatus.Abandoned);
+        var completed = perApplicant.Count > 0 && perApplicant.TrueForAll(x => x == ScreeningRequestStatus.Completed);
         try
         {
             if (abandoned && application.Status == ApplicationStatus.Screening) application.AbandonScreening(actor);
-            else if (outage is null && all.Count > 0 && all.TrueForAll(x => x.Status == ScreeningRequestStatus.Completed)
-                     && application.Status == ApplicationStatus.Screening) application.CompleteScreening(actor);
+            else if (outage is null && completed && application.Status == ApplicationStatus.Screening) application.CompleteScreening(actor);
             await store.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException exception) { return ApplicationEndpoints.Conflict(exception); }
@@ -153,10 +176,24 @@ public static class ApplicationScreeningEndpoints
         if (outage is not null)
             return Results.Problem(statusCode: 503, title: outage, detail: abandoned
                 ? $"Every screening request for this application is abandoned after {options.MaxAttempts} attempts; the application has returned to ConsentGranted."
-                : "No screening verdict was written. Retry the request when the provider is available.");
+                : "No screening verdict was written. Re-post to this route, or POST to screening/{requestId}/retry, once the provider is available.");
 
         return await ApplicationEndpoints.DetailAsync(application.Id, store, ApplicationEndpoints.MayReadPii(user), ct);
     }
+
+    // One applicant's screening state across every attempt cycle they hold.
+    private static ScreeningRequestStatus StateOf(IEnumerable<ScreeningRequest> cycles)
+    {
+        var rows = cycles.ToList();
+        if (rows.Exists(x => x.Status is ScreeningRequestStatus.Pending or ScreeningRequestStatus.InFlight))
+            return ScreeningRequestStatus.Pending;
+        return rows.Exists(x => x.Status == ScreeningRequestStatus.Completed)
+            ? ScreeningRequestStatus.Completed
+            : ScreeningRequestStatus.Abandoned;
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException is Npgsql.PostgresException { SqlState: "23505" };
 
     private static bool HasAnyConsent(IReadOnlyList<ApplicationConsent> consents, Guid applicationId, Guid applicantId) =>
         ApplicationConsent.Effective(consents).Any(entry =>

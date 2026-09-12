@@ -650,8 +650,15 @@ highest-write table in the `operations` schema and arrives with its own retentio
 | POST | /api/applications/{id}/consent | Applications.Manage + CSRF; records one Granted/Revoked consent row (a revocation is a new row, never an edit). Advances Submitted → ConsentGranted once every applicant holds at least one effective grant; 201 with `{ consent, applicationStatus }`, 400 for an applicant not on the application or an Unknown decision |
 | POST | /api/applications/{id}/withdraw | Applications.Manage + CSRF; any non-terminal state → Withdrawn; 409 when already terminal |
 | GET | /api/applications/{id}/screening | Applications.Manage; screening requests with attempts, last error and the latest verdict; masked unless the caller holds Applications.ReadPii |
-| POST | /api/applications/{id}/screening | Applications.Manage + CSRF; ConsentGranted → Screening, then one provider call per consented applicant. 200 and Screening → UnderReview when every request completes; **503 and no verdict written** on a provider outage; 409 unless ConsentGranted, or when no applicant on the application holds effective consent |
+| POST | /api/applications/{id}/screening | Applications.Manage + CSRF; ConsentGranted → Screening, then one provider call per consented applicant. 200 and Screening → UnderReview when every applicant's screening completes; **503 and no verdict written** on a provider outage; 409 from any state but ConsentGranted or Screening, or when no applicant on the application holds effective consent. **Idempotent**: re-posting while already in Screening re-attempts the still-pending requests rather than conflicting, so a client that received a 503 can retry the URL it posted to. Entering Screening still requires ConsentGranted — that is the consent gate and it is unaffected |
 | POST | /api/applications/{id}/screening/{requestId}/retry | Applications.Manage + CSRF; re-attempts one Pending request; 409 when the request is not Pending or the applicant's consent has since been revoked; 503 on a further outage. The attempt that reaches `Screening:MaxAttempts` moves the request to Abandoned, and when every request for the application is Abandoned the application returns to ConsentGranted |
+
+**Attempt cycles.** A screening request's idempotency key is
+`application:{id}:applicant:{id}:cycle:{n}`. The cycle is what makes `AbandonScreening`'s promise
+reachable: a key fixed per (application, applicant) would have let the unique index refuse any
+replacement forever, so an applicant whose provider was down for its whole retry budget could
+never be screened again. A new cycle is minted only once every earlier one is Abandoned; a live
+(Pending/InFlight) request is reused, and an applicant who already Completed is not re-screened.
 
 **Provider outage.** `ScreeningRecommendation.Unavailable` means the provider could not answer,
 and `ScreeningResult` refuses to store it, so an outage can never become a persisted verdict. The

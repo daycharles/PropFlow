@@ -158,8 +158,8 @@ public sealed class ScreeningRequestTests
     {
         var application = Guid.NewGuid();
         var applicant = Guid.NewGuid();
-        Assert.Equal(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(application, applicant));
-        Assert.Equal($"application:{application:N}:applicant:{applicant:N}", ScreeningRequest.KeyFor(application, applicant));
+        Assert.Equal(ScreeningRequest.KeyFor(application, applicant, 1), ScreeningRequest.KeyFor(application, applicant, 1));
+        Assert.Equal($"application:{application:N}:applicant:{applicant:N}:cycle:1", ScreeningRequest.KeyFor(application, applicant, 1));
     }
 
     [Fact]
@@ -167,14 +167,17 @@ public sealed class ScreeningRequestTests
     {
         var application = Guid.NewGuid();
         var applicant = Guid.NewGuid();
-        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(application, Guid.NewGuid()));
-        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(Guid.NewGuid(), applicant));
+        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant, 1), ScreeningRequest.KeyFor(application, Guid.NewGuid(), 1));
+        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant, 1), ScreeningRequest.KeyFor(Guid.NewGuid(), applicant, 1));
+        // A fresh attempt cycle after abandonment must be a different key, or the unique index
+        // refuses it and AbandonScreening leads nowhere.
+        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant, 1), ScreeningRequest.KeyFor(application, applicant, 2));
     }
 
     [Fact]
     public void The_generated_key_fits_the_persisted_column_and_is_accepted_by_the_constructor()
     {
-        var key = ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.NewGuid());
+        var key = ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.NewGuid(), 99);
         Assert.True(key.Length <= ScreeningRequest.IdempotencyKeyMaxLength);
         Assert.Equal(key, new ScreeningRequest(Org, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), key).IdempotencyKey);
     }
@@ -182,8 +185,9 @@ public sealed class ScreeningRequestTests
     [Fact]
     public void An_empty_application_or_applicant_has_no_key()
     {
-        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.Empty, Guid.NewGuid()));
-        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.Empty));
+        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.Empty, Guid.NewGuid(), 1));
+        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.Empty, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.NewGuid(), 0));
     }
 }
 
