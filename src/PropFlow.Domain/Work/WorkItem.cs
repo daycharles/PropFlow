@@ -33,6 +33,10 @@ public sealed class WorkItem : TenantEntity
     public decimal? Cost { get; private set; }
     public string? InternalNotes { get; private set; }
     public string? ResidentVisibleNotes { get; private set; }
+    // PF-S03.04. Assigned once, at creation, only when the organization has configured
+    // numbering for WorkItem. Work created before numbering was turned on keeps this null
+    // forever - there is no retroactive backfill.
+    public string? DisplayNumber { get; private set; }
     public void Edit(string title, string? description, Guid? categoryId, WorkPriority priority) { RefuseWhenTerminal(); Title = Required(title, 200); Description = Optional(description, 4000); CategoryId = categoryId; Priority = priority; }
     public void SetLocation(Guid propertyId, Guid? buildingId, Guid? spaceId, Guid? residentId)
     {
@@ -54,6 +58,16 @@ public sealed class WorkItem : TenantEntity
     {
         InternalNotes = Optional(internalNotes, 4000);
         ResidentVisibleNotes = Optional(residentVisibleNotes, 4000);
+    }
+    // The numbering allocator (EfWorkOperations) calls this at most once, right after
+    // construction and before the first save - the guard is a programming-error backstop, not
+    // something a client request can trigger.
+    public void SetDisplayNumber(string displayNumber)
+    {
+        if (DisplayNumber is not null) throw new InvalidOperationException("A display number has already been assigned.");
+        if (string.IsNullOrWhiteSpace(displayNumber) || displayNumber.Trim().Length > 50)
+            throw new ArgumentException("Display number must contain 1 to 50 characters.", nameof(displayNumber));
+        DisplayNumber = displayNumber.Trim();
     }
     // Completed and cancelled work takes no new assignment. The guard lives on the mutating
     // overloads so neither the event-raising overloads nor a future caller can route around it,

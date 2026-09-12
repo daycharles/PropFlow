@@ -46,6 +46,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<WorkCategory> Categories => Set<WorkCategory>();
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
+    public DbSet<NumberingSequence> NumberingSequences => Set<NumberingSequence>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -101,7 +102,12 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.InternalNotes).HasMaxLength(4000);
             entity.Property(x => x.ResidentVisibleNotes).HasMaxLength(4000);
             entity.Property(x => x.Cost).HasPrecision(18, 2);
+            entity.Property(x => x.DisplayNumber).HasMaxLength(50);
             entity.Property<uint>("Version").IsRowVersion();
+            // Unique when set (a partial index - most work predates numbering and has none),
+            // so two organizations' work never collides and neither can one organization's.
+            entity.HasIndex(x => new { x.OrganizationId, x.DisplayNumber })
+                .IsUnique().HasFilter("\"DisplayNumber\" IS NOT NULL");
             entity.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.EmployeeId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -288,6 +294,13 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<CustomFieldDefinition>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.CustomFieldDefinitionId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.WorkId, x.CustomFieldDefinitionId }).IsUnique();
+        });
+        model.Entity<NumberingSequence>(entity =>
+        {
+            entity.ToTable("NumberingSequences");
+            entity.Property(x => x.AppliesTo).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Prefix).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.AppliesTo }).IsUnique();
         });
         model.Entity<SavedView>(entity =>
         {

@@ -236,6 +236,23 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    [Fact]
+    public async Task Rls_confines_numbering_sequences_to_their_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"NumberingSequences\" (\"OrganizationId\", \"Id\", \"AppliesTo\", \"Prefix\", \"Width\", \"NextValue\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, 'WorkItem', 'WO-', 5, 1, now())");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"NumberingSequences\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"NumberingSequences\" (\"OrganizationId\", \"Id\", \"AppliesTo\", \"Prefix\", \"Width\", \"NextValue\", \"CreatedAt\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, 'WorkItem', 'forged', 5, 1, now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
