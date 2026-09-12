@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { ApplicationPanel } from "../../components/application-panel";
 import { ProtectedPage } from "../../components/protected-page";
 import {
   api,
@@ -8,6 +9,7 @@ import {
   type Applicant,
   type Listing,
   type PropertyReference,
+  type RentalApplication,
   type Session,
   type Showing,
 } from "../../../lib/api";
@@ -40,7 +42,12 @@ function ListingsContent({ session }: { session: Session }) {
   const [inquiryMessage, setInquiryMessage] = useState("");
   const [leadSource, setLeadSource] = useState("");
   const [showingDate, setShowingDate] = useState("");
+  const [applications, setApplications] = useState<RentalApplication[]>([]);
+  const [openApplicationId, setOpenApplicationId] = useState<string | null>(null);
   const canManage = hasCapability(session, "Leasing.Manage");
+  // FS-S05 is a second, separately granted capability: Leasing.Manage alone must not reach the
+  // application workflow, and Regional Manager holds Applications.Manage without Leasing.Manage.
+  const canManageApplications = hasCapability(session, "Applications.Manage");
   const refresh = () =>
     Promise.all([api.properties.list(), api.marketing.listings.list()])
       .then(([propertyList, listingList]) => {
@@ -90,16 +97,44 @@ function ListingsContent({ session }: { session: Session }) {
     setSelectedListing(listing);
     setError("");
     try {
-      const [inquiryList, showingList, applicantList] = await Promise.all([
+      const [inquiryList, showingList, applicantList, applicationList] = await Promise.all([
         api.marketing.listings.inquiries(listing.id),
         api.marketing.listings.showings(listing.id),
         api.marketing.listings.applicants(listing.id),
+        // Applications.Manage is a separate grant from Leasing.Manage; without it the route is a
+        // 403 that would take the rest of the activity view down with it.
+        canManageApplications
+          ? api.applications.list(listing.id)
+          : Promise.resolve<RentalApplication[]>([]),
       ]);
       setInquiries(inquiryList);
       setShowings(showingList);
       setApplicants(applicantList);
+      setApplications(applicationList);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to load listing activity.");
+    }
+  };
+  // PF-S05.09 replaces the legacy "Start screening" / "Approve" buttons, which drove
+  // `PUT .../applicants/{id}/status` — a flat status change with no consent check and no decision
+  // row. Creating the application, putting the person on it as Primary and submitting are one
+  // gesture because they are what the old single click claimed to do; everything that follows
+  // (consent, screening, the decision) is deliberately separate and gated in ApplicationPanel.
+  const startApplication = async (applicant: Applicant) => {
+    if (!selectedListing) return;
+    setError("");
+    try {
+      const created = await api.applications.create(selectedListing.id);
+      await api.applications.addApplicant(created.id, {
+        applicantId: applicant.id,
+        role: "Primary",
+      });
+      await api.applications.submit(created.id);
+      setOpenApplicationId(created.id);
+      await loadActivity(selectedListing);
+      setMessage("Application started. Record consent before requesting screening.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to start the application.");
     }
   };
   const createInquiry = async (event: React.FormEvent) => {
@@ -326,36 +361,48 @@ function ListingsContent({ session }: { session: Session }) {
           ))}
           {!inquiries.length && <p>No inquiries yet.</p>}
           <h3>Applicants</h3>
-          {applicants.map((applicant) => (
-            <p key={applicant.id}>
-              {applicant.prospectName} ({applicant.email}) — {applicant.status}
-              {canManage && applicant.status === "New" && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void api.marketing.listings
-                      .applicantStatus(selectedListing.id, applicant.id, "Screening")
-                      .then(() => loadActivity(selectedListing))
-                  }
-                >
-                  Start screening
-                </button>
-              )}
-              {canManage && applicant.status === "Screening" && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void api.marketing.listings
-                      .applicantStatus(selectedListing.id, applicant.id, "Approved")
-                      .then(() => loadActivity(selectedListing))
-                  }
-                >
-                  Approve
-                </button>
-              )}
-            </p>
-          ))}
+          {applicants.map((applicant) => {
+            const application = applications.find((candidate) =>
+              candidate.applicants.some((row) => row.applicantId === applicant.id),
+            );
+            return (
+              <p key={applicant.id}>
+                {applicant.prospectName} ({applicant.email}) — {applicant.status}
+                {application && ` — application ${application.status}`}
+                {canManageApplications && !application && (
+                  <button type="button" onClick={() => void startApplication(applicant)}>
+                    Start application
+                  </button>
+                )}
+                {canManageApplications && application && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenApplicationId(
+                        openApplicationId === application.id ? null : application.id,
+                      )
+                    }
+                  >
+                    {openApplicationId === application.id ? "Hide application" : "Open application"}
+                  </button>
+                )}
+              </p>
+            );
+          })}
           {!applicants.length && <p>No applicants yet.</p>}
+          {!canManageApplications && applicants.length > 0 && (
+            <p className="hint">
+              Rental applications, consent and screening need the Applications.Manage capability.
+            </p>
+          )}
+          {openApplicationId && canManageApplications && (
+            <ApplicationPanel
+              key={openApplicationId}
+              applicationId={openApplicationId}
+              canManage={canManageApplications}
+              onChanged={() => void loadActivity(selectedListing)}
+            />
+          )}
           <h3>Showings</h3>
           {showings.map((showing) => (
             <p key={showing.id}>

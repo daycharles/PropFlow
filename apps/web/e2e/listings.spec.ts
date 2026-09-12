@@ -28,8 +28,12 @@ test("leasing user creates and publishes a listing", async ({ page }) => {
   await expect(page.getByText("Inquiry recorded.")).toBeVisible();
   await page.getByRole("button", { name: "Convert to applicant" }).click();
   await expect(page.getByText(/Taylor Prospect.*New/)).toBeVisible();
-  await page.getByRole("button", { name: "Start screening" }).click();
-  await expect(page.getByText(/Taylor Prospect.*Screening/)).toBeVisible();
+  // PF-S05.09 removed the "Start screening" / "Approve" buttons that used to live here. They
+  // drove PUT .../applicants/{id}/status, which reached Approved with no consent check and no
+  // decision row; the applicant now enters the gated application flow instead. That flow is
+  // e2e/rental-application.spec.ts — this spec stays about listings, inquiries and showings.
+  await expect(page.getByRole("button", { name: "Start screening" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Start application" })).toBeVisible();
   await expect(page.getByText(/Taylor Prospect .*New .*source: Website/)).toBeVisible();
   await page.getByRole("button", { name: "Mark contacted" }).click();
   await expect(page.getByText(/Taylor Prospect .*Contacted/)).toBeVisible();

@@ -702,6 +702,9 @@ message rather than a bare "conflict".
 `PUT /api/marketing/listings/{id}/applicants/{applicantId}/status` sets a flat status on the
 person, with no consent check and no decision row. It now returns **409** once a rental
 application exists for that applicant, naming `/api/applications` instead. It still works for an
-applicant with no application, so nothing that predates FS-S05 breaks. The `/marketing/listings`
-Applicants panel still calls it and will now fail loudly rather than silently corrupting the
-decision trail; rewiring that panel is PF-S05.09.
+applicant with no application, so nothing that predates FS-S05 breaks. PF-S05.09 rewired the
+`/marketing/listings` Applicants panel off it: the panel's "Start screening" and "Approve"
+buttons are gone, and the applicant now enters `/api/applications` through a **Start application**
+control. Nothing in `apps/web` calls the legacy route any more — `api.marketing.listings
+.applicantStatus` (`apps/web/lib/api.ts`) is kept as a client for a route that is still live for
+an applicant with no application, not because a page uses it.
