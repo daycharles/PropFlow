@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Integrations;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Integrations;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Integrations
 {
     [DbContext(typeof(IntegrationStore))]
-    partial class IntegrationStoreModelSnapshot : ModelSnapshot
+    [Migration("20260912203346_IntegrationsReconciliation")]
+    partial class IntegrationsReconciliation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -36,7 +36,7 @@ public sealed class DatabaseReadiness(IConfiguration configuration) : IHealthChe
                          AND count(*) FILTER (WHERE NOT (c.relrowsecurity AND c.relforcerowsecurity)) = 0
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
                        WHERE n.nspname = 'communications' AND c.relkind = 'r' AND c.relname <> '__CommunicationsMigrations')
-                  AND (SELECT count(*) >= 2
+                  AND (SELECT count(*) >= 6
                          AND count(*) FILTER (WHERE NOT (c.relrowsecurity AND c.relforcerowsecurity)) = 0
                        FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
                        WHERE n.nspname = 'integrations' AND c.relkind = 'r' AND c.relname <> '__IntegrationsMigrations')
