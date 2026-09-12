@@ -130,6 +130,7 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/architecture.md` | Normative for cross-cutting design and persistence |
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
 | `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M7) |
+| `docs/integration-sandbox-contract.md` | The **outbound** JSON-over-HTTP contract `SandboxIntegrationAdapter` pulls (PF-S19.07): payload shape, the per-connection credential keys, the synthetic-resident-id rule, the failure messages |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree. The API port is **5001** everywhere (`.env.example`, `next.config.ts:7`, `demo-script.md`, the CI `e2e` job) |
 | `docs/DEPLOYMENT.md` | The **production-posture** install path: a release bundle plus `propflow-deploy up`. Names the three settings Production hard-requires, and the two deliberate deviations (Kestrel-terminated TLS, loopback proxy allow-list) |
 | `docs/RELEASE-TESTING.md` | The **Development** bring-up guide — running from source with `dotnet run` / `next dev`. Ported from the CI `e2e` job; the macOS-specific steps are noted there as unverified |

@@ -7,6 +7,9 @@ namespace PropFlow.UnitTests;
 
 public sealed class IntegrationAdapterTests
 {
+    // The mock adapter returns the same snapshot for every connection, so any id will do.
+    private static readonly IntegrationPullContext AnyConnection = new(Guid.NewGuid());
+
     [Fact]
     public void Canonical_hash_is_stable_for_equal_records_and_changes_with_content()
     {
@@ -24,15 +27,15 @@ public sealed class IntegrationAdapterTests
         var adapter = new MockIntegrationAdapter();
         Assert.Equal("mock", adapter.SourceSystem);
 
-        var first = await adapter.PullAsync(default);
-        var second = await adapter.PullAsync(default);
+        var first = await adapter.PullAsync(AnyConnection, default);
+        var second = await adapter.PullAsync(AnyConnection, default);
         Assert.Equal(first, second);
     }
 
     [Fact]
     public async Task Mock_snapshot_is_internally_consistent()
     {
-        var snapshot = await new MockIntegrationAdapter().PullAsync(default);
+        var snapshot = await new MockIntegrationAdapter().PullAsync(AnyConnection, default);
         var propertyIds = snapshot.Properties.Select(p => p.ExternalId).ToHashSet();
         var spaceIds = snapshot.Spaces.Select(s => s.ExternalId).ToHashSet();
 
@@ -123,6 +126,14 @@ public sealed class IntegrationAdapterTests
         Assert.Throws<ArgumentException>(() => IntegrationSecretLookup.Found("  "));
     }
 
+    [Fact]
+    public void Pull_context_requires_the_connection_it_runs_for()
+    {
+        var id = Guid.NewGuid();
+        Assert.Equal(id, new IntegrationPullContext(id).ConnectionId);
+        Assert.Throws<ArgumentException>(() => new IntegrationPullContext(Guid.Empty));
+    }
+
     // Claims "mock" on purpose — the misconfiguration IntegrationCatalog must refuse loudly.
     private sealed class DuplicateSourceAdapter : IIntegrationAdapter
     {
@@ -130,7 +141,7 @@ public sealed class IntegrationAdapterTests
         public string DisplayName => "Second mock";
         public IntegrationAdapterDescriptor Descriptor => IntegrationAdapterDescriptor.FullPropertyManagementSnapshot;
 
-        public Task<IntegrationSnapshot> PullAsync(CancellationToken cancellationToken) =>
+        public Task<IntegrationSnapshot> PullAsync(IntegrationPullContext context, CancellationToken cancellationToken) =>
             Task.FromResult(IntegrationSnapshot.Empty(SourceSystem));
     }
 
@@ -140,7 +151,7 @@ public sealed class IntegrationAdapterTests
         public string DisplayName => "Stub property system";
         public IntegrationAdapterDescriptor Descriptor => IntegrationAdapterDescriptor.FullPropertyManagementSnapshot;
 
-        public Task<IntegrationSnapshot> PullAsync(CancellationToken cancellationToken) =>
+        public Task<IntegrationSnapshot> PullAsync(IntegrationPullContext context, CancellationToken cancellationToken) =>
             Task.FromResult(IntegrationSnapshot.Empty(SourceSystem));
     }
 }
