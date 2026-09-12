@@ -1,15 +1,27 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PropFlow.Application.Integrations;
 using PropFlow.Domain.Integrations;
 
 namespace PropFlow.Infrastructure.Integrations;
 
-// Connection CRUD plus the sync run. A sync pulls the adapter's full snapshot and upserts one
-// ExternalRecordLink per external record, tracking added / updated / failed. It does not yet
-// reconcile those records into Properties/Spaces/WorkItems/Assets — PF-6.10 is the external
-// side only. The connection's health counters are updated in the same transaction as the links.
-public sealed class EfIntegrationOperations(IntegrationStore store, IIntegrationCatalog catalog, TimeProvider clock)
+// Connection CRUD plus the sync run.
+//
+// A sync claims a SyncRun, pulls the adapter's full snapshot, upserts one ExternalRecordLink per
+// external record, hands the snapshot to EfIntegrationReconciler to drive into the operations
+// schema, sweeps the links the source stopped reporting, and closes the run with real counters.
+//
+// The run row is inserted and SAVED BEFORE the adapter is contacted — the same claim-then-commit
+// shape as OutboxProcessor.cs:38-48, and for the same reason: two dispatchers must not sync one
+// connection at once. Exclusivity is the IX_SyncRuns_ActiveClaim partial unique index, not an
+// in-memory check, so the loser is whoever the database rejects. Do not move that save after the
+// pull to avoid the exception; the exception is the claim working.
+public sealed class EfIntegrationOperations(
+    IntegrationStore store,
+    IIntegrationCatalog catalog,
+    TimeProvider clock,
+    EfIntegrationReconciler reconciler)
     : IIntegrationOperations
 {
     public async Task<IReadOnlyList<IntegrationConnectionHealth>> ListAsync(CancellationToken cancellationToken)
@@ -74,7 +86,11 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         return new RecordsPage(items, total, page, pageSize);
     }
 
-    public async Task<SyncReport> SyncAsync(Guid id, CancellationToken cancellationToken)
+    public Task<SyncReport> SyncAsync(Guid id, CancellationToken cancellationToken) =>
+        SyncAsync(id, SyncTrigger.Manual, 1, cancellationToken);
+
+    public async Task<SyncReport> SyncAsync(Guid id, SyncTrigger trigger, int attemptNumber,
+        CancellationToken cancellationToken)
     {
         var connection = await store.Connections.SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
         if (connection is null) return SyncReport.NotFound;
@@ -89,8 +105,22 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
             return new SyncReport(SyncOutcome.Failed, 0, 0, 0, 0, connection.LastError);
         }
 
+        // THE CLAIM. Inserted and committed before PullAsync, exactly as OutboxProcessor claims an
+        // outbox message before contacting a provider. IX_SyncRuns_ActiveClaim makes a second
+        // Running row for this connection a unique violation, so the loser finds out here and
+        // backs out rather than running a duplicate sync.
+        var run = SyncRun.Begin(store.OrganizationId, Guid.NewGuid(), connection.Id, trigger, now, attemptNumber);
+        store.SyncRuns.Add(run);
         connection.BeginSync(now);
-        await store.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await store.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsActiveClaimViolation(exception))
+        {
+            store.ChangeTracker.Clear();
+            return SyncReport.AlreadyRunning;
+        }
 
         IntegrationSnapshot snapshot;
         try
@@ -99,30 +129,52 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            connection.FailSync(clock.GetUtcNow(), Sanitize(ex.Message));
+            var error = Sanitize(ex.Message);
+            connection.FailSync(clock.GetUtcNow(), error);
+            run.Fail(error, SyncCounts.Zero, clock.GetUtcNow());
             await store.SaveChangesAsync(cancellationToken);
-            return new SyncReport(SyncOutcome.Failed, 0, 0, 0, 0, connection.LastError);
+            return new SyncReport(SyncOutcome.Failed, 0, 0, 0, 0, connection.LastError, RunId: run.Id);
         }
 
         var existing = await store.RecordLinks
             .Where(r => r.ConnectionId == id)
             .ToDictionaryAsync(r => (r.Kind, r.ExternalId), cancellationToken);
 
-        var counters = new Counters();
-        Ingest(IntegrationEntityKind.Property, snapshot.Properties, r => r.ExternalId, connection, existing, counters, now);
-        Ingest(IntegrationEntityKind.Space, snapshot.Spaces, r => r.ExternalId, connection, existing, counters, now);
-        Ingest(IntegrationEntityKind.Occupancy, snapshot.Occupancies, r => r.ExternalId, connection, existing, counters, now);
-        Ingest(IntegrationEntityKind.WorkOrder, snapshot.WorkOrders, r => r.ExternalId, connection, existing, counters, now);
-        Ingest(IntegrationEntityKind.Asset, snapshot.Assets, r => r.ExternalId, connection, existing, counters, now);
+        var seen = 0;
+        seen += Ingest(IntegrationEntityKind.Property, snapshot.Properties, r => r.ExternalId, connection, existing, run.Id, now);
+        seen += Ingest(IntegrationEntityKind.Space, snapshot.Spaces, r => r.ExternalId, connection, existing, run.Id, now);
+        seen += Ingest(IntegrationEntityKind.Occupancy, snapshot.Occupancies, r => r.ExternalId, connection, existing, run.Id, now);
+        seen += Ingest(IntegrationEntityKind.WorkOrder, snapshot.WorkOrders, r => r.ExternalId, connection, existing, run.Id, now);
+        seen += Ingest(IntegrationEntityKind.Asset, snapshot.Assets, r => r.ExternalId, connection, existing, run.Id, now);
+        // Occupancies bring a resident each, under a synthetic external id, because
+        // CanonicalOccupancy carries the person but no id for them. The link has to exist before
+        // the reconciler looks it up. Residents are not counted in Seen: they are not records the
+        // source sent, they are records PropFlow derived.
+        foreach (var occupancy in snapshot.Occupancies)
+            EnsureLink(IntegrationEntityKind.Resident, SyntheticExternalId.ForResident(occupancy.ExternalId),
+                connection, existing);
 
-        connection.CompleteSync(clock.GetUtcNow());
+        run.Heartbeat(clock.GetUtcNow());
         await store.SaveChangesAsync(cancellationToken);
 
-        // Failed is 0 here: PF-6.10 only records the external side, so there is no per-record
-        // mapping step to fail. It becomes meaningful when reconciliation into the domain tables
-        // lands. The persisted FailedRecords health count already reflects any Failed links.
-        return new SyncReport(SyncOutcome.Completed, counters.Seen, counters.Added, counters.Updated, 0, null);
+        var reconciliation = await reconciler.ReconcileAsync(connection, adapter.Descriptor, snapshot,
+            existing, run.Id, cancellationToken);
+
+        var counts = new SyncCounts(seen, reconciliation.Added, reconciliation.Updated,
+            reconciliation.Failed, reconciliation.Conflicted);
+        connection.CompleteSync(clock.GetUtcNow());
+        run.Complete(counts, CanonicalHash.Of(snapshot), clock.GetUtcNow());
+        await store.SaveChangesAsync(cancellationToken);
+
+        return new SyncReport(SyncOutcome.Completed, seen, reconciliation.Added, reconciliation.Updated,
+            reconciliation.Failed, null, reconciliation.Conflicted, reconciliation.Retired, run.Id);
     }
+
+    // The claim index is the only unique constraint a Running SyncRun insert can violate, but the
+    // name is checked rather than assumed so an unrelated constraint failure still surfaces.
+    private static bool IsActiveClaimViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgres
+        && postgres.ConstraintName is "IX_SyncRuns_ActiveClaim";
 
     // IntegrationConnection.FailSync rejects control characters and anything over ErrorMaxLength,
     // so an adapter exception with a multi-line or very long message used to throw *inside* the
@@ -148,26 +200,30 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
             : builder.ToString(0, IntegrationConnection.ErrorMaxLength - 1) + "…";
     }
 
-    private void Ingest<T>(IntegrationEntityKind kind, IReadOnlyList<T> records, Func<T, string> externalId,
+    // Records what the source currently says about each external id. This is the "last SEEN" side
+    // only: it moves ContentHash and never ReconciledHash, so a record whose content changed comes
+    // out of here with NeedsReconciliation true and the reconciler decides what to do about it.
+    // Returns how many records were seen.
+    private int Ingest<T>(IntegrationEntityKind kind, IReadOnlyList<T> records, Func<T, string> externalId,
         IntegrationConnection connection, Dictionary<(IntegrationEntityKind, string), ExternalRecordLink> existing,
-        Counters counters, DateTimeOffset now) where T : notnull
+        Guid runId, DateTimeOffset now) where T : notnull
     {
         foreach (var record in records)
         {
-            counters.Seen++;
-            var key = externalId(record);
-            var hash = CanonicalHash.Of(record);
-            if (!existing.TryGetValue((kind, key), out var link))
-            {
-                link = new ExternalRecordLink(store.OrganizationId, Guid.NewGuid(), connection.Id, kind, key);
-                store.RecordLinks.Add(link);
-                existing[(kind, key)] = link;
-                link.Observe(hash, now);
-                counters.Added++;
-                continue;
-            }
-            if (link.Observe(hash, now)) counters.Updated++;
+            var link = EnsureLink(kind, externalId(record), connection, existing);
+            link.Observe(CanonicalHash.Of(record), now, runId);
         }
+        return records.Count;
+    }
+
+    private ExternalRecordLink EnsureLink(IntegrationEntityKind kind, string externalId,
+        IntegrationConnection connection, Dictionary<(IntegrationEntityKind, string), ExternalRecordLink> existing)
+    {
+        if (existing.TryGetValue((kind, externalId), out var link)) return link;
+        link = new ExternalRecordLink(store.OrganizationId, Guid.NewGuid(), connection.Id, kind, externalId);
+        store.RecordLinks.Add(link);
+        existing[(kind, externalId)] = link;
+        return link;
     }
 
     private async Task<IntegrationConnectionHealth> HealthAsync(IntegrationConnection connection, CancellationToken cancellationToken)
@@ -179,12 +235,5 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         return new IntegrationConnectionHealth(connection.Id, connection.SourceSystem, connection.DisplayName,
             connection.IsEnabled, connection.LastAttemptedAt, connection.LastSucceededAt,
             connection.ConsecutiveFailures, connection.LastError, tracked, failed);
-    }
-
-    private sealed class Counters
-    {
-        public int Seen;
-        public int Added;
-        public int Updated;
     }
 }

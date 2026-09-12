@@ -91,6 +91,7 @@ builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationAdapter, SandboxIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationSecretStore, ConfiguredIntegrationSecretStore>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
+builder.Services.AddScoped<EfIntegrationReconciler>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
 builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();
 builder.Services.AddSingleton<PropFlow.Application.Screening.IScreeningProvider, PropFlow.Infrastructure.Screening.ConfiguredScreeningProvider>();

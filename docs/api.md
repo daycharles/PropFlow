@@ -588,16 +588,29 @@ fails its first sync with a `lastError` naming the configuration key that is mis
 | POST | /api/integrations | `Integrations.Manage` + CSRF; `{ sourceSystem, displayName }`; 201, 400 for an unknown source system or invalid text, 409 if a connection to that source already exists |
 | POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
 | POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |
-| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull; 200 with a sync report, 404, or 409 if the connection is disabled |
+| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull and reconciles it; 200 with a sync report, 404, or 409 if the connection is disabled or a sync is already running |
 
 A health snapshot is `{ id, sourceSystem, displayName, isEnabled, lastAttemptedAt,
 lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords }`. A sync report
-is `{ outcome, seen, added, updated, failed, error }` where `outcome` is `Completed` / `Failed`
-/ `NotFound` / `Disabled`. `added` + `updated` are relative to what the connection had already
-seen, keyed by a content hash, so re-syncing an unchanged source reports zeros. `failed` is
-always 0 until reconciliation lands. A tracked record is `{ kind, externalId, contentHash,
-syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy` / `WorkOrder`
-/ `Asset` and `syncState` is `Pending` / `Synced` / `Failed`.
+is `{ outcome, seen, added, updated, failed, error, conflicted, retired, runId }` where `outcome`
+is `Completed` / `Failed` / `NotFound` / `Disabled` / `AlreadyRunning`.
+
+**The counters changed meaning in PF-S19.05 and are now about PropFlow rows, not external record
+links.** `seen` is canonical records in the snapshot; `added` and `updated` are PropFlow rows
+created and updated; `failed` is records a domain invariant refused; `conflicted` is records that
+raised a conflict, upstream disappearances included; `retired` is links the source stopped
+reporting, whose PropFlow rows are left untouched. Re-syncing an unchanged source still reports
+zero `added` and `updated`, because a link whose `reconciledHash` already equals its
+`contentHash` is skipped. A connection with no mapping profile reports `added` 0 and a non-zero
+`conflicted` on its first sync — that is the intended connect → sync → review → promote → sync
+flow, not a failure.
+
+A tracked record is `{ kind, externalId, contentHash, reconciledHash, internalId, syncState,
+lastSeenAt, lastReconciledAt, lastRunId, lastError }`; `kind` is `Property` / `Space` /
+`Occupancy` / `WorkOrder` / `Asset` / `Resident` / `Building` and `syncState` is `Pending` /
+`Synced` / `Failed` / `Conflicted` / `Retired`. `contentHash` is what the source last said and
+`reconciledHash` is what was last written into PropFlow; the two differing is what makes a
+replayed sync converge rather than lose a change.
 
 `Integrations.Manage` is granted to Organization Admin and Property Manager only. The
 Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
