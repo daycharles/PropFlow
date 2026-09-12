@@ -71,6 +71,7 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/marketing/listings/{id}/unpublish | Leasing.Manage + CSRF; returns a published listing to draft |
 | GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry for an available published listing with optional lead-source attribution; active duplicate email inquiries return 409 |
 | PUT | /api/marketing/listings/{id}/inquiries/{inquiryId}/status | Leasing.Manage + CSRF; advances inquiry status |
+| PUT | /api/marketing/listings/{id}/applicants/{applicantId}/status | Leasing.Manage + CSRF; advances the legacy per-person applicant status; **409 once a rental application exists for that applicant** (see Rental applications and screening) |
 | GET/POST | /api/marketing/listings/{id}/showings | Read or request a showing for a published listing |
 | PUT | /api/marketing/listings/{id}/showings/{showingId}/status | Leasing.Manage + CSRF; updates showing status |
 | GET | /api/leasing/leases/ | Work.Read; tenant-scoped leases, optionally filtered by resident or space |
@@ -631,3 +632,76 @@ reproducible immutable owner statements. Journal lines may carry an optional `pr
 property reporting. Managers use `Accounting.Manage`; statement reads also accept
 `Accounting.OwnerRead` (granted to the Owner role). A repeated statement request returns the
 existing snapshot, whose response includes `netOwnerAmount` and a SHA-256 `sourceHash`.
+
+## Rental applications and screening (FS-S05)
+
+`/api/applications` is the FS-S05 surface: intake, consent, third-party screening and the
+approve/deny trail. Every route requires `Applications.Manage`. `Applications.ReadPii` is a
+second, separately revocable capability that unmasks contact details, income and screening
+detail; `Regional Manager` holds the first and not the second.
+
+**Masking.** In a masked response the PII properties are **absent from the JSON**, not null — a
+null means "no value is held", an absent property means "you may not see this". The masked fields
+are `email`, `phone`, `monthlyIncome`, `employmentStatus` on each applicant and `score`,
+`summary`, `receivedAt` on each screening row. `name`, `role`, screening `status`, `attempts` and
+`recommendation` stay visible so a queue is workable without the PII capability. List and detail
+unmask automatically for a caller holding `Applications.ReadPii`; `GET /{id}/pii` requires it, so
+a denial is a visible 403 rather than a quietly thinner object.
+
+There is no per-read PII access-log table. It was considered and declined: it would be the
+highest-write table in the `operations` schema and arrives with its own retention story.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/applications/ | Applications.Manage; tenant-scoped applications, optional `?listingId=` and `?status=`, newest submitted first, capped at 500; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/ | Applications.Manage + CSRF; creates a Draft application against a listing; 201, or 404 when the listing does not exist |
+| GET | /api/applications/{id} | Applications.Manage; application with its applicants and screening rows, or 404; masked unless the caller holds Applications.ReadPii |
+| GET | /api/applications/{id}/pii | **Applications.ReadPii**; the same record always unmasked; 403 without the capability, 404 when the application does not exist |
+| POST | /api/applications/{id}/applicants | Applications.Manage + CSRF; adds a person to the application as Primary/CoApplicant/Guarantor with optional monthly income and employment status; 404 unknown application or applicant, 409 for a second Primary, a duplicate person, a co-applicant before the Primary, or a terminal application |
+| POST | /api/applications/{id}/submit | Applications.Manage + CSRF; Draft → Submitted; 409 unless Draft and a Primary applicant exists |
+| GET | /api/applications/{id}/consent | Applications.Manage; `{ applicationId, effective, history }` — the full append-only row history plus the reduction to the latest row per (applicant, check). Not masked: consent rows carry no PII |
+| POST | /api/applications/{id}/consent | Applications.Manage + CSRF; records one Granted/Revoked consent row (a revocation is a new row, never an edit). Advances Submitted → ConsentGranted once every applicant holds at least one effective grant; 201 with `{ consent, applicationStatus }`, 400 for an applicant not on the application or an Unknown decision |
+| POST | /api/applications/{id}/withdraw | Applications.Manage + CSRF; any non-terminal state → Withdrawn; 409 when already terminal |
+| GET | /api/applications/{id}/screening | Applications.Manage; screening requests with attempts, last error and the latest verdict; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/{id}/screening | Applications.Manage + CSRF; ConsentGranted → Screening, then one provider call per consented applicant. 200 and Screening → UnderReview when every applicant's screening completes; **503 and no verdict written** on a provider outage; 409 from any state but ConsentGranted or Screening, or when no applicant on the application holds effective consent. **Idempotent**: re-posting while already in Screening re-attempts the still-pending requests rather than conflicting, so a client that received a 503 can retry the URL it posted to. Entering Screening still requires ConsentGranted — that is the consent gate and it is unaffected |
+| POST | /api/applications/{id}/screening/{requestId}/retry | Applications.Manage + CSRF; re-attempts one Pending request; 409 when the request is not Pending or the applicant's consent has since been revoked; 503 on a further outage. The attempt that reaches `Screening:MaxAttempts` moves the request to Abandoned, and when every request for the application is Abandoned the application returns to ConsentGranted |
+
+**Attempt cycles.** A screening request's idempotency key is
+`application:{id}:applicant:{id}:cycle:{n}`. The cycle is what makes `AbandonScreening`'s promise
+reachable: a key fixed per (application, applicant) would have let the unique index refuse any
+replacement forever, so an applicant whose provider was down for its whole retry budget could
+never be screened again. A new cycle is minted only once every earlier one is Abandoned; a live
+(Pending/InFlight) request is reused, and an applicant who already Completed is not re-screened.
+
+**Provider outage.** `ScreeningRecommendation.Unavailable` means the provider could not answer,
+and `ScreeningResult` refuses to store it, so an outage can never become a persisted verdict. The
+response is 503. What *is* written on that path is the `ScreeningRequest` row and its attempt
+counter — the retry ledger, not an answer about the applicant — because retry exhaustion cannot
+be reached by a counter that is not persisted.
+
+**Retry ceiling.** `Screening:MaxAttempts` (default 3, must be at least 1, validated at startup).
+Configuration rather than a constant or a request field: a constant cannot be tuned when a
+bureau's availability turns out worse than assumed, and a request field would let a caller grant
+itself unlimited retries against a paid third party.
+
+**The consent gate is checked twice.** The domain refuses any status but `ConsentGranted`, and
+the endpoint separately re-checks effective consent per applicant immediately before the provider
+call — a revocation recorded after the application reached `ConsentGranted` is invisible to the
+status alone.
+| POST | /api/applications/{id}/approve | Applications.Manage + CSRF; UnderReview → Approved with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview, and 409 with an actionable message when any screening verdict is `Fail` and no override `note` was supplied |
+| POST | /api/applications/{id}/deny | Applications.Manage + CSRF; UnderReview → Denied with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview |
+| GET | /api/applications/{id}/decisions | Applications.Manage; the append-only decision trail, newest first. Not masked: a reason code is not applicant PII |
+
+**Approving over a failed screening.** A `Fail` recommendation does **not** hard-block approval —
+a hard block makes individualized assessment impossible — but approving over one requires a
+non-blank `note`, so the override is never silent. The rule is a domain refusal in
+`RentalApplication.Approve`, not an endpoint check, and the 409 body carries the domain's own
+message rather than a bare "conflict".
+
+**The legacy applicant-status route is fenced.**
+`PUT /api/marketing/listings/{id}/applicants/{applicantId}/status` sets a flat status on the
+person, with no consent check and no decision row. It now returns **409** once a rental
+application exists for that applicant, naming `/api/applications` instead. It still works for an
+applicant with no application, so nothing that predates FS-S05 breaks. The `/marketing/listings`
+Applicants panel still calls it and will now fail loudly rather than silently corrupting the
+decision trail; rewiring that panel is PF-S05.09.
