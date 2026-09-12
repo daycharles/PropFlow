@@ -38,14 +38,28 @@ public static class Capabilities
     // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
     public const string ManageConfiguration = "Settings.ManageConfiguration";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
+    // FS-S05: applicant intake is split into two capabilities on purpose. ManageApplications is
+    // the workflow - create an application, record consent, order screening, approve or deny -
+    // and it reaches Regional Manager, who runs leasing in the field. ReadApplicantPii is the
+    // separate gate on unmasked contact details, income and screening detail, and it does not.
+    // One combined capability would make FS-S05's required PII-access tests vacuous: they would
+    // assert that whoever can work an application can read its PII, which is the same claim
+    // twice. The second constant is what gives GET /api/applications/{id}/pii (PF-S05.05) a
+    // control that can actually be denied to a role that still holds the workflow.
+    public const string ManageApplications = "Applications.Manage";   // intake, consent, screening, approve/deny
+    public const string ReadApplicantPii   = "Applications.ReadPii";  // unmasked contact, income, screening detail
+
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration, ManageApplications, ReadApplicantPii];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
     public static IReadOnlyList<string> ForRole(string role, Guid? employeeId = null, Guid? vendorId = null) => role switch
     {
         "Organization Admin" or "Property Manager" => All.Where(x => x is not ResidentPortalRead and not ResidentPortalRequest).ToArray(),
-        "Regional Manager" => CategoryManagement,
+        // Spread rather than extend CategoryManagement: that array is shared with any future
+        // role arm, and ManageApplications is a Regional Manager decision, not a work-management
+        // one. ReadApplicantPii is deliberately absent here - see the constants above.
+        "Regional Manager" => [.. CategoryManagement, ManageApplications],
         "Maintenance Supervisor" => WorkManagement,
         "Read Only" => [ReadWork],
         // A field role is not usable until the control-plane membership names the employee/vendor
