@@ -328,10 +328,16 @@ public sealed class IntegrationReconciliationPersistenceTests(DatabaseFixture fi
         Assert.Empty(await other.MappingRules.IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.SyncRuns.IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.Conflicts.IgnoreQueryFilters().ToListAsync());
+        // "SELECT *, xmin", not "SELECT *". Both of these entities carry the xmin row version, and
+        // PostgreSQL excludes system columns from a star expansion, so the plain star the
+        // Attachments/CustomFieldDefinitions isolation tests use (those entities have no row
+        // version) fails here with "The required column 'xmin' was not present". The point of the
+        // assertion is that a raw, filter-bypassing read still returns nothing, so the projection
+        // has to be one EF can actually materialise.
         Assert.Empty(await other.Conflicts
-            .FromSqlRaw("SELECT * FROM integrations.\"Conflicts\"").IgnoreQueryFilters().ToListAsync());
+            .FromSqlRaw("SELECT *, xmin FROM integrations.\"Conflicts\"").IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.SyncRuns
-            .FromSqlRaw("SELECT * FROM integrations.\"SyncRuns\"").IgnoreQueryFilters().ToListAsync());
+            .FromSqlRaw("SELECT *, xmin FROM integrations.\"SyncRuns\"").IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
