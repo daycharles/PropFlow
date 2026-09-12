@@ -217,6 +217,7 @@ app.MapSessionManagementEndpoints();
 app.MapWorkEndpoints();
 app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
+app.MapApplicationEndpoints();
 app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();

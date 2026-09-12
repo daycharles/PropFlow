@@ -24,6 +24,17 @@ public sealed class ScreeningRequest : TenantEntity
         IdempotencyKey = ApplicationText.RequireSingleLine(idempotencyKey, nameof(idempotencyKey), IdempotencyKeyMaxLength);
     }
 
+    // The canonical key for "screening this applicant on this application". It lives here rather
+    // than in the endpoint so the request path, a retry and any later background sweep all derive
+    // the same key — the unique index on (OrganizationId, IdempotencyKey) only makes a replay
+    // safe if every caller spells the key identically.
+    public static string KeyFor(Guid applicationId, Guid applicantId)
+    {
+        if (applicationId == Guid.Empty) throw new ArgumentException("Application is required.", nameof(applicationId));
+        if (applicantId == Guid.Empty) throw new ArgumentException("Applicant is required.", nameof(applicantId));
+        return $"application:{applicationId:N}:applicant:{applicantId:N}";
+    }
+
     public Guid ApplicationId { get; private set; }
     public Guid ApplicantId { get; private set; }
     public string IdempotencyKey { get; private set; } = "";

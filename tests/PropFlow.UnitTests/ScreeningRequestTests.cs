@@ -150,6 +150,41 @@ public sealed class ScreeningRequestTests
         Assert.Throws<ArgumentException>(() => request.RecordFailure("  ", Now, maxAttempts: 3));
         Assert.Throws<ArgumentException>(() => request.RecordFailure(new string('e', ScreeningRequest.ErrorMaxLength + 1), Now, maxAttempts: 3));
     }
+
+    // The unique index on (OrganizationId, IdempotencyKey) only makes a replay safe if the
+    // request path and the retry path spell the key identically, so the spelling is one function.
+    [Fact]
+    public void The_idempotency_key_is_stable_for_an_application_and_applicant()
+    {
+        var application = Guid.NewGuid();
+        var applicant = Guid.NewGuid();
+        Assert.Equal(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(application, applicant));
+        Assert.Equal($"application:{application:N}:applicant:{applicant:N}", ScreeningRequest.KeyFor(application, applicant));
+    }
+
+    [Fact]
+    public void A_different_applicant_or_application_gets_a_different_key()
+    {
+        var application = Guid.NewGuid();
+        var applicant = Guid.NewGuid();
+        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(application, Guid.NewGuid()));
+        Assert.NotEqual(ScreeningRequest.KeyFor(application, applicant), ScreeningRequest.KeyFor(Guid.NewGuid(), applicant));
+    }
+
+    [Fact]
+    public void The_generated_key_fits_the_persisted_column_and_is_accepted_by_the_constructor()
+    {
+        var key = ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.NewGuid());
+        Assert.True(key.Length <= ScreeningRequest.IdempotencyKeyMaxLength);
+        Assert.Equal(key, new ScreeningRequest(Org, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), key).IdempotencyKey);
+    }
+
+    [Fact]
+    public void An_empty_application_or_applicant_has_no_key()
+    {
+        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.Empty, Guid.NewGuid()));
+        Assert.Throws<ArgumentException>(() => ScreeningRequest.KeyFor(Guid.NewGuid(), Guid.Empty));
+    }
 }
 
 public sealed class ScreeningResultTests

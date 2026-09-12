@@ -618,3 +618,33 @@ reproducible immutable owner statements. Journal lines may carry an optional `pr
 property reporting. Managers use `Accounting.Manage`; statement reads also accept
 `Accounting.OwnerRead` (granted to the Owner role). A repeated statement request returns the
 existing snapshot, whose response includes `netOwnerAmount` and a SHA-256 `sourceHash`.
+
+## Rental applications and screening (FS-S05)
+
+`/api/applications` is the FS-S05 surface: intake, consent, third-party screening and the
+approve/deny trail. Every route requires `Applications.Manage`. `Applications.ReadPii` is a
+second, separately revocable capability that unmasks contact details, income and screening
+detail; `Regional Manager` holds the first and not the second.
+
+**Masking.** In a masked response the PII properties are **absent from the JSON**, not null — a
+null means "no value is held", an absent property means "you may not see this". The masked fields
+are `email`, `phone`, `monthlyIncome`, `employmentStatus` on each applicant and `score`,
+`summary`, `receivedAt` on each screening row. `name`, `role`, screening `status`, `attempts` and
+`recommendation` stay visible so a queue is workable without the PII capability. List and detail
+unmask automatically for a caller holding `Applications.ReadPii`; `GET /{id}/pii` requires it, so
+a denial is a visible 403 rather than a quietly thinner object.
+
+There is no per-read PII access-log table. It was considered and declined: it would be the
+highest-write table in the `operations` schema and arrives with its own retention story.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/applications/ | Applications.Manage; tenant-scoped applications, optional `?listingId=` and `?status=`, newest submitted first, capped at 500; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/ | Applications.Manage + CSRF; creates a Draft application against a listing; 201, or 404 when the listing does not exist |
+| GET | /api/applications/{id} | Applications.Manage; application with its applicants and screening rows, or 404; masked unless the caller holds Applications.ReadPii |
+| GET | /api/applications/{id}/pii | **Applications.ReadPii**; the same record always unmasked; 403 without the capability, 404 when the application does not exist |
+| POST | /api/applications/{id}/applicants | Applications.Manage + CSRF; adds a person to the application as Primary/CoApplicant/Guarantor with optional monthly income and employment status; 404 unknown application or applicant, 409 for a second Primary, a duplicate person, a co-applicant before the Primary, or a terminal application |
+| POST | /api/applications/{id}/submit | Applications.Manage + CSRF; Draft → Submitted; 409 unless Draft and a Primary applicant exists |
+| GET | /api/applications/{id}/consent | Applications.Manage; `{ applicationId, effective, history }` — the full append-only row history plus the reduction to the latest row per (applicant, check). Not masked: consent rows carry no PII |
+| POST | /api/applications/{id}/consent | Applications.Manage + CSRF; records one Granted/Revoked consent row (a revocation is a new row, never an edit). Advances Submitted → ConsentGranted once every applicant holds at least one effective grant; 201 with `{ consent, applicationStatus }`, 400 for an applicant not on the application or an Unknown decision |
+| POST | /api/applications/{id}/withdraw | Applications.Manage + CSRF; any non-terminal state → Withdrawn; 409 when already terminal |
