@@ -13,6 +13,10 @@ public sealed class MockIntegrationAdapter : IIntegrationAdapter
     public string SourceSystem => Source;
     public string DisplayName => "Mock property system";
 
+    // Property management, all five canonical kinds, whole-source snapshot only: PullAsync takes
+    // no cursor and always returns the same fixed set.
+    public IntegrationAdapterDescriptor Descriptor => IntegrationAdapterDescriptor.FullPropertyManagementSnapshot;
+
     public Task<IntegrationSnapshot> PullAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Snapshot);
 
