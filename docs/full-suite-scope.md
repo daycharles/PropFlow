@@ -143,6 +143,15 @@ The shared OperationsStore migration is intentionally a merge point with the in-
 procurement migration; its generated snapshot must be reconciled once the parallel operations
 branches are integrated.
 
+**FS-S14 — Vendor, procurement, and purchasing (#202).** Vendor profiles, expiring compliance
+documents, contracts, rate cards, bids, purchase orders, work authorizations, invoice matching,
+and performance reviews are persisted in the `operations` schema. `Procurement.Manage` is limited
+to organization administrators and property managers. Purchase orders above their configured
+approval threshold require approval; expired active insurance or license documents block
+submission; issued purchase orders enforce vendor-safe invoice matching. PO lifecycle and invoice
+match actions emit append-only timeline entries. Tenant composite foreign keys, runtime grants,
+RLS, unit tests, and HTTP tests cover isolation and role-negative behavior.
+
 ## Gates 2–5
 
 ### FS-G3A — Operations platform (#187 epic, #201 FS-S13, #203 FS-S15)

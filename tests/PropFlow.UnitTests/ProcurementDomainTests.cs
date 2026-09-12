@@ -1,4 +1,5 @@
 using PropFlow.Domain.Procurement;
+using PropFlow.Application;
 using Xunit;
 
 namespace PropFlow.UnitTests;
@@ -43,5 +44,13 @@ public sealed class ProcurementDomainTests
         Assert.Equal(ProcurementStatus.Draft, a.Status);
         a.Approve();
         Assert.Equal(ProcurementStatus.Approved, a.Status);
+    }
+
+    [Fact]
+    public void Field_vendor_role_has_no_procurement_write_or_read_capability()
+    {
+        var capabilities = Capabilities.ForRole(Roles.Vendor, vendorId: Guid.NewGuid());
+        Assert.DoesNotContain(Capabilities.ReadProcurement, capabilities);
+        Assert.DoesNotContain(Capabilities.ManageProcurement, capabilities);
     }
 }

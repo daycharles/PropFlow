@@ -2988,6 +2988,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 
                     b.HasKey("OrganizationId", "Id");
 
+                    b.HasIndex("OrganizationId", "SpaceId");
+
                     b.HasIndex("OrganizationId", "TemplateId");
 
                     b.HasIndex("OrganizationId", "PropertyId", "Status", "CreatedAt");
@@ -4060,6 +4062,11 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PropFlow.Domain.Properties.Space", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PropFlow.Domain.Work.InspectionTemplate", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "TemplateId")
@@ -4088,6 +4095,12 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .WithMany()
                         .HasForeignKey("OrganizationId", "PropertyId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PropFlow.Domain.Properties.Space", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

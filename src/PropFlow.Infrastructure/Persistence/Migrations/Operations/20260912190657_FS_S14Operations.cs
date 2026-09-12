@@ -6,86 +6,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     /// <inheritdoc />
-    public partial class FS_S14Procurement : Migration
+    public partial class FS_S14Operations : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_WorkCategories_OrganizationId_Name",
-                schema: "operations",
-                table: "WorkCategories");
-
-            migrationBuilder.AddColumn<string>(
-                name: "DisplayNumber",
-                schema: "operations",
-                table: "WorkItems",
-                type: "character varying(50)",
-                maxLength: 50,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "AppliesTo",
-                schema: "operations",
-                table: "WorkCategories",
-                type: "character varying(20)",
-                maxLength: 20,
-                nullable: false,
-                defaultValue: "WorkItem");
-
-            migrationBuilder.CreateTable(
-                name: "ApprovalRequests",
-                schema: "operations",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SubjectType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    SubjectId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RequestedBy = table.Column<Guid>(type: "uuid", nullable: false),
-                    Note = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
-                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    RequestedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    DecidedBy = table.Column<Guid>(type: "uuid", nullable: true),
-                    DecidedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    DecisionReason = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalRequests", x => new { x.OrganizationId, x.Id });
-                });
-
-            migrationBuilder.CreateTable(
-                name: "CustomFieldValues",
-                schema: "operations",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    WorkId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CustomFieldDefinitionId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Value = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_CustomFieldValues", x => new { x.OrganizationId, x.Id });
-                    table.ForeignKey(
-                        name: "FK_CustomFieldValues_CustomFieldDefinitions_OrganizationId_Cus~",
-                        columns: x => new { x.OrganizationId, x.CustomFieldDefinitionId },
-                        principalSchema: "operations",
-                        principalTable: "CustomFieldDefinitions",
-                        principalColumns: new[] { "OrganizationId", "Id" },
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_CustomFieldValues_WorkItems_OrganizationId_WorkId",
-                        columns: x => new { x.OrganizationId, x.WorkId },
-                        principalSchema: "operations",
-                        principalTable: "WorkItems",
-                        principalColumns: new[] { "OrganizationId", "Id" },
-                        onDelete: ReferentialAction.Restrict);
-                });
-
             migrationBuilder.CreateTable(
                 name: "InspectionTemplates",
                 schema: "operations",
@@ -103,56 +28,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_InspectionTemplates", x => new { x.OrganizationId, x.Id });
-                });
-
-            migrationBuilder.CreateTable(
-                name: "NotificationPreferences",
-                schema: "operations",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    EventType = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
-                    Enabled = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_NotificationPreferences", x => new { x.OrganizationId, x.Id });
-                });
-
-            migrationBuilder.CreateTable(
-                name: "NumberingSequences",
-                schema: "operations",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    AppliesTo = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    Prefix = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    Width = table.Column<int>(type: "integer", nullable: false),
-                    NextValue = table.Column<long>(type: "bigint", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_NumberingSequences", x => new { x.OrganizationId, x.Id });
-                });
-
-            migrationBuilder.CreateTable(
-                name: "OrganizationSettings",
-                schema: "operations",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    DefaultTimeZoneId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    BusinessHours = table.Column<string>(type: "jsonb", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_OrganizationSettings", x => new { x.OrganizationId, x.Id });
                 });
 
             migrationBuilder.CreateTable(
@@ -416,6 +291,13 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         principalTable: "Properties",
                         principalColumns: new[] { "OrganizationId", "Id" },
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Inspections_Spaces_OrganizationId_SpaceId",
+                        columns: x => new { x.OrganizationId, x.SpaceId },
+                        principalSchema: "operations",
+                        principalTable: "Spaces",
+                        principalColumns: new[] { "OrganizationId", "Id" },
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -509,6 +391,13 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         principalTable: "Properties",
                         principalColumns: new[] { "OrganizationId", "Id" },
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UnitTurns_Spaces_OrganizationId_SpaceId",
+                        columns: x => new { x.OrganizationId, x.SpaceId },
+                        principalSchema: "operations",
+                        principalTable: "Spaces",
+                        principalColumns: new[] { "OrganizationId", "Id" },
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -544,46 +433,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_WorkItems_OrganizationId_DisplayNumber",
-                schema: "operations",
-                table: "WorkItems",
-                columns: new[] { "OrganizationId", "DisplayNumber" },
-                unique: true,
-                filter: "\"DisplayNumber\" IS NOT NULL");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_WorkCategories_OrganizationId_AppliesTo_Name",
-                schema: "operations",
-                table: "WorkCategories",
-                columns: new[] { "OrganizationId", "AppliesTo", "Name" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalRequests_OrganizationId_Status",
-                schema: "operations",
-                table: "ApprovalRequests",
-                columns: new[] { "OrganizationId", "Status" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalRequests_OrganizationId_SubjectType_SubjectId",
-                schema: "operations",
-                table: "ApprovalRequests",
-                columns: new[] { "OrganizationId", "SubjectType", "SubjectId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CustomFieldValues_OrganizationId_CustomFieldDefinitionId",
-                schema: "operations",
-                table: "CustomFieldValues",
-                columns: new[] { "OrganizationId", "CustomFieldDefinitionId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CustomFieldValues_OrganizationId_WorkId_CustomFieldDefiniti~",
-                schema: "operations",
-                table: "CustomFieldValues",
-                columns: new[] { "OrganizationId", "WorkId", "CustomFieldDefinitionId" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_InspectionFindings_OrganizationId_InspectionId_Status",
                 schema: "operations",
                 table: "InspectionFindings",
@@ -596,6 +445,12 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 columns: new[] { "OrganizationId", "PropertyId", "Status", "CreatedAt" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Inspections_OrganizationId_SpaceId",
+                schema: "operations",
+                table: "Inspections",
+                columns: new[] { "OrganizationId", "SpaceId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Inspections_OrganizationId_TemplateId",
                 schema: "operations",
                 table: "Inspections",
@@ -606,27 +461,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 schema: "operations",
                 table: "InspectionTemplates",
                 columns: new[] { "OrganizationId", "Name", "Version" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NotificationPreferences_OrganizationId_UserId_EventType",
-                schema: "operations",
-                table: "NotificationPreferences",
-                columns: new[] { "OrganizationId", "UserId", "EventType" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NumberingSequences_OrganizationId_AppliesTo",
-                schema: "operations",
-                table: "NumberingSequences",
-                columns: new[] { "OrganizationId", "AppliesTo" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_OrganizationSettings_OrganizationId",
-                schema: "operations",
-                table: "OrganizationSettings",
-                column: "OrganizationId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -754,27 +588,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "ApprovalRequests",
-                schema: "operations");
-
-            migrationBuilder.DropTable(
-                name: "CustomFieldValues",
-                schema: "operations");
-
-            migrationBuilder.DropTable(
                 name: "InspectionFindings",
-                schema: "operations");
-
-            migrationBuilder.DropTable(
-                name: "NotificationPreferences",
-                schema: "operations");
-
-            migrationBuilder.DropTable(
-                name: "NumberingSequences",
-                schema: "operations");
-
-            migrationBuilder.DropTable(
-                name: "OrganizationSettings",
                 schema: "operations");
 
             migrationBuilder.DropTable(
@@ -828,33 +642,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
             migrationBuilder.DropTable(
                 name: "InspectionTemplates",
                 schema: "operations");
-
-            migrationBuilder.DropIndex(
-                name: "IX_WorkItems_OrganizationId_DisplayNumber",
-                schema: "operations",
-                table: "WorkItems");
-
-            migrationBuilder.DropIndex(
-                name: "IX_WorkCategories_OrganizationId_AppliesTo_Name",
-                schema: "operations",
-                table: "WorkCategories");
-
-            migrationBuilder.DropColumn(
-                name: "DisplayNumber",
-                schema: "operations",
-                table: "WorkItems");
-
-            migrationBuilder.DropColumn(
-                name: "AppliesTo",
-                schema: "operations",
-                table: "WorkCategories");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_WorkCategories_OrganizationId_Name",
-                schema: "operations",
-                table: "WorkCategories",
-                columns: new[] { "OrganizationId", "Name" },
-                unique: true);
         }
     }
 }

@@ -12,8 +12,8 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    [Migration("20260912190053_FS_S14Procurement")]
-    partial class FS_S14Procurement
+    [Migration("20260912190657_FS_S14Operations")]
+    partial class FS_S14Operations
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2991,6 +2991,8 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 
                     b.HasKey("OrganizationId", "Id");
 
+                    b.HasIndex("OrganizationId", "SpaceId");
+
                     b.HasIndex("OrganizationId", "TemplateId");
 
                     b.HasIndex("OrganizationId", "PropertyId", "Status", "CreatedAt");
@@ -4063,6 +4065,11 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PropFlow.Domain.Properties.Space", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PropFlow.Domain.Work.InspectionTemplate", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "TemplateId")
@@ -4091,6 +4098,12 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .WithMany()
                         .HasForeignKey("OrganizationId", "PropertyId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PropFlow.Domain.Properties.Space", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
