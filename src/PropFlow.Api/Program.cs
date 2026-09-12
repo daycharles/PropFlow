@@ -218,6 +218,7 @@ app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
 app.MapAccountingEndpoints();
+app.MapReportingEndpoints();
 app.MapOwnerAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();

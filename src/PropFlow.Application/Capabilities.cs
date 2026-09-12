@@ -37,8 +37,9 @@ public static class Capabilities
     // PF-S03.01: custom fields, numbering, business hours, and notification preferences.
     // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
     public const string ManageConfiguration = "Settings.ManageConfiguration";
+    public const string ReadReports = "Reports.Read";
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration, ReadReports];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
