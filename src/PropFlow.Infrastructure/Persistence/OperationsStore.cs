@@ -15,6 +15,7 @@ using PropFlow.Domain.Leasing;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 using PropFlow.Domain.Communications;
+using PropFlow.Domain.Procurement;
 
 namespace PropFlow.Infrastructure.Persistence;
 
@@ -22,6 +23,11 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
 {
     public Guid OrganizationId => tenant.OrganizationId;
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
+    public DbSet<InspectionTemplate> InspectionTemplates => Set<InspectionTemplate>();
+    public DbSet<Inspection> Inspections => Set<Inspection>();
+    public DbSet<InspectionFinding> InspectionFindings => Set<InspectionFinding>();
+    public DbSet<UnitTurn> UnitTurns => Set<UnitTurn>();
+    public DbSet<UnitTurnTask> UnitTurnTasks => Set<UnitTurnTask>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Portfolio> Portfolios => Set<Portfolio>();
@@ -91,6 +97,15 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<ManagementFeeRule> ManagementFeeRules => Set<ManagementFeeRule>();
     public DbSet<Distribution> Distributions => Set<Distribution>();
     public DbSet<OwnerStatement> OwnerStatements => Set<OwnerStatement>();
+    public DbSet<VendorProfile> VendorProfiles => Set<VendorProfile>();
+    public DbSet<VendorDocument> VendorDocuments => Set<VendorDocument>();
+    public DbSet<VendorContract> VendorContracts => Set<VendorContract>();
+    public DbSet<VendorRateCard> VendorRateCards => Set<VendorRateCard>();
+    public DbSet<ProcurementBid> ProcurementBids => Set<ProcurementBid>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<WorkAuthorization> WorkAuthorizations => Set<WorkAuthorization>();
+    public DbSet<VendorPerformanceReview> VendorPerformanceReviews => Set<VendorPerformanceReview>();
+    public DbSet<PurchaseOrderInvoiceMatch> PurchaseOrderInvoiceMatches => Set<PurchaseOrderInvoiceMatch>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -98,6 +113,15 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasDefaultSchema("operations");
+        model.Entity<VendorProfile>(e => { e.ToTable("VendorProfiles"); e.Property(x => x.TaxIdentifier).HasMaxLength(100); e.Property(x => x.Address).HasMaxLength(500); e.Property(x => x.Notes).HasMaxLength(2000); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); e.HasIndex(x => new { x.OrganizationId, x.VendorId }).IsUnique(); });
+        model.Entity<VendorDocument>(e => { e.ToTable("VendorDocuments"); e.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired(); e.Property(x => x.DocumentNumber).HasMaxLength(100).IsRequired(); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); e.HasIndex(x => new { x.OrganizationId, x.VendorId, x.ExpiresOn }); });
+        model.Entity<VendorContract>(e => { e.ToTable("VendorContracts"); e.Property(x => x.Name).HasMaxLength(200).IsRequired(); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); });
+        model.Entity<VendorRateCard>(e => { e.ToTable("VendorRateCards"); e.Property(x => x.ServiceCode).HasMaxLength(100).IsRequired(); e.Property(x => x.UnitRate).HasPrecision(18, 2); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); e.HasIndex(x => new { x.OrganizationId, x.VendorId, x.ServiceCode, x.EffectiveOn }).IsUnique(); });
+        model.Entity<ProcurementBid>(e => { e.ToTable("ProcurementBids"); e.Property(x => x.Title).HasMaxLength(200).IsRequired(); e.Property(x => x.Amount).HasPrecision(18, 2); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); e.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkItemId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.SetNull); });
+        model.Entity<PurchaseOrder>(e => { e.ToTable("PurchaseOrders"); e.Property(x => x.Number).HasMaxLength(50).IsRequired(); e.Property(x => x.Amount).HasPrecision(18, 2); e.Property(x => x.ApprovalThreshold).HasPrecision(18, 2); e.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired(); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); e.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.SetNull); e.HasIndex(x => new { x.OrganizationId, x.Number }).IsUnique(); });
+        model.Entity<WorkAuthorization>(e => { e.ToTable("WorkAuthorizations"); e.Property(x => x.Amount).HasPrecision(18, 2); e.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired(); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); e.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkItemId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); e.HasIndex(x => new { x.OrganizationId, x.WorkItemId }).IsUnique(); });
+        model.Entity<VendorPerformanceReview>(e => { e.ToTable("VendorPerformanceReviews"); e.Property(x => x.Score).IsRequired(); e.Property(x => x.Notes).HasMaxLength(2000); e.HasOne<Vendor>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.VendorId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); e.HasIndex(x => new { x.OrganizationId, x.VendorId, x.ReviewedAt }); });
+        model.Entity<PurchaseOrderInvoiceMatch>(e => { e.ToTable("PurchaseOrderInvoiceMatches"); e.Property(x => x.Amount).HasPrecision(18, 2); e.HasOne<PurchaseOrder>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PurchaseOrderId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); e.HasOne<PayableInvoice>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PayableInvoiceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); e.HasIndex(x => new { x.OrganizationId, x.PurchaseOrderId, x.PayableInvoiceId }).IsUnique(); });
         model.Entity<WorkItem>(entity =>
         {
             entity.ToTable("WorkItems");
@@ -122,6 +146,38 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             // Repeat-repair detection (PF-6.04) counts a property's work per asset.
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId });
+        });
+        model.Entity<InspectionTemplate>(entity =>
+        {
+            entity.ToTable("InspectionTemplates"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.ChecklistJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name, x.Version }).IsUnique();
+        });
+        model.Entity<Inspection>(entity =>
+        {
+            entity.ToTable("Inspections"); entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<InspectionTemplate>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.TemplateId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.CreatedAt });
+        });
+        model.Entity<InspectionFinding>(entity =>
+        {
+            entity.ToTable("InspectionFindings"); entity.Property(x => x.Area).HasMaxLength(200).IsRequired(); entity.Property(x => x.Description).HasMaxLength(2000).IsRequired(); entity.Property(x => x.Severity).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.PhotoAttachmentIdsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasOne<Inspection>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.InspectionId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OrganizationId, x.InspectionId, x.Status });
+        });
+        model.Entity<UnitTurn>(entity =>
+        {
+            entity.ToTable("UnitTurns"); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Inspection>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.MoveOutInspectionId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.SpaceId, x.Status });
+        });
+        model.Entity<UnitTurnTask>(entity =>
+        {
+            entity.ToTable("UnitTurnTasks"); entity.Property(x => x.Title).HasMaxLength(500).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasOne<UnitTurn>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.TurnId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkItem>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.WorkId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.OrganizationId, x.TurnId, x.Sequence }).IsUnique();
         });
         model.Entity<Vendor>(entity =>
         {

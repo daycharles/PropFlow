@@ -603,6 +603,23 @@ Billing also exposes tenant-scoped payment-method vault metadata (provider token
 
 Accounting includes first-class payable and receivable invoices with settlement/void transitions, plus bank accounts linked to asset accounts and idempotent imported bank transactions that can be matched to posted journal entries. All records are tenant-scoped and journal/period controls remain enforced.
 
+## Procurement and vendor operations (FS-S14)
+
+The `Procurement.Read` / `Procurement.Manage` capabilities protect vendor onboarding and purchasing. The API provides vendor profiles, expiring insurance/license/certification documents, contracts, rate cards, bids and bid selection, purchase orders, work authorizations, invoice matching, and performance reviews. Purchase orders above their approval threshold enter `PendingApproval`; an active expired insurance or license document blocks submission. Only issued purchase orders can be matched, and a match cannot exceed the PO amount. Every mutating PO action writes an append-only cross-module timeline entry. All queries and foreign keys are organization-scoped and PostgreSQL RLS applies in production.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET/PUT | `/api/procurement/vendors/{vendorId}/profile` | Read or upsert onboarding profile |
+| GET/POST | `/api/procurement/vendors/{vendorId}/documents` | List or add compliance documents |
+| GET/POST | `/api/procurement/vendors/{vendorId}/contracts` | List or add contracts |
+| GET/POST | `/api/procurement/vendors/{vendorId}/rate-cards` | List or add effective rate cards |
+| GET/POST | `/api/procurement/bids` | List or submit bids; `POST /{id}/select` selects one for comparison |
+| GET/POST | `/api/procurement/purchase-orders` | List or create a PO |
+| POST | `/api/procurement/purchase-orders/{id}/submit`, `/approve`, `/issue` | Enforce document and approval state machine |
+| POST | `/api/procurement/purchase-orders/{id}/match-invoice` | Match a tenant/vendor payable invoice to an issued PO |
+| GET/POST | `/api/procurement/authorizations` | List or create work authorizations; `POST /{id}/approve` approves |
+| GET/POST | `/api/procurement/vendors/{vendorId}/performance` | Read or add scored performance reviews |
+
 ## Budgets and owner accounting (FS-S10)
 
 `/api/owner-accounting` provides tenant-scoped budgets, approval transitions, monthly lines,
