@@ -24,4 +24,5 @@ public sealed record WorkListItem(
     Guid? EmployeeId,
     DateTimeOffset? DueDate,
     DateTimeOffset CreatedAt,
-    uint Version);
+    uint Version,
+    string? DisplayNumber = null);

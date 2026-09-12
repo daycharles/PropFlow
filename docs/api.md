@@ -206,6 +206,11 @@ request's custom fields, and not the work item's own edits. A `null` (or blank) 
 existing value for that key rather than storing an empty one. Both endpoints and `GET
 /api/work/{id}` echo the current set back as `customFields` on the response, keyed the same way.
 
+`displayNumber` (FS-S03.04) is read-only — assigned automatically at creation if the
+organization has [configured numbering](#numbering-fs-s0304) for `WorkItem`, `null` otherwise.
+It appears on the work list, the work detail response, and the create/update responses; a caller
+cannot set or change it.
+
 `GET /api/work/{id}/timeline` returns entries oldest first, all one shape:
 `{ id, eventType, occurredAt, actorId, oldValue, newValue, relatedObjectType, relatedObjectId,
 changes, residentVisible }`. `eventType` is the event name (`WorkCreated`, `WorkUpdated`,
@@ -436,6 +441,21 @@ never deletes the row — a value already recorded against an archived definitio
 Attaching a value to a work item (`CustomFieldValue`, validated against the live definition at
 write time) is `customFields` on [work create/update and the work detail response](#work-create-and-update)
 (FS-S03.02).
+
+## Numbering (FS-S03.04)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/settings/numbering | `Work.Read`; every configured scheme for the tenant — `{ appliesTo, prefix, width, nextValue, nextFormatted }` |
+| PUT | /api/settings/numbering/{appliesTo} | `Settings.ManageConfiguration` + CSRF; `{ prefix, width }`; creates the scheme (starting at 1) if none exists for `appliesTo`, otherwise reconfigures `prefix`/`width` only — `nextValue` cannot be set through this endpoint; 200, or 400 on an invalid width (1–10) or prefix (≤ 20 chars) |
+
+A configured scheme causes every new `WorkItem` to receive a `displayNumber` — `prefix` followed
+by `nextValue` zero-padded to `width` (e.g. `WO-00042`) — set once, at creation, and never
+reassigned or backfilled onto work created before the scheme existed. The allocation itself is
+one atomic SQL statement (`UPDATE ... RETURNING`, not a read-then-increment), so two concurrent
+creates can never receive the same number; `displayNumber` also carries a unique index per
+organization as a second backstop. `displayNumber` appears on the work list, the work detail
+response, and `POST`/`PUT /api/work`'s response — it cannot be set by the caller.
 
 ## Global search (milestone 6)
 
