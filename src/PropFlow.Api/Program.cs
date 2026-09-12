@@ -91,6 +91,7 @@ builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
 builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();
+builder.Services.AddSingleton<PropFlow.Application.Screening.IScreeningProvider, PropFlow.Infrastructure.Screening.ConfiguredScreeningProvider>();
 builder.Services.AddScoped<IPreventiveMaintenancePlanSource, EfPreventiveMaintenancePlanSource>();
 builder.Services.AddScoped<IPreventiveWorkOccurrenceSink, EfPreventiveWorkOccurrenceSink>();
 builder.Services.AddScoped<PreventiveMaintenanceService>();
