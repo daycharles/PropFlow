@@ -590,9 +590,56 @@ fails its first sync with a `lastError` naming the configuration key that is mis
 | POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
 | POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |
 | POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull and reconciles it; 200 with a sync report, 404, or 409 if the connection is disabled or a sync is already running |
+| GET | /api/integrations/{id}/conflicts | `Integrations.Manage`; the conflict queue, open first; `?status=` / `?kind=` / `?reason=` / `?page=` / `?pageSize=` (1–200, default 50); `{ items, totalCount, openCount, staleCount, page, pageSize }`, 400 on an unparseable filter, 404 |
+| POST | /api/integrations/{id}/conflicts/{conflictId}/resolve | `Integrations.Manage` + CSRF; optional `{ note }`; 204, 404, or 409 if already resolved or ignored |
+| POST | /api/integrations/{id}/conflicts/{conflictId}/ignore | `Integrations.Manage` + CSRF; optional `{ note }`; 204, 404, or 409 if already resolved or ignored |
+| GET | /api/integrations/{id}/mappings | `Integrations.Manage`; every mapping profile for the connection with its rules and validation issues; 404 |
+| PUT | /api/integrations/{id}/mappings/{kind} | `Integrations.Manage` + CSRF; upserts the profile for that entity kind; `{ targetPortfolioId, defaultCreatorId, defaultTimeZoneId }`; 201 on create, 200 on update, 400 for an unknown kind, 404 |
+| POST | /api/integrations/{id}/mappings/{kind}/rules | `Integrations.Manage` + CSRF; `{ sourceField, sourceValue, targetValue }`; 201, 400 for an unknown kind or source field, a rule that does not apply to that kind, or blank/over-long values, 404 |
+| DELETE | /api/integrations/{id}/mappings/{kind}/rules/{ruleId} | `Integrations.Manage` + CSRF; 204, 400 for an unknown kind, 404 |
+| POST | /api/integrations/{id}/mappings/{kind}/promote | `Integrations.Manage` + CSRF; moves the profile to `AutoApply`; 200 `{ mode, issues }`, 400 for an unknown kind, 404, or **409 carrying the `issues` list while the profile still has validation errors** |
+| POST | /api/integrations/{id}/mappings/{kind}/report-only | `Integrations.Manage` + CSRF; moves the profile back to `ReportOnly`; 204, 400 for an unknown kind, 404 |
+| GET | /api/integrations/{id}/runs | `Integrations.Manage`; run history newest first; `?page=` / `?pageSize=` (1–200, default 25); `{ items, totalCount, page, pageSize }`, 404 |
+| GET | /api/integrations/{id}/runs/{runId} | `Integrations.Manage`; one run with its counts, or 404 |
+| POST | /api/integrations/{id}/records/{recordId}/retire | `Integrations.Manage` + CSRF; operator-invoked retirement of one link; 204, 404, or 409 if already retired |
+
+`{kind}` is an `IntegrationEntityKind` name — `Property`, `Space`, `Occupancy`, `WorkOrder`,
+`Asset`, `Resident`, `Building` — matched case-insensitively; anything else is a 400 naming the
+value. There is **no route that deletes a conflict**: resolution is a status transition, and the
+runtime role holds no `DELETE` grant on `integrations."Conflicts"` to make one with, because a
+resolved conflict is the record that a human looked at a divergence and made a call.
+
+A conflict is `{ id, connectionId, kind, externalId, reason, field, observedValue, currentValue,
+detail, status, firstSeenInRunId, lastSeenInRunId, firstSeenAt, lastSeenAt, observationCount,
+resolvedByUserId, resolvedAt, resolutionNote, seenInLatestRun }`. `reason` is `UnmappedValue` /
+`MissingRequiredMapping` / `MissingParentLink` / `UpstreamDisappearance` / `AmbiguousMatch` /
+`ValidationRefusal`; `status` is `Open` / `Resolved` / `Ignored`. `seenInLatestRun` is false when
+the connection's most recent **completed** run no longer detected the divergence — the reconciler
+stops re-observing a conflict it can no longer see but never closes one on its own, so this is how
+a caller tells "still broken" from "fixed, and the row is just waiting to be closed".
+`staleCount` is how many open conflicts are in that state.
+
+A mapping profile is `{ id, connectionId, kind, mode, targetPortfolioId, defaultCreatorId,
+defaultTimeZoneId, createdAt, updatedAt, rules, issues, canAutoApply, availableSourceFields }`,
+where `mode` is `ReportOnly` / `AutoApply`, a rule is `{ id, sourceField, sourceValue,
+targetValue }`, and an issue is `{ severity, field, reason }` with `severity` `Error` or
+`Unmapped`. **A profile is created `ReportOnly` and there is no way to create one that is not** —
+promotion is a separate, refusable step, so a first connect cannot silently rewrite a tenant's
+property names. `Unmapped` issues are informational (the four `CanonicalProperty` address fields
+have nowhere to go) and never block promotion; `Error` issues do, and promote returns them in the
+409 body so an operator sees exactly what to fix. Editing a profile's defaults in a way that
+reintroduces an error demotes it back to `ReportOnly` rather than leaving it applying with a
+missing fact.
+
+A sync run is `{ id, connectionId, trigger, attemptNumber, status, startedAt, heartbeatAt,
+completedAt, seen, added, updated, failed, conflicted, error, snapshotHash }`, where `trigger` is
+`Manual` / `Scheduled` / `Retry` and `status` is `Running` / `Completed` / `Failed`.
 
 A health snapshot is `{ id, sourceSystem, displayName, isEnabled, lastAttemptedAt,
-lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords }`. A sync report
+lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords, openConflicts }`.
+`openConflicts` is the unresolved-conflict badge: a conflict is deliberately not a failure, so
+without it a connection raising the same unmapped-status conflict on every run looks identical to
+a clean one. A sync report
 is `{ outcome, seen, added, updated, failed, error, conflicted, retired, runId }` where `outcome`
 is `Completed` / `Failed` / `NotFound` / `Disabled` / `AlreadyRunning`.
 

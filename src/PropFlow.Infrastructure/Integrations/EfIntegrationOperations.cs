@@ -232,8 +232,10 @@ public sealed class EfIntegrationOperations(
             .CountAsync(r => r.ConnectionId == connection.Id, cancellationToken);
         var failed = await store.RecordLinks.AsNoTracking()
             .CountAsync(r => r.ConnectionId == connection.Id && r.SyncState == SyncState.Failed, cancellationToken);
+        var openConflicts = await store.Conflicts.AsNoTracking()
+            .CountAsync(c => c.ConnectionId == connection.Id && c.Status == ConflictStatus.Open, cancellationToken);
         return new IntegrationConnectionHealth(connection.Id, connection.SourceSystem, connection.DisplayName,
             connection.IsEnabled, connection.LastAttemptedAt, connection.LastSucceededAt,
-            connection.ConsecutiveFailures, connection.LastError, tracked, failed);
+            connection.ConsecutiveFailures, connection.LastError, tracked, failed, openConflicts);
     }
 }
