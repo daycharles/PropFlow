@@ -138,6 +138,8 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
 | `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M7 reconciled to GitHub 2026-09-11 |
+| `docs/full-suite-scope.md` | The FS-S## full-suite scope, and the `PF-S05.NN` / `PF-S19.NN` sub-task tables. The Status cell is the truth for in-flight sub-task work — sub-tasks carry no GitHub issue |
+| `docs/followups.md` | The open/deferred register, with a *Closed* section that keeps a gap from being re-filed. A row moves to *Closed* only with the evidence that closed it |
 
 Known stale, verified 2026-09-10 — fix them if your change touches them:
 

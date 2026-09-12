@@ -230,11 +230,10 @@ public sealed class EfIntegrationReconciler(
             // no external id for them, so the link is keyed on the synthetic id. One named place.
             var residentExternalId = SyntheticExternalId.ForResident(record.ExternalId);
             var (residentLink, residentHash) = pass.Link(IntegrationEntityKind.Resident, residentExternalId,
-                CanonicalHash.Of((record.ResidentName, record.Email, record.Phone)));
-            // A resident is derived rather than sent, so SyncAsync's ingest pass only creates the
-            // link; the "last seen" hash is recorded here, where the content actually is. Without
-            // this ContentHash stays null, NeedsReconciliation is permanently true, and every run
-            // would rewrite every resident.
+                CanonicalHash.ForResident(record));
+            // Re-observed rather than observed: SyncAsync's ingest pass already recorded the same
+            // hash against the same run, because a resident link that no pass touches is retired by
+            // the sweep. Repeating it here is idempotent and keeps this pass readable on its own.
             residentLink.Observe(residentHash, pass.Now, pass.RunId);
 
             try
@@ -506,7 +505,8 @@ public sealed class EfIntegrationReconciler(
             pass.Result.Retire();
         }
 
-        if (stale.Count > 0) await integrations.SaveChangesAsync(ct);
+        var newConflicts = AttachRaisedConflicts(pass);
+        if (stale.Count > 0 || newConflicts > 0) await integrations.SaveChangesAsync(ct);
     }
 
     // --- Commit ordering ---------------------------------------------------------------------------
@@ -518,7 +518,19 @@ public sealed class EfIntegrationReconciler(
         if (operations.ChangeTracker.HasChanges()) await operations.SaveChangesAsync(ct);
         foreach (var (link, internalId, hash) in pending)
             link.Reconcile(internalId, hash, pass.RunId, pass.Now);
+        AttachRaisedConflicts(pass);
         await integrations.SaveChangesAsync(ct);
+    }
+
+    // A conflict the pass built has to be INSERTED, not just counted. Re-observations are already
+    // tracked entities loaded by LoadOpenConflictsAsync and need nothing here; a brand-new one is
+    // detached, and without this the Conflicted counter rises on every run while the queue an
+    // operator actually reads stays empty.
+    private int AttachRaisedConflicts(Pass pass)
+    {
+        var raised = pass.DrainRaised();
+        if (raised.Count > 0) integrations.Conflicts.AddRange(raised);
+        return raised.Count;
     }
 
     private async Task LoadProfilesAsync(Pass pass, Guid connectionId, CancellationToken ct)
@@ -558,9 +570,16 @@ public sealed class EfIntegrationReconciler(
         public IReadOnlyCollection<ExternalRecordLink> AllLinks => links.Values.ToList();
 
         private readonly Dictionary<(IntegrationEntityKind, string), Guid> resolved = [];
+        // Conflicts raised in this pass that are not yet attached to the store. The caller drains
+        // them and inserts them alongside the link writes.
         private readonly List<Conflict> raised = [];
 
-        public IReadOnlyList<Conflict> Raised => raised;
+        public IReadOnlyList<Conflict> DrainRaised()
+        {
+            var pending = raised.ToList();
+            raised.Clear();
+            return pending;
+        }
 
         public bool Supplies(IntegrationEntityKind kind) => Descriptor.Supplies(kind);
         public MappingProfile? Profile(IntegrationEntityKind kind) => Profiles.GetValueOrDefault(kind);
