@@ -129,6 +129,9 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Budgets", operations."BudgetLines", operations."Owners", operations."PropertyOwnerships", operations."ManagementFeeRules", operations."Distributions" TO propflow_app;
             GRANT SELECT, INSERT ON operations."OwnerStatements" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Attachments" TO propflow_app;
+            -- FS-S12 inspection and make-ready workflow. These tables are tenant-scoped below
+            -- in the migration; the runtime role only receives the operations it needs.
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."InspectionTemplates", operations."Inspections", operations."InspectionFindings", operations."UnitTurns", operations."UnitTurnTasks" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."CustomFieldDefinitions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."CustomFieldValues" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."NumberingSequences" TO propflow_app;
