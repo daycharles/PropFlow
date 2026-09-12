@@ -329,9 +329,9 @@ public sealed class IntegrationReconciliationPersistenceTests(DatabaseFixture fi
         Assert.Empty(await other.SyncRuns.IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.Conflicts.IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.Conflicts
-            .FromSqlRaw("SELECT * FROM integrations.\"Conflicts\"").IgnoreQueryFilters().ToListAsync());
+            .FromSqlRaw("SELECT *, xmin FROM integrations.\"Conflicts\"").IgnoreQueryFilters().ToListAsync());
         Assert.Empty(await other.SyncRuns
-            .FromSqlRaw("SELECT * FROM integrations.\"SyncRuns\"").IgnoreQueryFilters().ToListAsync());
+            .FromSqlRaw("SELECT *, xmin FROM integrations.\"SyncRuns\"").IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
