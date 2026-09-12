@@ -785,6 +785,84 @@ td small {
   gap: 12px;
   margin-top: 12px;
 }
+/* PF-S19.09: the conflict queue, mapping panel and run history behind a connection card. */
+.integration-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.integration-subpanel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.integration-subpanel h3,
+.integration-subpanel h4 {
+  margin: 12px 0 6px;
+}
+.integration-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 10px 0;
+}
+.conflict-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.conflict-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+/* A stale row is still open — it is only the latest run that stopped seeing it — so it is
+   de-emphasised rather than coloured like a resolution. */
+.conflict-row.conflict-stale {
+  background: var(--sand);
+}
+.conflict-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.conflict-reason {
+  font-weight: 800;
+}
+.conflict-field,
+.conflict-detail {
+  color: var(--secondary);
+}
+.conflict-detail {
+  margin: 6px 0 0;
+}
+.mapping-issues,
+.mapping-refusal {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.mapping-issues ul,
+.mapping-refusal ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.mapping-issues-error,
+.mapping-refusal {
+  border-color: var(--terracotta);
+  background: var(--terracotta-tint);
+}
+.mapping-rules {
+  margin-top: 12px;
+}
 .search-trigger {
   display: inline-flex;
   align-items: center;
