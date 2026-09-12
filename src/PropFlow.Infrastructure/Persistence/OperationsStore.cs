@@ -49,6 +49,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
     public DbSet<NumberingSequence> NumberingSequences => Set<NumberingSequence>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<OrganizationSettings> OrganizationSettings => Set<OrganizationSettings>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -313,6 +314,13 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.DecisionReason).HasMaxLength(1000);
             entity.HasIndex(x => new { x.OrganizationId, x.SubjectType, x.SubjectId });
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+        model.Entity<OrganizationSettings>(entity =>
+        {
+            entity.ToTable("OrganizationSettings");
+            entity.Property(x => x.DefaultTimeZoneId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.BusinessHoursJson).HasColumnName("BusinessHours").HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => x.OrganizationId).IsUnique();
         });
         model.Entity<SavedView>(entity =>
         {
