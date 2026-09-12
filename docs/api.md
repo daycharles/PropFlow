@@ -71,6 +71,7 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/marketing/listings/{id}/unpublish | Leasing.Manage + CSRF; returns a published listing to draft |
 | GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry for an available published listing with optional lead-source attribution; active duplicate email inquiries return 409 |
 | PUT | /api/marketing/listings/{id}/inquiries/{inquiryId}/status | Leasing.Manage + CSRF; advances inquiry status |
+| PUT | /api/marketing/listings/{id}/applicants/{applicantId}/status | Leasing.Manage + CSRF; advances the legacy per-person applicant status; **409 once a rental application exists for that applicant** (see Rental applications and screening) |
 | GET/POST | /api/marketing/listings/{id}/showings | Read or request a showing for a published listing |
 | PUT | /api/marketing/listings/{id}/showings/{showingId}/status | Leasing.Manage + CSRF; updates showing status |
 | GET | /api/leasing/leases/ | Work.Read; tenant-scoped leases, optionally filtered by resident or space |
@@ -667,3 +668,20 @@ itself unlimited retries against a paid third party.
 the endpoint separately re-checks effective consent per applicant immediately before the provider
 call — a revocation recorded after the application reached `ConsentGranted` is invisible to the
 status alone.
+| POST | /api/applications/{id}/approve | Applications.Manage + CSRF; UnderReview → Approved with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview, and 409 with an actionable message when any screening verdict is `Fail` and no override `note` was supplied |
+| POST | /api/applications/{id}/deny | Applications.Manage + CSRF; UnderReview → Denied with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview |
+| GET | /api/applications/{id}/decisions | Applications.Manage; the append-only decision trail, newest first. Not masked: a reason code is not applicant PII |
+
+**Approving over a failed screening.** A `Fail` recommendation does **not** hard-block approval —
+a hard block makes individualized assessment impossible — but approving over one requires a
+non-blank `note`, so the override is never silent. The rule is a domain refusal in
+`RentalApplication.Approve`, not an endpoint check, and the 409 body carries the domain's own
+message rather than a bare "conflict".
+
+**The legacy applicant-status route is fenced.**
+`PUT /api/marketing/listings/{id}/applicants/{applicantId}/status` sets a flat status on the
+person, with no consent check and no decision row. It now returns **409** once a rental
+application exists for that applicant, naming `/api/applications` instead. It still works for an
+applicant with no application, so nothing that predates FS-S05 breaks. The `/marketing/listings`
+Applicants panel still calls it and will now fail loudly rather than silently corrupting the
+decision trail; rewiring that panel is PF-S05.09.

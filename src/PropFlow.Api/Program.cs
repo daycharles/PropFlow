@@ -222,6 +222,7 @@ app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
 app.MapApplicationEndpoints();
 app.MapApplicationScreeningEndpoints();
+app.MapApplicationDecisionEndpoints();
 app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
