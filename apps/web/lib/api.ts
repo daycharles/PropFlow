@@ -451,6 +451,37 @@ export type ActiveMember = {
   employeeId?: string | null;
   vendorId?: string | null;
 };
+// PF-S03.08: settings admin UI for the PF-S03 configuration primitives (custom fields,
+// numbering, business hours, notification preferences). AppliesTo is a closed vocabulary with
+// one value today (`WorkItem`) - the UI hardcodes it rather than offering a chooser with one
+// option, the same call CustomFieldRequest's server-side default makes.
+export type CustomFieldType = "Text" | "Number" | "Date" | "Boolean" | "SingleSelect";
+export type CustomFieldDefinition = {
+  id: string;
+  key: string;
+  name: string;
+  appliesTo: string;
+  fieldType: CustomFieldType;
+  options: string[];
+  isRequired: boolean;
+  sortOrder: number;
+  isArchived: boolean;
+  createdAt: string;
+};
+export type NumberingScheme = {
+  appliesTo: string;
+  prefix: string;
+  width: number;
+  nextValue: number;
+  nextFormatted: string;
+};
+export type BusinessHoursWindow = { day: string; open: string | null; close: string | null };
+export type OrganizationSettings = {
+  defaultTimeZoneId: string | null;
+  businessHours: BusinessHoursWindow[];
+};
+export type NotificationEventType = "WorkAssigned" | "AutomationApplied" | "InvitationReceived";
+export type NotificationPreference = { eventType: NotificationEventType; enabled: boolean };
 export type RoleCapabilities = {
   role: string;
   defaults: string[];
@@ -1160,6 +1191,63 @@ export const api = {
         }),
       }),
     delete: (id: string) => mutation<void>(`/api/saved-views/${id}`, { method: "DELETE" }),
+  },
+  // PF-S03.08: settings admin UI for custom fields, numbering, business hours, and
+  // notification preferences. AppliesTo is hardcoded to "WorkItem" - the only value the closed
+  // ConfigurationEntityType vocabulary defines today.
+  customFields: {
+    list: () => request<CustomFieldDefinition[]>("/api/settings/custom-fields/"),
+    create: (input: {
+      key: string;
+      name: string;
+      fieldType: CustomFieldType;
+      options?: string[] | null;
+      isRequired: boolean;
+      sortOrder: number;
+    }) =>
+      mutation<CustomFieldDefinition>("/api/settings/custom-fields/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...input, appliesTo: "WorkItem", options: input.options ?? null }),
+      }),
+    update: (
+      id: string,
+      input: { name: string; options?: string[] | null; isRequired: boolean; sortOrder: number },
+    ) =>
+      mutation<CustomFieldDefinition>(`/api/settings/custom-fields/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...input, options: input.options ?? null }),
+      }),
+    archive: (id: string) =>
+      mutation<void>(`/api/settings/custom-fields/${id}/archive`, { method: "POST" }),
+  },
+  numbering: {
+    list: () => request<NumberingScheme[]>("/api/settings/numbering/"),
+    configure: (appliesTo: string, input: { prefix?: string | null; width: number }) =>
+      mutation<NumberingScheme>(`/api/settings/numbering/${appliesTo}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+  },
+  organizationSettings: {
+    get: () => request<OrganizationSettings>("/api/settings/organization/"),
+    update: (input: OrganizationSettings) =>
+      mutation<OrganizationSettings>("/api/settings/organization/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+  },
+  notificationPreferences: {
+    list: () => request<NotificationPreference[]>("/api/settings/notification-preferences/"),
+    setEnabled: (eventType: NotificationEventType, enabled: boolean) =>
+      mutation<NotificationPreference>(`/api/settings/notification-preferences/${eventType}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      }),
   },
   // PF-S01.09: organization membership administration (invitations, roles, members).
   invitations: {
