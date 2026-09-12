@@ -29,6 +29,11 @@ export const PRIMARY_NAV: readonly NavItem[] = [
     label: "Automation",
     capability: "Settings.ManageAutomationRules",
   },
+  {
+    href: "/settings/configuration",
+    label: "Configuration",
+    capability: "Settings.ManageConfiguration",
+  },
   { href: "/integrations", label: "Integrations", capability: "Integrations.Manage" },
   { href: "/settings/members", label: "Members", capability: "Identity.ManageMembers" },
 ];
