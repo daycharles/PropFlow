@@ -150,9 +150,16 @@ public sealed class EfIntegrationOperations(
         // CanonicalOccupancy carries the person but no id for them. The link has to exist before
         // the reconciler looks it up. Residents are not counted in Seen: they are not records the
         // source sent, they are records PropFlow derived.
+        //
+        // Observed here, in the ingest pass, exactly like every supplied kind — NOT only in the
+        // reconciler's occupancy pass. The retirement sweep retires any link this run did not
+        // touch, and a run that skips or conflicts its occupancies never reaches that pass; the
+        // brand-new resident link would then be retired as an "upstream disappearance" on the very
+        // first sync, for a record the source never stopped reporting.
         foreach (var occupancy in snapshot.Occupancies)
             EnsureLink(IntegrationEntityKind.Resident, SyntheticExternalId.ForResident(occupancy.ExternalId),
-                connection, existing);
+                    connection, existing)
+                .Observe(CanonicalHash.ForResident(occupancy), now, run.Id);
 
         run.Heartbeat(clock.GetUtcNow());
         await store.SaveChangesAsync(cancellationToken);
