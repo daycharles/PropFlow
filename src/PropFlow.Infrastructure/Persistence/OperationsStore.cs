@@ -50,6 +50,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<NumberingSequence> NumberingSequences => Set<NumberingSequence>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<OrganizationSettings> OrganizationSettings => Set<OrganizationSettings>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -321,6 +322,13 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.DefaultTimeZoneId).HasMaxLength(100).IsRequired();
             entity.Property(x => x.BusinessHoursJson).HasColumnName("BusinessHours").HasColumnType("jsonb").IsRequired();
             entity.HasIndex(x => x.OrganizationId).IsUnique();
+        });
+        model.Entity<NotificationPreference>(entity =>
+        {
+            entity.ToTable("NotificationPreferences");
+            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.EventType).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.UserId, x.EventType }).IsUnique();
         });
         model.Entity<SavedView>(entity =>
         {

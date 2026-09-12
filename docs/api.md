@@ -492,6 +492,26 @@ Storage and validation only, the same order templates existed before dispatch di
 PF-4.05): nothing reads these settings yet, so there is no "closed for business" enforcement
 anywhere in the codebase today.
 
+## Staff notification preferences (FS-S03.07)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/settings/notification-preferences | `Work.Read`; returns all three event types for the caller, `{ eventType, enabled }[]` — a type with no stored row reads `enabled: true` |
+| PUT | /api/settings/notification-preferences/{eventType} | `Work.Read` + CSRF; `{ enabled }`; upserts the caller's own preference for that event type. 400 on an unknown `eventType` |
+
+Personal settings, not org configuration — gated on plain `Work.Read` like `/api/saved-views`,
+not `Settings.ManageConfiguration`: any staff member (including Read Only) manages their own
+preferences, always scoped to their own user id from the session, never a request parameter.
+
+`eventType` is one of `WorkAssigned`, `AutomationApplied`, `InvitationReceived` — a closed
+vocabulary, the same shape as `ConfigurationEntityType`, naming the events that already fire
+somewhere in the codebase (`EmployeeAssigned`, `AutomationApplied` on the timeline,
+`IdentityAuditLog.EventTypes.InvitationSent`). The default is opt-out: a missing row means
+enabled, so a brand-new user reads as fully subscribed rather than fully silent. **No delivery
+channel is wired to any of this yet** — today only residents have a messaging pipeline
+(`IResidentMessenger`); this is the preference model and its API only, not a promise of
+delivery.
+
 ## Global search (milestone 6)
 
 | Method | Path | Behavior |

@@ -287,6 +287,23 @@ public sealed class IsolationTests(DatabaseFixture fixture)
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
     }
 
+    [Fact]
+    public async Task Rls_confines_notification_preferences_to_their_tenant()
+    {
+        await using var s = await fixture.CreateScenarioAsync();
+        await using (var admin = s.AdminStore(s.OrganizationA))
+        {
+            await admin.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO operations.\"NotificationPreferences\" (\"OrganizationId\", \"Id\", \"UserId\", \"EventType\", \"Enabled\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.AdminA}, 'WorkAssigned', false)");
+        }
+
+        await using var store = s.Store(s.OrganizationB);
+        Assert.Empty(await store.Database.SqlQueryRaw<Guid>("SELECT \"Id\" FROM operations.\"NotificationPreferences\"").ToListAsync());
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => store.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO operations.\"NotificationPreferences\" (\"OrganizationId\", \"Id\", \"UserId\", \"EventType\", \"Enabled\") VALUES ({s.OrganizationA}, {Guid.NewGuid()}, {s.AdminA}, 'WorkAssigned', false)"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
