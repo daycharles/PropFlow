@@ -220,6 +220,97 @@ export type Showing = {
   scheduledAt: string;
   status: "Requested" | "Confirmed" | "Completed" | "Cancelled";
 };
+// FS-S05 rental applications. Enums arrive as strings (Program.cs registers
+// JsonStringEnumConverter), so the union types below are the wire shape, not a mapping.
+export type ApplicationStatus =
+  | "Draft"
+  | "Submitted"
+  | "ConsentGranted"
+  | "Screening"
+  | "UnderReview"
+  | "Approved"
+  | "Denied"
+  | "Withdrawn";
+export type ApplicantRole = "Primary" | "CoApplicant" | "Guarantor";
+export type ApplicationConsentType =
+  | "BackgroundCheck"
+  | "CreditCheck"
+  | "EvictionHistory"
+  | "IncomeVerification";
+export type RecordedConsentDecision = "Granted" | "Revoked";
+export type ScreeningRequestStatus = "Pending" | "InFlight" | "Completed" | "Abandoned";
+// Unavailable is the provider-outage marker and is never persisted as a verdict — an outage is a
+// 503 with nothing written (docs/api.md, "Provider outage"). It is in the union because the
+// vocabulary is shared with the provider port, not because a row can hold it.
+export type ScreeningRecommendation = "Pass" | "Review" | "Fail" | "Unavailable";
+
+// Masking is by ABSENCE, not by null: without Applications.ReadPii the API omits `email`,
+// `phone`, `monthlyIncome` and `employmentStatus` entirely. Optional properties are what models
+// that — `"monthlyIncome" in row` separates "you may not see this" from "no value is held", and
+// the panel renders those two facts differently. Do not widen these to `| null` only.
+export type ApplicationApplicantRow = {
+  id: string;
+  applicantId: string;
+  name: string;
+  role: ApplicantRole;
+  email?: string;
+  phone?: string | null;
+  monthlyIncome?: number | null;
+  employmentStatus?: string | null;
+};
+// `recommendation` is present in BOTH shapes and null until a verdict lands; `score`, `summary`
+// and `receivedAt` are the masked ones.
+export type ScreeningRequestRow = {
+  requestId: string;
+  applicantId: string;
+  status: ScreeningRequestStatus;
+  attempts: number;
+  lastAttemptedAt?: string | null;
+  lastError?: string | null;
+  completedAt?: string | null;
+  recommendation?: ScreeningRecommendation | null;
+  score?: number | null;
+  summary?: string | null;
+  receivedAt?: string | null;
+};
+export type RentalApplication = {
+  id: string;
+  listingId: string;
+  status: ApplicationStatus;
+  submittedAt?: string | null;
+  decidedAt?: string | null;
+  applicants: ApplicationApplicantRow[];
+  screening: ScreeningRequestRow[];
+};
+export type EffectiveConsent = {
+  applicantId: string;
+  consentType: ApplicationConsentType;
+  decision: RecordedConsentDecision;
+  recordedAt: string;
+  recordedBy: string;
+  source: string;
+};
+export type ApplicationConsentRow = EffectiveConsent & {
+  id: string;
+  applicationId: string;
+  allowsScreening: boolean;
+};
+// The whole append-only row set plus its reduction: "consent was held when screening ran" is
+// answered by `history`, not by `effective`.
+export type ApplicationConsentLog = {
+  applicationId: string;
+  effective: EffectiveConsent[];
+  history: ApplicationConsentRow[];
+};
+export type ApplicationDecision = {
+  id: string;
+  applicationId: string;
+  outcome: "Approved" | "Denied";
+  reason: string;
+  note?: string | null;
+  decidedBy: string;
+  decidedAt: string;
+};
 export type PortalSummary = {
   resident: ResidentReference & { smsConsent: string; emailConsent: string };
   occupancy?: { id: string; spaceId: string; movedInOn: string } | null;
@@ -958,6 +1049,89 @@ export const api = {
           body: JSON.stringify({ status }),
         }),
     },
+  },
+  // FS-S05. Every route needs Applications.Manage; `pii` additionally needs
+  // Applications.ReadPii and answers 403 without it. `startScreening` and `retryScreening`
+  // answer 503 on a provider outage with nothing written — callers must tell that apart from a
+  // 409 (a refused transition) and from a Fail verdict, which is a real answer about a person.
+  applications: {
+    list: (listingId?: string, status?: ApplicationStatus) => {
+      const params = new URLSearchParams();
+      if (listingId) params.set("listingId", listingId);
+      if (status) params.set("status", status);
+      const query = params.toString();
+      return request<RentalApplication[]>(`/api/applications/${query ? `?${query}` : ""}`);
+    },
+    get: (id: string) => request<RentalApplication>(`/api/applications/${id}`),
+    pii: (id: string) => request<RentalApplication>(`/api/applications/${id}/pii`),
+    create: (listingId: string) =>
+      mutation<RentalApplication>("/api/applications/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      }),
+    addApplicant: (
+      id: string,
+      input: {
+        applicantId: string;
+        role: ApplicantRole;
+        monthlyIncome?: number | null;
+        employmentStatus?: string | null;
+      },
+    ) =>
+      mutation<RentalApplication>(`/api/applications/${id}/applicants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    submit: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/submit`, { method: "POST" }),
+    consent: (id: string) => request<ApplicationConsentLog>(`/api/applications/${id}/consent`),
+    recordConsent: (
+      id: string,
+      input: {
+        applicantId: string;
+        consentType: ApplicationConsentType;
+        decision: RecordedConsentDecision;
+        source: string;
+      },
+    ) =>
+      mutation<{ consent: ApplicationConsentRow; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/consent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    withdraw: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/withdraw`, { method: "POST" }),
+    screening: (id: string) => request<ScreeningRequestRow[]>(`/api/applications/${id}/screening`),
+    startScreening: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/screening`, { method: "POST" }),
+    retryScreening: (id: string, requestId: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/screening/${requestId}/retry`, {
+        method: "POST",
+      }),
+    approve: (id: string, input: { reason: string; note?: string | null }) =>
+      mutation<{ decision: ApplicationDecision; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    deny: (id: string, input: { reason: string; note?: string | null }) =>
+      mutation<{ decision: ApplicationDecision; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/deny`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    decisions: (id: string) => request<ApplicationDecision[]>(`/api/applications/${id}/decisions`),
   },
   leasing: {
     leases: {
