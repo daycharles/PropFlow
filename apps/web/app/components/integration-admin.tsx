@@ -171,9 +171,13 @@ export function ConflictQueue({
   return (
     <div className="integration-subpanel">
       <h3>Conflict queue</h3>
+      {/* "showing N of M" rather than a bare M. With six Open conflicts of which two have gone
+          stale, the status filter matches six while the freshness split renders four, and a line
+          that said only "6 match the filter" over four visible rows reads as a bug. Seen the first
+          time this panel met real data. */}
       <p className="hint" data-testid="conflict-counts">
-        {page.openCount} open · {page.staleCount} no longer seen in the latest run ·{" "}
-        {page.totalCount} match the filter
+        {page.openCount} open · {page.staleCount} no longer seen in the latest run · showing{" "}
+        {visible.length} of {page.totalCount} matching the status, kind and reason filters
       </p>
       {page.staleCount > 0 && (
         <p className="hint" data-testid="stale-explainer">
