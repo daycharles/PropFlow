@@ -648,3 +648,22 @@ highest-write table in the `operations` schema and arrives with its own retentio
 | GET | /api/applications/{id}/consent | Applications.Manage; `{ applicationId, effective, history }` — the full append-only row history plus the reduction to the latest row per (applicant, check). Not masked: consent rows carry no PII |
 | POST | /api/applications/{id}/consent | Applications.Manage + CSRF; records one Granted/Revoked consent row (a revocation is a new row, never an edit). Advances Submitted → ConsentGranted once every applicant holds at least one effective grant; 201 with `{ consent, applicationStatus }`, 400 for an applicant not on the application or an Unknown decision |
 | POST | /api/applications/{id}/withdraw | Applications.Manage + CSRF; any non-terminal state → Withdrawn; 409 when already terminal |
+| GET | /api/applications/{id}/screening | Applications.Manage; screening requests with attempts, last error and the latest verdict; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/{id}/screening | Applications.Manage + CSRF; ConsentGranted → Screening, then one provider call per consented applicant. 200 and Screening → UnderReview when every request completes; **503 and no verdict written** on a provider outage; 409 unless ConsentGranted, or when no applicant on the application holds effective consent |
+| POST | /api/applications/{id}/screening/{requestId}/retry | Applications.Manage + CSRF; re-attempts one Pending request; 409 when the request is not Pending or the applicant's consent has since been revoked; 503 on a further outage. The attempt that reaches `Screening:MaxAttempts` moves the request to Abandoned, and when every request for the application is Abandoned the application returns to ConsentGranted |
+
+**Provider outage.** `ScreeningRecommendation.Unavailable` means the provider could not answer,
+and `ScreeningResult` refuses to store it, so an outage can never become a persisted verdict. The
+response is 503. What *is* written on that path is the `ScreeningRequest` row and its attempt
+counter — the retry ledger, not an answer about the applicant — because retry exhaustion cannot
+be reached by a counter that is not persisted.
+
+**Retry ceiling.** `Screening:MaxAttempts` (default 3, must be at least 1, validated at startup).
+Configuration rather than a constant or a request field: a constant cannot be tuned when a
+bureau's availability turns out worse than assumed, and a request field would let a caller grant
+itself unlimited retries against a paid third party.
+
+**The consent gate is checked twice.** The domain refuses any status but `ConsentGranted`, and
+the endpoint separately re-checks effective consent per applicant immediately before the provider
+call — a revocation recorded after the application reached `ConsentGranted` is invisible to the
+status alone.

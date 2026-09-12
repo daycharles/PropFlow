@@ -102,6 +102,9 @@ builder.Services.AddHttpClient();
 var communicationsOptions = builder.Configuration.GetSection(CommunicationsOptions.SectionName).Get<CommunicationsOptions>() ?? new CommunicationsOptions();
 communicationsOptions.Validate(builder.Environment.IsProduction() || builder.Environment.IsStaging());
 builder.Services.AddSingleton(communicationsOptions);
+var screeningOptions = builder.Configuration.GetSection(PropFlow.Application.Screening.ScreeningOptions.SectionName).Get<PropFlow.Application.Screening.ScreeningOptions>() ?? new PropFlow.Application.Screening.ScreeningOptions();
+screeningOptions.Validate();
+builder.Services.AddSingleton(screeningOptions);
 builder.Services.AddSingleton<ISentMessageLog, InMemorySentMessageLog>();
 if (communicationsOptions.SmsProvider.Equals("Twilio", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<IMessageSender, TwilioMessageSender>();
@@ -218,6 +221,7 @@ app.MapWorkEndpoints();
 app.MapReferenceEndpoints();
 app.MapMarketingEndpoints();
 app.MapApplicationEndpoints();
+app.MapApplicationScreeningEndpoints();
 app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
