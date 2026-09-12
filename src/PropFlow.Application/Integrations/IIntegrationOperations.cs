@@ -16,7 +16,12 @@ public sealed record IntegrationConnectionHealth(
     int ConsecutiveFailures,
     string? LastError,
     int TrackedRecords,
-    int FailedRecords);
+    int FailedRecords,
+    // The unresolved-conflict badge PF-6.11 asked for and never got (docs/followups.md). Without
+    // it the health list cannot tell a connection syncing cleanly from one that has raised the same
+    // unmapped-status conflict on every run for a week: both show a recent LastSucceededAt and zero
+    // failures, because a conflict is deliberately not a failure.
+    int OpenConflicts = 0);
 
 // Result of a single sync run against a connection's adapter.
 //

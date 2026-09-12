@@ -93,6 +93,7 @@ builder.Services.AddSingleton<IIntegrationSecretStore, ConfiguredIntegrationSecr
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<EfIntegrationReconciler>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
+builder.Services.AddScoped<IIntegrationAdministration, EfIntegrationAdministration>();
 builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();
 builder.Services.AddSingleton<PropFlow.Application.Screening.IScreeningProvider, PropFlow.Infrastructure.Screening.ConfiguredScreeningProvider>();
 builder.Services.AddScoped<IPreventiveMaintenancePlanSource, EfPreventiveMaintenancePlanSource>();
