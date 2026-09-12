@@ -474,6 +474,24 @@ is terminal, and the requester can never be the decider (separation of duties). 
 and decision is recorded on the tenant timeline (`ApprovalRequested`/`ApprovalDecided`,
 `relatedObjectType: "ApprovalRequest"`).
 
+## Organization settings (FS-S03.06)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/settings/organization | `Work.Read`; never 404s — before anything is saved, returns `defaultTimeZoneId: null` and all seven days closed |
+| PUT | /api/settings/organization | `Settings.ManageConfiguration` + CSRF; `{ defaultTimeZoneId, businessHours: [{ day, open, close }, ...] }`; upserts the one row per organization. 400 on an invalid IANA zone, a week missing a day, a duplicate day, an open time without a matching close, or open ≥ close |
+
+`businessHours` is exactly seven entries, one per `System.DayOfWeek` name (`"Sunday"` …
+`"Saturday"`), each carrying `open`/`close` as `"HH:mm:ss"` or both `null` for a closed day — a
+partial update is rejected rather than defaulting the missing day, so a client can't accidentally
+leave a stale day in place. `defaultTimeZoneId` is a fallback for a property that doesn't set its
+own (`Property.TimeZoneId`, PF-7.04, always wins over this when a property has one), validated
+the same way (`Region/City` IANA form — a bare `UTC` is rejected).
+
+Storage and validation only, the same order templates existed before dispatch did (PF-4.03 vs
+PF-4.05): nothing reads these settings yet, so there is no "closed for business" enforcement
+anywhere in the codebase today.
+
 ## Global search (milestone 6)
 
 | Method | Path | Behavior |

@@ -226,6 +226,7 @@ app.MapCategoryEndpoints();
 app.MapCustomFieldEndpoints();
 app.MapNumberingEndpoints();
 app.MapApprovalEndpoints();
+app.MapOrganizationSettingsEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapComplianceEndpoints();
