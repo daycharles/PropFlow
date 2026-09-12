@@ -19,8 +19,37 @@ public interface IIntegrationAdapter
     // instead of silently returning an empty list.
     IntegrationAdapterDescriptor Descriptor { get; }
 
-    Task<IntegrationSnapshot> PullAsync(CancellationToken cancellationToken);
+    // Pull the source's current snapshot on behalf of one connection. Throw
+    // `IntegrationPullException` for a failure the operator should see; `EfIntegrationOperations`
+    // records it against the connection's health as a failed sync.
+    Task<IntegrationSnapshot> PullAsync(IntegrationPullContext context, CancellationToken cancellationToken);
 }
+
+// Which connection a pull is running for.
+//
+// A pull is always on behalf of exactly one `IntegrationConnection`, and an adapter that talks to
+// a real endpoint must resolve *that connection's* credential through `IIntegrationSecretStore`
+// rather than a one-per-process credential the way `CommunicationsOptions` does. Without the id
+// here that is not expressible, so PF-S19.07 widened `PullAsync` by this one parameter. The mock
+// adapter ignores it.
+//
+// A record rather than a bare `Guid` so the incremental-pull watermark that
+// `IntegrationAdapterDescriptor.SupportsIncrementalPull` foreshadows can be added here without
+// reshaping the interface a second time.
+public sealed record IntegrationPullContext(Guid ConnectionId)
+{
+    public Guid ConnectionId { get; } = ConnectionId != Guid.Empty
+        ? ConnectionId
+        : throw new ArgumentException("A pull context requires the connection it is running for.", nameof(ConnectionId));
+}
+
+// A pull failed for a reason the operator should read on the Integration Health screen.
+//
+// Why a dedicated type rather than letting an arbitrary exception escape: `SyncAsync` feeds the
+// message into `IntegrationConnection.FailSync`, which is bounded and rejects control characters.
+// Every message raised here is short, single-line, and written by PropFlow — never a provider's
+// response body, which may be large, multi-line, or carry the credential back at us.
+public sealed class IntegrationPullException(string message) : Exception(message);
 
 // The capability statement for one adapter.
 //

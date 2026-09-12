@@ -569,8 +569,15 @@ through the tenant query filter and row-level security.
 ## Integrations (milestone 6)
 
 Adapters pull records from external property-management systems and PropFlow tracks what each
-one has seen. Milestone 6 ships the abstraction and one mock adapter; it records the external
-side only — reconciling those records into Properties / Spaces / Work / Assets is a later task.
+one has seen. It records the external side only — reconciling those records into Properties /
+Spaces / Work / Assets is a later task (FS-S19).
+
+Two adapters are registered: `mock`, the deterministic in-memory one milestone 6 shipped, and
+`sandbox` (PF-S19.07), an HTTP client against a PropFlow-defined JSON contract —
+[`integration-sandbox-contract.md`](integration-sandbox-contract.md) says what a sandbox server
+must serve and how a connection's credential is configured. `sandbox` appears in
+`GET /api/integrations/sources` whether or not it is configured; a connection created against it
+fails its first sync with a `lastError` naming the configuration key that is missing.
 
 | Method | Path | Behavior |
 | --- | --- | --- |

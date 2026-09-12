@@ -88,6 +88,8 @@ builder.Services.AddScoped<IAttentionQueue, EfAttentionQueue>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
 builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
+builder.Services.AddSingleton<IIntegrationAdapter, SandboxIntegrationAdapter>();
+builder.Services.AddSingleton<IIntegrationSecretStore, ConfiguredIntegrationSecretStore>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
 builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();

@@ -2,10 +2,11 @@ using PropFlow.Application.Integrations;
 
 namespace PropFlow.Infrastructure.Integrations;
 
-// The one adapter milestone 6 ships. It returns a fixed, self-consistent snapshot (parents
-// referenced by every child exist) so the sync path, the health screen and the tests have
-// something real to run against without a live external system. Deterministic: the same call
-// always yields the same records with the same content, so a re-sync reports zero changes.
+// The in-memory adapter: no network, no credential. It returns a fixed, self-consistent snapshot
+// (parents referenced by every child exist) so the sync path, the health screen and the tests
+// have something real to run against without a live external system. Deterministic: the same
+// call always yields the same records with the same content, so a re-sync reports zero changes.
+// The over-the-wire counterpart is SandboxIntegrationAdapter (PF-S19.07).
 public sealed class MockIntegrationAdapter : IIntegrationAdapter
 {
     public const string Source = "mock";
@@ -17,7 +18,8 @@ public sealed class MockIntegrationAdapter : IIntegrationAdapter
     // no cursor and always returns the same fixed set.
     public IntegrationAdapterDescriptor Descriptor => IntegrationAdapterDescriptor.FullPropertyManagementSnapshot;
 
-    public Task<IntegrationSnapshot> PullAsync(CancellationToken cancellationToken) =>
+    // The same fixed snapshot for every connection, so the pull context is not consulted.
+    public Task<IntegrationSnapshot> PullAsync(IntegrationPullContext context, CancellationToken cancellationToken) =>
         Task.FromResult(Snapshot);
 
     private static readonly IntegrationSnapshot Snapshot = new(

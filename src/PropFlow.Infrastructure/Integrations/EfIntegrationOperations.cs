@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application.Integrations;
 using PropFlow.Domain.Integrations;
@@ -94,11 +95,11 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         IntegrationSnapshot snapshot;
         try
         {
-            snapshot = await adapter.PullAsync(cancellationToken);
+            snapshot = await adapter.PullAsync(new IntegrationPullContext(connection.Id), cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            connection.FailSync(clock.GetUtcNow(), ex.Message);
+            connection.FailSync(clock.GetUtcNow(), Sanitize(ex.Message));
             await store.SaveChangesAsync(cancellationToken);
             return new SyncReport(SyncOutcome.Failed, 0, 0, 0, 0, connection.LastError);
         }
@@ -121,6 +122,30 @@ public sealed class EfIntegrationOperations(IntegrationStore store, IIntegration
         // mapping step to fail. It becomes meaningful when reconciliation into the domain tables
         // lands. The persisted FailedRecords health count already reflects any Failed links.
         return new SyncReport(SyncOutcome.Completed, counters.Seen, counters.Added, counters.Updated, 0, null);
+    }
+
+    // IntegrationConnection.FailSync rejects control characters and anything over ErrorMaxLength,
+    // so an adapter exception with a multi-line or very long message used to throw *inside* the
+    // catch block above and escape SyncAsync as a 500. Harmless while the only adapter was the
+    // in-memory mock, which never throws; reachable as of PF-S19.07, where a transport or
+    // serializer exception can carry either. The adapter contract asks for a short single-line
+    // IntegrationPullException, but a store cannot rely on every adapter honouring it.
+    public static string Sanitize(string message)
+    {
+        var builder = new StringBuilder(message.Length);
+        foreach (var ch in message)
+        {
+            var next = char.IsControl(ch) ? ' ' : ch;
+            // Collapse runs of whitespace so a stack-shaped message stays one readable line.
+            if (next is ' ' && (builder.Length is 0 || builder[^1] is ' ')) continue;
+            builder.Append(next);
+        }
+        while (builder.Length > 0 && builder[^1] is ' ') builder.Length--;
+
+        if (builder.Length is 0) return "The adapter failed without a message.";
+        return builder.Length <= IntegrationConnection.ErrorMaxLength
+            ? builder.ToString()
+            : builder.ToString(0, IntegrationConnection.ErrorMaxLength - 1) + "…";
     }
 
     private void Ingest<T>(IntegrationEntityKind kind, IReadOnlyList<T> records, Func<T, string> externalId,
