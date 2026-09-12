@@ -122,6 +122,75 @@ public sealed class CapabilitiesTests
         Assert.DoesNotContain(Capabilities.ManageAttachments, Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()));
     }
 
+    // FS-S05. The decision these three pin: applicant workflow and applicant PII are two
+    // capabilities, not one. Regional Manager is the role that proves the split is real - it
+    // works applications but cannot read unmasked applicant detail, so the PF-S05.05 PII
+    // endpoint has a control that can be denied to somebody who still holds the workflow.
+    [Theory]
+    [InlineData("Organization Admin")]
+    [InlineData("Property Manager")]
+    public void Admin_and_property_manager_hold_both_application_capabilities(string role)
+    {
+        var capabilities = Capabilities.ForRole(role);
+        Assert.Contains(Capabilities.ManageApplications, capabilities);
+        Assert.Contains(Capabilities.ReadApplicantPii, capabilities);
+    }
+
+    [Fact]
+    public void Regional_manager_works_applications_but_cannot_read_applicant_pii()
+    {
+        var capabilities = Capabilities.ForRole("Regional Manager");
+        Assert.Contains(Capabilities.ManageApplications, capabilities);
+        Assert.DoesNotContain(Capabilities.ReadApplicantPii, capabilities);
+    }
+
+    [Fact]
+    public void No_other_role_holds_either_application_capability()
+    {
+        foreach (var capabilities in new[]
+                 {
+                     Capabilities.ForRole("Maintenance Supervisor"),
+                     Capabilities.ForRole("Read Only"),
+                     Capabilities.ForRole("Technician", employeeId: Guid.NewGuid()),
+                     Capabilities.ForRole("Vendor", vendorId: Guid.NewGuid()),
+                     Capabilities.ForRole("Owner"),
+                     Capabilities.ForRole("Resident")
+                 })
+        {
+            Assert.DoesNotContain(Capabilities.ManageApplications, capabilities);
+            Assert.DoesNotContain(Capabilities.ReadApplicantPii, capabilities);
+        }
+    }
+
+    [Fact]
+    public void Regional_manager_keeps_every_capability_it_held_before_applications_were_added()
+    {
+        // The shared CategoryManagement array is spread at the Regional Manager call site rather
+        // than extended. This pins the pre-FS-S05 set as a subset, so a careless edit to that
+        // shared array - which other role arms may later use - is caught here.
+        string[] before =
+        [
+            Capabilities.ReadWork, Capabilities.AssignVendor, Capabilities.AssignEmployee,
+            Capabilities.CreateWork, Capabilities.UpdateWork, Capabilities.ManageCategories,
+            Capabilities.ManageAssets, Capabilities.ManageAttachments
+        ];
+
+        var capabilities = Capabilities.ForRole("Regional Manager");
+
+        Assert.All(before, c => Assert.Contains(c, capabilities));
+        Assert.Equal(before.Length + 1, capabilities.Count);
+    }
+
+    [Fact]
+    public void Both_application_capabilities_have_an_authorization_policy()
+    {
+        // Program.cs:145-150 builds one authorization policy per entry in All. A capability
+        // missing from All has no policy, and RequireAuthorization for it fails at runtime
+        // rather than at compile time.
+        Assert.Contains(Capabilities.ManageApplications, Capabilities.All);
+        Assert.Contains(Capabilities.ReadApplicantPii, Capabilities.All);
+    }
+
     [Fact]
     public void All_contains_every_capability_constant_without_duplicates()
     {

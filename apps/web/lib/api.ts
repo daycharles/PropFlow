@@ -220,6 +220,97 @@ export type Showing = {
   scheduledAt: string;
   status: "Requested" | "Confirmed" | "Completed" | "Cancelled";
 };
+// FS-S05 rental applications. Enums arrive as strings (Program.cs registers
+// JsonStringEnumConverter), so the union types below are the wire shape, not a mapping.
+export type ApplicationStatus =
+  | "Draft"
+  | "Submitted"
+  | "ConsentGranted"
+  | "Screening"
+  | "UnderReview"
+  | "Approved"
+  | "Denied"
+  | "Withdrawn";
+export type ApplicantRole = "Primary" | "CoApplicant" | "Guarantor";
+export type ApplicationConsentType =
+  | "BackgroundCheck"
+  | "CreditCheck"
+  | "EvictionHistory"
+  | "IncomeVerification";
+export type RecordedConsentDecision = "Granted" | "Revoked";
+export type ScreeningRequestStatus = "Pending" | "InFlight" | "Completed" | "Abandoned";
+// Unavailable is the provider-outage marker and is never persisted as a verdict — an outage is a
+// 503 with nothing written (docs/api.md, "Provider outage"). It is in the union because the
+// vocabulary is shared with the provider port, not because a row can hold it.
+export type ScreeningRecommendation = "Pass" | "Review" | "Fail" | "Unavailable";
+
+// Masking is by ABSENCE, not by null: without Applications.ReadPii the API omits `email`,
+// `phone`, `monthlyIncome` and `employmentStatus` entirely. Optional properties are what models
+// that — `"monthlyIncome" in row` separates "you may not see this" from "no value is held", and
+// the panel renders those two facts differently. Do not widen these to `| null` only.
+export type ApplicationApplicantRow = {
+  id: string;
+  applicantId: string;
+  name: string;
+  role: ApplicantRole;
+  email?: string;
+  phone?: string | null;
+  monthlyIncome?: number | null;
+  employmentStatus?: string | null;
+};
+// `recommendation` is present in BOTH shapes and null until a verdict lands; `score`, `summary`
+// and `receivedAt` are the masked ones.
+export type ScreeningRequestRow = {
+  requestId: string;
+  applicantId: string;
+  status: ScreeningRequestStatus;
+  attempts: number;
+  lastAttemptedAt?: string | null;
+  lastError?: string | null;
+  completedAt?: string | null;
+  recommendation?: ScreeningRecommendation | null;
+  score?: number | null;
+  summary?: string | null;
+  receivedAt?: string | null;
+};
+export type RentalApplication = {
+  id: string;
+  listingId: string;
+  status: ApplicationStatus;
+  submittedAt?: string | null;
+  decidedAt?: string | null;
+  applicants: ApplicationApplicantRow[];
+  screening: ScreeningRequestRow[];
+};
+export type EffectiveConsent = {
+  applicantId: string;
+  consentType: ApplicationConsentType;
+  decision: RecordedConsentDecision;
+  recordedAt: string;
+  recordedBy: string;
+  source: string;
+};
+export type ApplicationConsentRow = EffectiveConsent & {
+  id: string;
+  applicationId: string;
+  allowsScreening: boolean;
+};
+// The whole append-only row set plus its reduction: "consent was held when screening ran" is
+// answered by `history`, not by `effective`.
+export type ApplicationConsentLog = {
+  applicationId: string;
+  effective: EffectiveConsent[];
+  history: ApplicationConsentRow[];
+};
+export type ApplicationDecision = {
+  id: string;
+  applicationId: string;
+  outcome: "Approved" | "Denied";
+  reason: string;
+  note?: string | null;
+  decidedBy: string;
+  decidedAt: string;
+};
 export type PortalSummary = {
   resident: ResidentReference & { smsConsent: string; emailConsent: string };
   occupancy?: { id: string; spaceId: string; movedInOn: string } | null;
@@ -351,17 +442,36 @@ export type IntegrationHealth = {
   lastError?: string | null;
   trackedRecords: number;
   failedRecords: number;
+  // PF-S19: a conflict is deliberately NOT a failure, so without this badge a connection raising
+  // the same unmapped-status conflict on every run looks identical to a clean one.
+  openConflicts: number;
 };
-export type IntegrationSyncState = "Pending" | "Synced" | "Failed";
+export type IntegrationEntityKind =
+  | "Property"
+  | "Space"
+  | "Occupancy"
+  | "WorkOrder"
+  | "Asset"
+  | "Resident"
+  | "Building";
+// Conflicted and Retired arrived with PF-S19. Retired never means the PropFlow row was deleted —
+// the link is retired and the row is left alone.
+export type IntegrationSyncState = "Pending" | "Synced" | "Failed" | "Conflicted" | "Retired";
 export type IntegrationRecord = {
   id: string;
   connectionId: string;
-  kind: string;
+  kind: IntegrationEntityKind;
   externalId: string;
   syncState: IntegrationSyncState;
   lastSeenAt?: string | null;
   lastError?: string | null;
+  // What the source last said versus what was last written into PropFlow. The two differing is
+  // what makes a replayed sync converge rather than lose a change.
   contentHash?: string | null;
+  reconciledHash?: string | null;
+  internalId?: string | null;
+  lastReconciledAt?: string | null;
+  lastRunId?: string | null;
 };
 export type IntegrationRecordsPage = {
   items: IntegrationRecord[];
@@ -370,12 +480,124 @@ export type IntegrationRecordsPage = {
   pageSize: number;
 };
 export type SyncReport = {
-  outcome: string;
+  outcome: "Completed" | "Failed" | "NotFound" | "Disabled" | "AlreadyRunning";
+  // PF-S19.05 changed what these count: PropFlow rows, not external record links. `conflicted`
+  // being non-zero on a first sync is the intended connect → review → promote flow, not a failure.
   seen: number;
   added: number;
   updated: number;
   failed: number;
+  conflicted: number;
+  retired: number;
   error?: string | null;
+  runId?: string | null;
+};
+// --- PF-S19 conflict queue -------------------------------------------------------------------
+export type ConflictReason =
+  | "UnmappedValue"
+  | "MissingRequiredMapping"
+  | "MissingParentLink"
+  | "UpstreamDisappearance"
+  | "AmbiguousMatch"
+  | "ValidationRefusal";
+export type ConflictStatus = "Open" | "Resolved" | "Ignored";
+export type IntegrationConflict = {
+  id: string;
+  connectionId: string;
+  kind: IntegrationEntityKind;
+  externalId: string;
+  reason: ConflictReason;
+  field: string;
+  observedValue?: string | null;
+  currentValue?: string | null;
+  detail?: string | null;
+  status: ConflictStatus;
+  firstSeenInRunId: string;
+  lastSeenInRunId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  observationCount: number;
+  resolvedByUserId?: string | null;
+  resolvedAt?: string | null;
+  resolutionNote?: string | null;
+  // False once the connection's most recent COMPLETED run no longer detected the divergence.
+  //
+  // The reconciler re-observes a conflict it still sees and stops observing one it cannot, but it
+  // NEVER closes a row on its own: "I no longer detect it" and "a human decided" are different
+  // facts, and only the second belongs in resolvedByUserId. So a divergence that has actually
+  // been fixed leaves its row Open, and the queue would appear never to empty after a successful
+  // fix. This flag — and the page's staleCount — are how the UI tells that story honestly
+  // instead of auto-closing rows with a synthetic system actor.
+  seenInLatestRun: boolean;
+};
+// openCount and staleCount are the whole connection's totals, not the page's, so paging through
+// the queue must never change them.
+export type ConflictsPage = {
+  items: IntegrationConflict[];
+  totalCount: number;
+  openCount: number;
+  staleCount: number;
+  page: number;
+  pageSize: number;
+};
+// --- PF-S19 mapping profiles -----------------------------------------------------------------
+// A profile is created ReportOnly and there is no way to create one that is not. In ReportOnly a
+// sync raises conflicts and writes NOTHING to the operations schema; promotion is a separate,
+// refusable step.
+export type MappingMode = "ReportOnly" | "AutoApply";
+// Error blocks promotion. Unmapped is informational — a canonical field PropFlow has nowhere to
+// put — and never blocks it.
+export type MappingIssueSeverity = "Error" | "Unmapped";
+export type MappingIssue = { severity: MappingIssueSeverity; field: string; reason: string };
+export type MappingSourceField = "WorkOrderStatus" | "AssetKind" | "PropertyTimeZone";
+export type MappingRule = {
+  id: string;
+  sourceField: MappingSourceField;
+  sourceValue: string;
+  targetValue: string;
+};
+export type MappingProfile = {
+  id: string;
+  connectionId: string;
+  kind: IntegrationEntityKind;
+  mode: MappingMode;
+  targetPortfolioId?: string | null;
+  defaultCreatorId?: string | null;
+  defaultTimeZoneId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  rules: MappingRule[];
+  issues: MappingIssue[];
+  // The same answer the promote endpoint will give, computed from the pure MappingProfile.
+  // Validate() — so the panel can disable promotion without a speculative round-trip.
+  canAutoApply: boolean;
+  availableSourceFields: MappingSourceField[];
+};
+// --- PF-S19 run history ----------------------------------------------------------------------
+export type SyncTrigger = "Manual" | "Scheduled" | "Retry";
+export type SyncRunStatus = "Running" | "Completed" | "Failed";
+export type SyncRun = {
+  id: string;
+  connectionId: string;
+  trigger: SyncTrigger;
+  attemptNumber: number;
+  status: SyncRunStatus;
+  startedAt: string;
+  heartbeatAt: string;
+  completedAt?: string | null;
+  seen: number;
+  added: number;
+  updated: number;
+  failed: number;
+  conflicted: number;
+  error?: string | null;
+  snapshotHash?: string | null;
+};
+export type SyncRunsPage = {
+  items: SyncRun[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
 };
 export type SearchHitType =
   | "Property"
@@ -493,9 +715,27 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    // The parsed ProblemDetails body, when there was one. Kept because some refusals carry
+    // structured extensions the message cannot express: POST
+    // /api/integrations/{id}/mappings/{kind}/promote answers 409 with an `issues` array naming
+    // exactly what to fix (src/PropFlow.Api/IntegrationEndpoints.cs:190-192). Collapsing that to
+    // a title would throw away the entire point of the promotion guard rail.
+    public readonly body?: unknown,
   ) {
     super(message);
   }
+}
+/**
+ * Read a named array extension off an ApiError's ProblemDetails body.
+ *
+ * Returns [] for anything that is not that shape, so a caller never has to defend against a
+ * refusal that arrived without the extension — a proxy error page, a 502, an older API.
+ */
+export function problemArray<T>(error: unknown, key: string): T[] {
+  if (!(error instanceof ApiError)) return [];
+  if (typeof error.body !== "object" || error.body === null) return [];
+  const value = (error.body as Record<string, unknown>)[key];
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 let csrfToken: string | undefined;
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -513,6 +753,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(
       response.status,
       detail?.detail ?? detail?.title ?? `Request failed (${response.status})`,
+      detail,
     );
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
@@ -959,6 +1200,89 @@ export const api = {
         }),
     },
   },
+  // FS-S05. Every route needs Applications.Manage; `pii` additionally needs
+  // Applications.ReadPii and answers 403 without it. `startScreening` and `retryScreening`
+  // answer 503 on a provider outage with nothing written — callers must tell that apart from a
+  // 409 (a refused transition) and from a Fail verdict, which is a real answer about a person.
+  applications: {
+    list: (listingId?: string, status?: ApplicationStatus) => {
+      const params = new URLSearchParams();
+      if (listingId) params.set("listingId", listingId);
+      if (status) params.set("status", status);
+      const query = params.toString();
+      return request<RentalApplication[]>(`/api/applications/${query ? `?${query}` : ""}`);
+    },
+    get: (id: string) => request<RentalApplication>(`/api/applications/${id}`),
+    pii: (id: string) => request<RentalApplication>(`/api/applications/${id}/pii`),
+    create: (listingId: string) =>
+      mutation<RentalApplication>("/api/applications/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      }),
+    addApplicant: (
+      id: string,
+      input: {
+        applicantId: string;
+        role: ApplicantRole;
+        monthlyIncome?: number | null;
+        employmentStatus?: string | null;
+      },
+    ) =>
+      mutation<RentalApplication>(`/api/applications/${id}/applicants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    submit: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/submit`, { method: "POST" }),
+    consent: (id: string) => request<ApplicationConsentLog>(`/api/applications/${id}/consent`),
+    recordConsent: (
+      id: string,
+      input: {
+        applicantId: string;
+        consentType: ApplicationConsentType;
+        decision: RecordedConsentDecision;
+        source: string;
+      },
+    ) =>
+      mutation<{ consent: ApplicationConsentRow; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/consent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    withdraw: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/withdraw`, { method: "POST" }),
+    screening: (id: string) => request<ScreeningRequestRow[]>(`/api/applications/${id}/screening`),
+    startScreening: (id: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/screening`, { method: "POST" }),
+    retryScreening: (id: string, requestId: string) =>
+      mutation<RentalApplication>(`/api/applications/${id}/screening/${requestId}/retry`, {
+        method: "POST",
+      }),
+    approve: (id: string, input: { reason: string; note?: string | null }) =>
+      mutation<{ decision: ApplicationDecision; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    deny: (id: string, input: { reason: string; note?: string | null }) =>
+      mutation<{ decision: ApplicationDecision; applicationStatus: ApplicationStatus }>(
+        `/api/applications/${id}/deny`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      ),
+    decisions: (id: string) => request<ApplicationDecision[]>(`/api/applications/${id}/decisions`),
+  },
   leasing: {
     leases: {
       list: () => request<Lease[]>("/api/leasing/leases/"),
@@ -1156,6 +1480,78 @@ export const api = {
       mutation<void>(`/api/integrations/${id}/${enabled ? "enable" : "disable"}`, {
         method: "POST",
       }),
+    // PF-S19.09. A conflict is closed by a status transition and never deleted: the runtime role
+    // holds no DELETE grant on integrations."Conflicts", because a resolved conflict is the
+    // record that a human looked at a divergence and made a call.
+    conflicts: (
+      id: string,
+      filter: {
+        status?: ConflictStatus;
+        kind?: IntegrationEntityKind;
+        reason?: ConflictReason;
+      } = {},
+      page = 1,
+      pageSize = 100,
+    ) => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (filter.status) params.set("status", filter.status);
+      if (filter.kind) params.set("kind", filter.kind);
+      if (filter.reason) params.set("reason", filter.reason);
+      return request<ConflictsPage>(`/api/integrations/${id}/conflicts?${params}`);
+    },
+    closeConflict: (id: string, conflictId: string, ignore: boolean, note?: string | null) =>
+      mutation<void>(
+        `/api/integrations/${id}/conflicts/${conflictId}/${ignore ? "ignore" : "resolve"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: note?.trim() ? note.trim() : null }),
+        },
+      ),
+    mappings: (id: string) => request<MappingProfile[]>(`/api/integrations/${id}/mappings`),
+    saveMapping: (
+      id: string,
+      kind: IntegrationEntityKind,
+      input: {
+        targetPortfolioId?: string | null;
+        defaultCreatorId?: string | null;
+        defaultTimeZoneId?: string | null;
+      },
+    ) =>
+      mutation<{ id: string }>(`/api/integrations/${id}/mappings/${kind}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    addMappingRule: (
+      id: string,
+      kind: IntegrationEntityKind,
+      input: { sourceField: MappingSourceField; sourceValue: string; targetValue: string },
+    ) =>
+      mutation<{ id: string }>(`/api/integrations/${id}/mappings/${kind}/rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    removeMappingRule: (id: string, kind: IntegrationEntityKind, ruleId: string) =>
+      mutation<void>(`/api/integrations/${id}/mappings/${kind}/rules/${ruleId}`, {
+        method: "DELETE",
+      }),
+    // Refuses with 409 while the profile has Error issues, carrying the whole issue list in the
+    // ProblemDetails body. Callers read it with problemArray<MappingIssue>(error, "issues") —
+    // rendering those is the difference between a guard rail and a bare "no".
+    promoteMapping: (id: string, kind: IntegrationEntityKind) =>
+      mutation<{ mode: MappingMode; issues: MappingIssue[] }>(
+        `/api/integrations/${id}/mappings/${kind}/promote`,
+        { method: "POST" },
+      ),
+    revertMappingToReportOnly: (id: string, kind: IntegrationEntityKind) =>
+      mutation<void>(`/api/integrations/${id}/mappings/${kind}/report-only`, { method: "POST" }),
+    runs: (id: string, page = 1, pageSize = 25) =>
+      request<SyncRunsPage>(`/api/integrations/${id}/runs?page=${page}&pageSize=${pageSize}`),
+    // Retires the LINK. The PropFlow row it reconciled into is deliberately left untouched.
+    retireRecord: (id: string, recordId: string) =>
+      mutation<void>(`/api/integrations/${id}/records/${recordId}/retire`, { method: "POST" }),
   },
   search: (term: string, limit = 12) =>
     request<SearchHit[]>(`/api/search?q=${encodeURIComponent(term)}&limit=${limit}`),

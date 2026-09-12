@@ -91,6 +91,12 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<ManagementFeeRule> ManagementFeeRules => Set<ManagementFeeRule>();
     public DbSet<Distribution> Distributions => Set<Distribution>();
     public DbSet<OwnerStatement> OwnerStatements => Set<OwnerStatement>();
+    public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
+    public DbSet<ApplicationApplicant> ApplicationApplicants => Set<ApplicationApplicant>();
+    public DbSet<ScreeningRequest> ScreeningRequests => Set<ScreeningRequest>();
+    public DbSet<ApplicationConsent> ApplicationConsents => Set<ApplicationConsent>();
+    public DbSet<ScreeningResult> ScreeningResults => Set<ScreeningResult>();
+    public DbSet<ApplicationDecision> ApplicationDecisions => Set<ApplicationDecision>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -610,6 +616,82 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
         model.Entity<BankAccount>(entity => { entity.ToTable("BankAccounts"); entity.Property(x => x.Name).HasMaxLength(100).IsRequired(); entity.Property(x => x.Institution).HasMaxLength(100).IsRequired(); entity.Property(x => x.LastFour).HasMaxLength(4).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<ChartOfAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<BankTransaction>(entity => { entity.ToTable("BankTransactions"); entity.Property(x => x.ExternalId).HasMaxLength(200).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.HasOne<BankAccount>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.BankAccountId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade); entity.HasOne<JournalEntry>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.JournalEntryId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict); entity.HasIndex(x => new { x.OrganizationId, x.BankAccountId, x.ExternalId }).IsUnique(); });
 
+        // FS-S05 applications and screening. Six tables; the last three are append-only at all
+        // three rungs (GuardWrites below, GRANT SELECT/INSERT only, and a PostgreSQL trigger)
+        // because a denial record is adverse-action evidence.
+        model.Entity<RentalApplication>(entity =>
+        {
+            entity.ToTable("RentalApplications");
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            // A concurrent approve and deny must collide rather than last-write-wins: xmin as a
+            // shadow row version surfaces the second one as a DbUpdateConcurrencyException,
+            // which ApiExceptionHandler already turns into a 409.
+            entity.Property<uint>("Version").IsRowVersion();
+            // Restrict, not Cascade: an application is a legal record that must outlive the
+            // listing it was made against, and cascading into the append-only decision rows
+            // would hit the trigger rather than delete cleanly.
+            entity.HasOne<Listing>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ListingId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.Applicants).WithOne().HasForeignKey(x => new { x.OrganizationId, x.ApplicationId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            entity.Navigation(x => x.Applicants).UsePropertyAccessMode(PropertyAccessMode.Field);
+            // Primary is a query over the loaded applicants, not a stored link.
+            entity.Ignore(x => x.Primary);
+            entity.HasIndex(x => new { x.OrganizationId, x.ListingId, x.Status });
+        });
+        model.Entity<ApplicationApplicant>(entity =>
+        {
+            entity.ToTable("ApplicationApplicants");
+            entity.Property(x => x.Role).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.MonthlyIncome).HasPrecision(18, 2);
+            entity.Property(x => x.EmploymentStatus).HasMaxLength(ApplicationApplicant.EmploymentStatusMaxLength);
+            entity.HasOne<Applicant>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicantId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            // The database rung of "the same person is on an application once". Exactly-one-
+            // Primary stays a domain invariant: it is a count, not something a unique index says.
+            entity.HasIndex(x => new { x.OrganizationId, x.ApplicationId, x.ApplicantId }).IsUnique();
+        });
+        model.Entity<ScreeningRequest>(entity =>
+        {
+            entity.ToTable("ScreeningRequests");
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(ScreeningRequest.IdempotencyKeyMaxLength).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.LastError).HasMaxLength(ScreeningRequest.ErrorMaxLength);
+            entity.HasOne<RentalApplication>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicationId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Applicant>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicantId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            // What makes a retry safe at the database rung: a replayed request cannot become a
+            // second row, so it cannot become a second credit pull.
+            entity.HasIndex(x => new { x.OrganizationId, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.ApplicationId, x.Status });
+        });
+        model.Entity<ApplicationConsent>(entity =>
+        {
+            entity.ToTable("ApplicationConsents");
+            entity.Property(x => x.ConsentType).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Decision).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(ApplicationConsent.SourceMaxLength).IsRequired();
+            entity.HasOne<RentalApplication>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicationId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Applicant>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicantId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            // Ordered by RecordedAt because the effective consent is the latest row per
+            // (application, applicant, check) — ApplicationConsent.Effective reduces this set.
+            entity.HasIndex(x => new { x.OrganizationId, x.ApplicationId, x.ApplicantId, x.ConsentType, x.RecordedAt });
+        });
+        model.Entity<ScreeningResult>(entity =>
+        {
+            entity.ToTable("ScreeningResults");
+            entity.Property(x => x.Recommendation).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(ScreeningResult.SummaryMaxLength);
+            entity.HasOne<ScreeningRequest>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ScreeningRequestId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Applicant>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicantId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ScreeningRequestId, x.ReceivedAt });
+        });
+        model.Entity<ApplicationDecision>(entity =>
+        {
+            entity.ToTable("ApplicationDecisions");
+            entity.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(ApplicationDecision.ReasonMaxLength).IsRequired();
+            entity.Property(x => x.Note).HasMaxLength(ApplicationDecision.NoteMaxLength);
+            entity.HasOne<RentalApplication>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ApplicationId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ApplicationId, x.DecidedAt });
+        });
+
         // One convention for every business entity, including future modules.
         foreach (var entity in model.Model.GetEntityTypes().Where(x => typeof(TenantEntity).IsAssignableFrom(x.ClrType)))
         {
@@ -651,6 +733,13 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             // gets only GRANT SELECT, INSERT and a PostgreSQL trigger rejects UPDATE/DELETE.
             if (entry.Entity is JournalEntry or JournalLine && entry.State != EntityState.Added)
                 throw new InvalidOperationException("Journal entries are append-only; post a reversing entry instead.");
+            // FS-S05: consent, screening verdicts and decisions are adverse-action evidence.
+            // Consent is revoked by recording a new row, never by editing the granting one, and
+            // a decision is superseded by a new decision. Same three-level control as above —
+            // the runtime role gets only GRANT SELECT, INSERT and a PostgreSQL trigger rejects
+            // UPDATE/DELETE; this rung turns a violation into a test failure instead of a 55000.
+            if (entry.Entity is ApplicationConsent or ScreeningResult or ApplicationDecision && entry.State != EntityState.Added)
+                throw new InvalidOperationException("Application consents, screening results and decisions are append-only; record a new row instead.");
         }
     }
 }

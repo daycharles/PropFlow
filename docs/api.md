@@ -71,6 +71,7 @@ Use HTTPS and retain cookies. API responses are JSON except successful 204s and 
 | POST | /api/marketing/listings/{id}/unpublish | Leasing.Manage + CSRF; returns a published listing to draft |
 | GET/POST | /api/marketing/listings/{id}/inquiries | Read or submit an inquiry for an available published listing with optional lead-source attribution; active duplicate email inquiries return 409 |
 | PUT | /api/marketing/listings/{id}/inquiries/{inquiryId}/status | Leasing.Manage + CSRF; advances inquiry status |
+| PUT | /api/marketing/listings/{id}/applicants/{applicantId}/status | Leasing.Manage + CSRF; advances the legacy per-person applicant status; **409 once a rental application exists for that applicant** (see Rental applications and screening) |
 | GET/POST | /api/marketing/listings/{id}/showings | Read or request a showing for a published listing |
 | PUT | /api/marketing/listings/{id}/showings/{showingId}/status | Leasing.Manage + CSRF; updates showing status |
 | GET | /api/leasing/leases/ | Work.Read; tenant-scoped leases, optionally filtered by resident or space |
@@ -569,8 +570,15 @@ through the tenant query filter and row-level security.
 ## Integrations (milestone 6)
 
 Adapters pull records from external property-management systems and PropFlow tracks what each
-one has seen. Milestone 6 ships the abstraction and one mock adapter; it records the external
-side only — reconciling those records into Properties / Spaces / Work / Assets is a later task.
+one has seen. It records the external side only — reconciling those records into Properties /
+Spaces / Work / Assets is a later task (FS-S19).
+
+Two adapters are registered: `mock`, the deterministic in-memory one milestone 6 shipped, and
+`sandbox` (PF-S19.07), an HTTP client against a PropFlow-defined JSON contract —
+[`integration-sandbox-contract.md`](integration-sandbox-contract.md) says what a sandbox server
+must serve and how a connection's credential is configured. `sandbox` appears in
+`GET /api/integrations/sources` whether or not it is configured; a connection created against it
+fails its first sync with a `lastError` naming the configuration key that is missing.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
@@ -581,16 +589,76 @@ side only — reconciling those records into Properties / Spaces / Work / Assets
 | POST | /api/integrations | `Integrations.Manage` + CSRF; `{ sourceSystem, displayName }`; 201, 400 for an unknown source system or invalid text, 409 if a connection to that source already exists |
 | POST | /api/integrations/{id}/enable | `Integrations.Manage` + CSRF; 204 or 404 |
 | POST | /api/integrations/{id}/disable | `Integrations.Manage` + CSRF; 204 or 404 |
-| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull; 200 with a sync report, 404, or 409 if the connection is disabled |
+| POST | /api/integrations/{id}/sync | `Integrations.Manage` + CSRF; runs a pull and reconciles it; 200 with a sync report, 404, or 409 if the connection is disabled or a sync is already running |
+| GET | /api/integrations/{id}/conflicts | `Integrations.Manage`; the conflict queue, open first; `?status=` / `?kind=` / `?reason=` / `?page=` / `?pageSize=` (1–200, default 50); `{ items, totalCount, openCount, staleCount, page, pageSize }`, 400 on an unparseable filter, 404 |
+| POST | /api/integrations/{id}/conflicts/{conflictId}/resolve | `Integrations.Manage` + CSRF; optional `{ note }`; 204, 404, or 409 if already resolved or ignored |
+| POST | /api/integrations/{id}/conflicts/{conflictId}/ignore | `Integrations.Manage` + CSRF; optional `{ note }`; 204, 404, or 409 if already resolved or ignored |
+| GET | /api/integrations/{id}/mappings | `Integrations.Manage`; every mapping profile for the connection with its rules and validation issues; 404 |
+| PUT | /api/integrations/{id}/mappings/{kind} | `Integrations.Manage` + CSRF; upserts the profile for that entity kind; `{ targetPortfolioId, defaultCreatorId, defaultTimeZoneId }`; 201 on create, 200 on update, 400 for an unknown kind, 404 |
+| POST | /api/integrations/{id}/mappings/{kind}/rules | `Integrations.Manage` + CSRF; `{ sourceField, sourceValue, targetValue }`; 201, 400 for an unknown kind or source field, a rule that does not apply to that kind, or blank/over-long values, 404 |
+| DELETE | /api/integrations/{id}/mappings/{kind}/rules/{ruleId} | `Integrations.Manage` + CSRF; 204, 400 for an unknown kind, 404 |
+| POST | /api/integrations/{id}/mappings/{kind}/promote | `Integrations.Manage` + CSRF; moves the profile to `AutoApply`; 200 `{ mode, issues }`, 400 for an unknown kind, 404, or **409 carrying the `issues` list while the profile still has validation errors** |
+| POST | /api/integrations/{id}/mappings/{kind}/report-only | `Integrations.Manage` + CSRF; moves the profile back to `ReportOnly`; 204, 400 for an unknown kind, 404 |
+| GET | /api/integrations/{id}/runs | `Integrations.Manage`; run history newest first; `?page=` / `?pageSize=` (1–200, default 25); `{ items, totalCount, page, pageSize }`, 404 |
+| GET | /api/integrations/{id}/runs/{runId} | `Integrations.Manage`; one run with its counts, or 404 |
+| POST | /api/integrations/{id}/records/{recordId}/retire | `Integrations.Manage` + CSRF; operator-invoked retirement of one link; 204, 404, or 409 if already retired |
+
+`{kind}` is an `IntegrationEntityKind` name — `Property`, `Space`, `Occupancy`, `WorkOrder`,
+`Asset`, `Resident`, `Building` — matched case-insensitively; anything else is a 400 naming the
+value. There is **no route that deletes a conflict**: resolution is a status transition, and the
+runtime role holds no `DELETE` grant on `integrations."Conflicts"` to make one with, because a
+resolved conflict is the record that a human looked at a divergence and made a call.
+
+A conflict is `{ id, connectionId, kind, externalId, reason, field, observedValue, currentValue,
+detail, status, firstSeenInRunId, lastSeenInRunId, firstSeenAt, lastSeenAt, observationCount,
+resolvedByUserId, resolvedAt, resolutionNote, seenInLatestRun }`. `reason` is `UnmappedValue` /
+`MissingRequiredMapping` / `MissingParentLink` / `UpstreamDisappearance` / `AmbiguousMatch` /
+`ValidationRefusal`; `status` is `Open` / `Resolved` / `Ignored`. `seenInLatestRun` is false when
+the connection's most recent **completed** run no longer detected the divergence — the reconciler
+stops re-observing a conflict it can no longer see but never closes one on its own, so this is how
+a caller tells "still broken" from "fixed, and the row is just waiting to be closed".
+`staleCount` is how many open conflicts are in that state.
+
+A mapping profile is `{ id, connectionId, kind, mode, targetPortfolioId, defaultCreatorId,
+defaultTimeZoneId, createdAt, updatedAt, rules, issues, canAutoApply, availableSourceFields }`,
+where `mode` is `ReportOnly` / `AutoApply`, a rule is `{ id, sourceField, sourceValue,
+targetValue }`, and an issue is `{ severity, field, reason }` with `severity` `Error` or
+`Unmapped`. **A profile is created `ReportOnly` and there is no way to create one that is not** —
+promotion is a separate, refusable step, so a first connect cannot silently rewrite a tenant's
+property names. `Unmapped` issues are informational (the four `CanonicalProperty` address fields
+have nowhere to go) and never block promotion; `Error` issues do, and promote returns them in the
+409 body so an operator sees exactly what to fix. Editing a profile's defaults in a way that
+reintroduces an error demotes it back to `ReportOnly` rather than leaving it applying with a
+missing fact.
+
+A sync run is `{ id, connectionId, trigger, attemptNumber, status, startedAt, heartbeatAt,
+completedAt, seen, added, updated, failed, conflicted, error, snapshotHash }`, where `trigger` is
+`Manual` / `Scheduled` / `Retry` and `status` is `Running` / `Completed` / `Failed`.
 
 A health snapshot is `{ id, sourceSystem, displayName, isEnabled, lastAttemptedAt,
-lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords }`. A sync report
-is `{ outcome, seen, added, updated, failed, error }` where `outcome` is `Completed` / `Failed`
-/ `NotFound` / `Disabled`. `added` + `updated` are relative to what the connection had already
-seen, keyed by a content hash, so re-syncing an unchanged source reports zeros. `failed` is
-always 0 until reconciliation lands. A tracked record is `{ kind, externalId, contentHash,
-syncState, lastSeenAt, lastError }`; `kind` is `Property` / `Space` / `Occupancy` / `WorkOrder`
-/ `Asset` and `syncState` is `Pending` / `Synced` / `Failed`.
+lastSucceededAt, consecutiveFailures, lastError, trackedRecords, failedRecords, openConflicts }`.
+`openConflicts` is the unresolved-conflict badge: a conflict is deliberately not a failure, so
+without it a connection raising the same unmapped-status conflict on every run looks identical to
+a clean one. A sync report
+is `{ outcome, seen, added, updated, failed, error, conflicted, retired, runId }` where `outcome`
+is `Completed` / `Failed` / `NotFound` / `Disabled` / `AlreadyRunning`.
+
+**The counters changed meaning in PF-S19.05 and are now about PropFlow rows, not external record
+links.** `seen` is canonical records in the snapshot; `added` and `updated` are PropFlow rows
+created and updated; `failed` is records a domain invariant refused; `conflicted` is records that
+raised a conflict, upstream disappearances included; `retired` is links the source stopped
+reporting, whose PropFlow rows are left untouched. Re-syncing an unchanged source still reports
+zero `added` and `updated`, because a link whose `reconciledHash` already equals its
+`contentHash` is skipped. A connection with no mapping profile reports `added` 0 and a non-zero
+`conflicted` on its first sync — that is the intended connect → sync → review → promote → sync
+flow, not a failure.
+
+A tracked record is `{ kind, externalId, contentHash, reconciledHash, internalId, syncState,
+lastSeenAt, lastReconciledAt, lastRunId, lastError }`; `kind` is `Property` / `Space` /
+`Occupancy` / `WorkOrder` / `Asset` / `Resident` / `Building` and `syncState` is `Pending` /
+`Synced` / `Failed` / `Conflicted` / `Retired`. `contentHash` is what the source last said and
+`reconciledHash` is what was last written into PropFlow; the two differing is what makes a
+replayed sync converge rather than lose a change.
 
 `Integrations.Manage` is granted to Organization Admin and Property Manager only. The
 Integrations tables live in their own `integrations` schema with forced RLS, so a connection and
@@ -611,3 +679,79 @@ reproducible immutable owner statements. Journal lines may carry an optional `pr
 property reporting. Managers use `Accounting.Manage`; statement reads also accept
 `Accounting.OwnerRead` (granted to the Owner role). A repeated statement request returns the
 existing snapshot, whose response includes `netOwnerAmount` and a SHA-256 `sourceHash`.
+
+## Rental applications and screening (FS-S05)
+
+`/api/applications` is the FS-S05 surface: intake, consent, third-party screening and the
+approve/deny trail. Every route requires `Applications.Manage`. `Applications.ReadPii` is a
+second, separately revocable capability that unmasks contact details, income and screening
+detail; `Regional Manager` holds the first and not the second.
+
+**Masking.** In a masked response the PII properties are **absent from the JSON**, not null — a
+null means "no value is held", an absent property means "you may not see this". The masked fields
+are `email`, `phone`, `monthlyIncome`, `employmentStatus` on each applicant and `score`,
+`summary`, `receivedAt` on each screening row. `name`, `role`, screening `status`, `attempts` and
+`recommendation` stay visible so a queue is workable without the PII capability. List and detail
+unmask automatically for a caller holding `Applications.ReadPii`; `GET /{id}/pii` requires it, so
+a denial is a visible 403 rather than a quietly thinner object.
+
+There is no per-read PII access-log table. It was considered and declined: it would be the
+highest-write table in the `operations` schema and arrives with its own retention story.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/applications/ | Applications.Manage; tenant-scoped applications, optional `?listingId=` and `?status=`, newest submitted first, capped at 500; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/ | Applications.Manage + CSRF; creates a Draft application against a listing; 201, or 404 when the listing does not exist |
+| GET | /api/applications/{id} | Applications.Manage; application with its applicants and screening rows, or 404; masked unless the caller holds Applications.ReadPii |
+| GET | /api/applications/{id}/pii | **Applications.ReadPii**; the same record always unmasked; 403 without the capability, 404 when the application does not exist |
+| POST | /api/applications/{id}/applicants | Applications.Manage + CSRF; adds a person to the application as Primary/CoApplicant/Guarantor with optional monthly income and employment status; 404 unknown application or applicant, 409 for a second Primary, a duplicate person, a co-applicant before the Primary, or a terminal application |
+| POST | /api/applications/{id}/submit | Applications.Manage + CSRF; Draft → Submitted; 409 unless Draft and a Primary applicant exists |
+| GET | /api/applications/{id}/consent | Applications.Manage; `{ applicationId, effective, history }` — the full append-only row history plus the reduction to the latest row per (applicant, check). Not masked: consent rows carry no PII |
+| POST | /api/applications/{id}/consent | Applications.Manage + CSRF; records one Granted/Revoked consent row (a revocation is a new row, never an edit). Advances Submitted → ConsentGranted once every applicant holds at least one effective grant; 201 with `{ consent, applicationStatus }`, 400 for an applicant not on the application or an Unknown decision |
+| POST | /api/applications/{id}/withdraw | Applications.Manage + CSRF; any non-terminal state → Withdrawn; 409 when already terminal |
+| GET | /api/applications/{id}/screening | Applications.Manage; screening requests with attempts, last error and the latest verdict; masked unless the caller holds Applications.ReadPii |
+| POST | /api/applications/{id}/screening | Applications.Manage + CSRF; ConsentGranted → Screening, then one provider call per consented applicant. 200 and Screening → UnderReview when every applicant's screening completes; **503 and no verdict written** on a provider outage; 409 from any state but ConsentGranted or Screening, or when no applicant on the application holds effective consent. **Idempotent**: re-posting while already in Screening re-attempts the still-pending requests rather than conflicting, so a client that received a 503 can retry the URL it posted to. Entering Screening still requires ConsentGranted — that is the consent gate and it is unaffected |
+| POST | /api/applications/{id}/screening/{requestId}/retry | Applications.Manage + CSRF; re-attempts one Pending request; 409 when the request is not Pending or the applicant's consent has since been revoked; 503 on a further outage. The attempt that reaches `Screening:MaxAttempts` moves the request to Abandoned, and when every request for the application is Abandoned the application returns to ConsentGranted |
+
+**Attempt cycles.** A screening request's idempotency key is
+`application:{id}:applicant:{id}:cycle:{n}`. The cycle is what makes `AbandonScreening`'s promise
+reachable: a key fixed per (application, applicant) would have let the unique index refuse any
+replacement forever, so an applicant whose provider was down for its whole retry budget could
+never be screened again. A new cycle is minted only once every earlier one is Abandoned; a live
+(Pending/InFlight) request is reused, and an applicant who already Completed is not re-screened.
+
+**Provider outage.** `ScreeningRecommendation.Unavailable` means the provider could not answer,
+and `ScreeningResult` refuses to store it, so an outage can never become a persisted verdict. The
+response is 503. What *is* written on that path is the `ScreeningRequest` row and its attempt
+counter — the retry ledger, not an answer about the applicant — because retry exhaustion cannot
+be reached by a counter that is not persisted.
+
+**Retry ceiling.** `Screening:MaxAttempts` (default 3, must be at least 1, validated at startup).
+Configuration rather than a constant or a request field: a constant cannot be tuned when a
+bureau's availability turns out worse than assumed, and a request field would let a caller grant
+itself unlimited retries against a paid third party.
+
+**The consent gate is checked twice.** The domain refuses any status but `ConsentGranted`, and
+the endpoint separately re-checks effective consent per applicant immediately before the provider
+call — a revocation recorded after the application reached `ConsentGranted` is invisible to the
+status alone.
+| POST | /api/applications/{id}/approve | Applications.Manage + CSRF; UnderReview → Approved with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview, and 409 with an actionable message when any screening verdict is `Fail` and no override `note` was supplied |
+| POST | /api/applications/{id}/deny | Applications.Manage + CSRF; UnderReview → Denied with a required `reason` code and optional `note`; 201 with `{ decision, applicationStatus }`, 409 unless UnderReview |
+| GET | /api/applications/{id}/decisions | Applications.Manage; the append-only decision trail, newest first. Not masked: a reason code is not applicant PII |
+
+**Approving over a failed screening.** A `Fail` recommendation does **not** hard-block approval —
+a hard block makes individualized assessment impossible — but approving over one requires a
+non-blank `note`, so the override is never silent. The rule is a domain refusal in
+`RentalApplication.Approve`, not an endpoint check, and the 409 body carries the domain's own
+message rather than a bare "conflict".
+
+**The legacy applicant-status route is fenced.**
+`PUT /api/marketing/listings/{id}/applicants/{applicantId}/status` sets a flat status on the
+person, with no consent check and no decision row. It now returns **409** once a rental
+application exists for that applicant, naming `/api/applications` instead. It still works for an
+applicant with no application, so nothing that predates FS-S05 breaks. PF-S05.09 rewired the
+`/marketing/listings` Applicants panel off it: the panel's "Start screening" and "Approve"
+buttons are gone, and the applicant now enters `/api/applications` through a **Start application**
+control. Nothing in `apps/web` calls the legacy route any more — `api.marketing.listings
+.applicantStatus` (`apps/web/lib/api.ts`) is kept as a client for a route that is still live for
+an applicant with no application, not because a page uses it.

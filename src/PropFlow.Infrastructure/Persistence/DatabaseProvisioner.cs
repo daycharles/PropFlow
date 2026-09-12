@@ -135,10 +135,39 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE ON operations."ApprovalRequests" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."OrganizationSettings" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."NotificationPreferences" TO propflow_app;
+            -- FS-S05 applications and screening. The application itself and its screening
+            -- requests are working state (status transitions, retry counters), so they carry
+            -- UPDATE; the applicant rows are editable and removable before submission.
+            GRANT SELECT, INSERT, UPDATE ON operations."RentalApplications" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."ApplicationApplicants" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON operations."ScreeningRequests" TO propflow_app;
+            -- The append-only three, deliberately on their own line rather than appended to a
+            -- multi-table GRANT above: consent, screening verdicts and decisions are adverse-
+            -- action evidence, and on a shared line one careless verb would silently unlock the
+            -- whole trail with nothing failing. A PostgreSQL trigger backs this up because a
+            -- GRANT can be widened by accident and a trigger cannot.
+            GRANT SELECT, INSERT ON operations."ApplicationConsents" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."ScreeningResults" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."ApplicationDecisions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."OutboxMessages" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."Connections" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."RecordLinks" TO propflow_app;
+            -- FS-S19 reconciliation. Mapping configuration is ordinary editable state: a profile is
+            -- created, retargeted and promoted, and a rule that was a mistake is deleted outright
+            -- rather than tombstoned.
+            GRANT SELECT, INSERT, UPDATE, DELETE ON integrations."MappingProfiles" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON integrations."MappingRules" TO propflow_app;
+            -- Append-and-amend, the same rung as operations."PaymentRefunds" above: a sync run is a
+            -- history row saying what an automated process did to a tenant's data, so the runtime
+            -- role can claim it, finish it and reclaim it, but never erase it. UPDATE without
+            -- DELETE is the control, not an oversight.
+            GRANT SELECT, INSERT, UPDATE ON integrations."SyncRuns" TO propflow_app;
+            -- Same rung, and the reason the conflict queue can be trusted: resolving a conflict is
+            -- a status transition (Conflict.Resolve / Conflict.Ignore), never a removal, so a
+            -- resolved conflict survives as evidence that a human looked at a divergence and made a
+            -- call. There is deliberately no DELETE.
+            GRANT SELECT, INSERT, UPDATE ON integrations."Conflicts" TO propflow_app;
             """;
         await command.ExecuteNonQueryAsync();
         await transaction.CommitAsync();
