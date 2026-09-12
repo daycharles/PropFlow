@@ -457,6 +457,23 @@ creates can never receive the same number; `displayNumber` also carries a unique
 organization as a second backstop. `displayNumber` appears on the work list, the work detail
 response, and `POST`/`PUT /api/work`'s response — it cannot be set by the caller.
 
+## Approvals (FS-S03.05)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | /api/approvals | `Work.Read`; tenant-scoped requests, newest first, capped at 200. Optional `?subjectType=`, `?subjectId=`, `?status=` (`Pending`/`Approved`/`Rejected`) |
+| POST | /api/approvals | `Work.Read` + CSRF; `{ subjectType, subjectId, note }`; 201, or 400 on a blank `subjectType`/empty `subjectId` |
+| POST | /api/approvals/{id}/decide | `Settings.ManageConfiguration` + CSRF; `{ approved, reason }`; 200, 404, 409 if already decided or if the caller is the original requester, 400 on an invalid shape |
+
+A generic, reusable "does someone with authority say yes" primitive — not a replacement for any
+feature's own approval state (`Budget`'s `Submit`/`Approve`/`Reject`, for one, keeps its own).
+`subjectType` is a validated free-text label (like `TimelineEntry.RelatedObjectType`), not a
+closed vocabulary — nothing here validates that the named subject actually exists, since the set
+of future subjects isn't enumerable today. v1 is one decision, not a chain: `Approve`/`Reject`
+is terminal, and the requester can never be the decider (separation of duties). Every request
+and decision is recorded on the tenant timeline (`ApprovalRequested`/`ApprovalDecided`,
+`relatedObjectType: "ApprovalRequest"`).
+
 ## Global search (milestone 6)
 
 | Method | Path | Behavior |

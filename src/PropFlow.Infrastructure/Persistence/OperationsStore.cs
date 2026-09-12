@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
 using PropFlow.Domain;
 using PropFlow.Domain.Accounting;
+using PropFlow.Domain.Approvals;
 using PropFlow.Domain.Assets;
 using PropFlow.Domain.Automation;
 using PropFlow.Domain.Configuration;
@@ -47,6 +48,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
     public DbSet<NumberingSequence> NumberingSequences => Set<NumberingSequence>();
+    public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<RepeatRepairPolicy> RepeatRepairPolicies => Set<RepeatRepairPolicy>();
@@ -301,6 +303,16 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.Property(x => x.AppliesTo).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.Prefix).HasMaxLength(20).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.AppliesTo }).IsUnique();
+        });
+        model.Entity<ApprovalRequest>(entity =>
+        {
+            entity.ToTable("ApprovalRequests");
+            entity.Property(x => x.SubjectType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DecisionReason).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.OrganizationId, x.SubjectType, x.SubjectId });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });
         model.Entity<SavedView>(entity =>
         {
