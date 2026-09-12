@@ -157,6 +157,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.ToTable("Inspections"); entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<InspectionTemplate>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.TemplateId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.PropertyId, x.Status, x.CreatedAt });
         });
         model.Entity<InspectionFinding>(entity =>
@@ -170,6 +171,7 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
             entity.ToTable("UnitTurns"); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.HasOne<Property>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PropertyId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Inspection>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.MoveOutInspectionId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Space>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SpaceId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.SpaceId, x.Status });
         });
         model.Entity<UnitTurnTask>(entity =>
