@@ -64,8 +64,22 @@ public static class MarketingEndpoints
             if (await store.Applicants.AnyAsync(x => x.InquiryId == request.InquiryId, ct)) return Results.Conflict("This inquiry is already an applicant.");
             var applicant = new Applicant(store.OrganizationId, Guid.NewGuid(), id, inquiry.Id, inquiry.ProspectName, inquiry.Email); store.Applicants.Add(applicant); await store.SaveChangesAsync(ct); return Results.Created($"/api/marketing/listings/{id}/applicants/{applicant.Id}", applicant);
         }).RequireAuthorization(Capabilities.ManageLeasing);
+        // FS-S05 fence, and it is a correctness fix rather than tidying. This route sets a flat
+        // status on the *person*, with no consent check and no decision row. Once a
+        // RentalApplication exists for that person, the shipped "Send to screening" / "Approve"
+        // buttons on /marketing/listings would drive it straight to Approved and bypass the
+        // consent gate and the adverse-action trail that FS-S05 exists to produce. So it refuses,
+        // loudly, and names the surface that does it properly. It keeps working for an applicant
+        // with no application, so nothing that predates FS-S05 breaks. Rewiring the UI onto the
+        // application flow is PF-S05.09.
         group.MapPut("/{id:guid}/applicants/{applicantId:guid}/status", async (Guid id, Guid applicantId, ApplicantStatusRequest request, OperationsStore store, CancellationToken ct) =>
-        { var applicant = await store.Applicants.SingleOrDefaultAsync(x => x.Id == applicantId && x.ListingId == id, ct); if (applicant is null) return Results.NotFound(); applicant.SetStatus(request.Status); await store.SaveChangesAsync(ct); return Results.Ok(applicant); }).RequireAuthorization(Capabilities.ManageLeasing);
+        {
+            var applicant = await store.Applicants.SingleOrDefaultAsync(x => x.Id == applicantId && x.ListingId == id, ct);
+            if (applicant is null) return Results.NotFound();
+            if (await store.ApplicationApplicants.AnyAsync(x => x.ApplicantId == applicantId, ct))
+                return Results.Problem(statusCode: 409, title: "This applicant has a rental application; use /api/applications to record consent, screening and the approve/deny decision.");
+            applicant.SetStatus(request.Status); await store.SaveChangesAsync(ct); return Results.Ok(applicant);
+        }).RequireAuthorization(Capabilities.ManageLeasing);
 
         group.MapGet("/{id:guid}/showings", async (Guid id, OperationsStore store, CancellationToken ct) => Results.Ok(await store.Showings.AsNoTracking().Where(x => x.ListingId == id).OrderBy(x => x.ScheduledAt).ToListAsync(ct)));
         group.MapPost("/{id:guid}/showings", async (Guid id, ShowingRequest request, OperationsStore store, CancellationToken ct) =>

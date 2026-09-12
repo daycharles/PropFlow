@@ -130,6 +130,7 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/architecture.md` | Normative for cross-cutting design and persistence |
 | `docs/backlog.md` | The task source. `PF-x.yy` ids are stable references — **never renumber**. ✅ in the Task cell = the GitHub issue is closed |
 | `docs/api.md` | The HTTP contract for every endpoint that exists (M3–M7) |
+| `docs/integration-sandbox-contract.md` | The **outbound** JSON-over-HTTP contract `SandboxIntegrationAdapter` pulls (PF-S19.07): payload shape, the per-connection credential keys, the synthetic-resident-id rule, the failure messages |
 | `docs/local-development.md` | Accurate, PowerShell-first, matches the tree. The API port is **5001** everywhere (`.env.example`, `next.config.ts:7`, `demo-script.md`, the CI `e2e` job) |
 | `docs/DEPLOYMENT.md` | The **production-posture** install path: a release bundle plus `propflow-deploy up`. Names the three settings Production hard-requires, and the two deliberate deviations (Kestrel-terminated TLS, loopback proxy allow-list) |
 | `docs/RELEASE-TESTING.md` | The **Development** bring-up guide — running from source with `dotnet run` / `next dev`. Ported from the CI `e2e` job; the macOS-specific steps are noted there as unverified |
@@ -137,6 +138,8 @@ baseline and `.claude/settings.local.json` stays gitignored.
 | `docs/audit-communications.md` | The honest defect/accepted-risk register for the outbox |
 | `docs/demo-script.md` | The M3 walkthrough, in demo order. Leads with bulk vendor assignment |
 | `docs/milestones.md` | Per-milestone status: what shipped and what remains. M3–M7 reconciled to GitHub 2026-09-11 |
+| `docs/full-suite-scope.md` | The FS-S## full-suite scope, and the `PF-S05.NN` / `PF-S19.NN` sub-task tables. The Status cell is the truth for in-flight sub-task work — sub-tasks carry no GitHub issue |
+| `docs/followups.md` | The open/deferred register, with a *Closed* section that keeps a gap from being re-filed. A row moves to *Closed* only with the evidence that closed it |
 
 Known stale, verified 2026-09-10 — fix them if your change touches them:
 

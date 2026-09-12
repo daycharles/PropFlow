@@ -4,8 +4,16 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import { ProtectedPage } from "../components/protected-page";
 import {
+  ConflictQueue,
+  DEFAULT_CONFLICT_FILTERS,
+  MappingPanel,
+  RunHistory,
+  type ConflictFilters,
+} from "../components/integration-admin";
+import {
   api,
   ApiError,
+  type IntegrationEntityKind,
   type IntegrationHealth,
   type IntegrationRecord,
   type IntegrationSource,
@@ -20,6 +28,10 @@ export default function IntegrationsPage() {
     </ProtectedPage>
   );
 }
+
+// PF-S19.09. Three surfaces behind one connection; `null` means none is open.
+const TABS = ["Conflicts", "Mapping", "History"] as const;
+type Tab = (typeof TABS)[number];
 
 function connectionStatus(health: IntegrationHealth): { label: string; tone: string } {
   if (!health.isEnabled) return { label: "Disabled", tone: "muted" };
@@ -109,6 +121,13 @@ function ConnectionCard({
   const [actionError, setActionError] = useState("");
   const [records, setRecords] = useState<IntegrationRecord[] | null>(null);
   const [showRecords, setShowRecords] = useState(false);
+  const [tab, setTab] = useState<Tab | null>(null);
+  // Bumped after a sync or a retirement, and used as the sub-panels' `key` so they remount and
+  // re-read. Their VIEW state (the queue's filters, the mapping panel's entity kind) lives here
+  // rather than inside them precisely so that remount costs the operator nothing.
+  const [reloadToken, setReloadToken] = useState(0);
+  const [conflictFilters, setConflictFilters] = useState<ConflictFilters>(DEFAULT_CONFLICT_FILTERS);
+  const [mappingKind, setMappingKind] = useState<IntegrationEntityKind>("Property");
 
   async function sync() {
     setBusy(true);
@@ -117,9 +136,29 @@ function ConnectionCard({
     try {
       setReport(await api.integrations.sync(health.id));
       await onChanged();
+      setReloadToken((value) => value + 1);
       if (showRecords) await loadRecords();
     } catch (cause) {
       setActionError(cause instanceof ApiError ? cause.message : "The sync could not run.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Retires the LINK, never the PropFlow row it reconciled into: the source no longer reports the
+  // record, which is not an instruction to delete what PropFlow holds.
+  async function retire(record: IntegrationRecord) {
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.integrations.retireRecord(health.id, record.id);
+      await loadRecords();
+      await onChanged();
+      setReloadToken((value) => value + 1);
+    } catch (cause) {
+      setActionError(
+        cause instanceof ApiError ? cause.message : "The record link could not be retired.",
+      );
     } finally {
       setBusy(false);
     }
@@ -178,6 +217,10 @@ function ConnectionCard({
         <dd>{health.trackedRecords}</dd>
         <dt>Unresolved</dt>
         <dd>{health.failedRecords}</dd>
+        {/* PF-S19: a conflict is not a failure, so before this badge existed a connection raising
+            the same unmapped-status conflict on every run looked exactly like a clean one. */}
+        <dt>Open conflicts</dt>
+        <dd data-testid="open-conflicts">{health.openConflicts}</dd>
       </dl>
 
       {health.lastError ? (
@@ -191,7 +234,8 @@ function ConnectionCard({
       {report ? (
         <p className="success" role="status">
           Sync {report.outcome.toLowerCase()}: saw {report.seen}, added {report.added}, updated{" "}
-          {report.updated}, failed {report.failed}.
+          {report.updated}, failed {report.failed}, conflicted {report.conflicted}, retired{" "}
+          {report.retired}.
         </p>
       ) : null}
 
@@ -208,6 +252,42 @@ function ConnectionCard({
           </button>
         ) : null}
       </div>
+
+      {/* The three PF-S19.09 operator surfaces. One at a time rather than all three stacked: a
+          connection card already carries health, actions and records. */}
+      <div className="integration-tabs" role="group" aria-label="Connection administration">
+        {TABS.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className={tab === name ? "" : "secondary"}
+            aria-pressed={tab === name}
+            onClick={() => setTab(tab === name ? null : name)}
+          >
+            {name}
+            {name === "Conflicts" && health.openConflicts > 0 ? ` (${health.openConflicts})` : ""}
+          </button>
+        ))}
+      </div>
+      {tab === "Conflicts" && (
+        <ConflictQueue
+          key={reloadToken}
+          connectionId={health.id}
+          filters={conflictFilters}
+          onFilters={setConflictFilters}
+          onChanged={onChanged}
+        />
+      )}
+      {tab === "Mapping" && (
+        <MappingPanel
+          key={reloadToken}
+          connectionId={health.id}
+          kind={mappingKind}
+          onKind={setMappingKind}
+          onChanged={onChanged}
+        />
+      )}
+      {tab === "History" && <RunHistory key={reloadToken} connectionId={health.id} />}
 
       {showRecords ? (
         <div className="integration-records">
@@ -230,6 +310,18 @@ function ConnectionCard({
                     <code>{record.externalId}</code>
                     <span className="integration-record-state">{record.syncState}</span>
                     {record.lastError ? <small>{record.lastError}</small> : null}
+                    {record.syncState === "Retired" ? (
+                      <small>Link retired; the PropFlow row it created is untouched.</small>
+                    ) : (
+                      <button
+                        type="button"
+                        className="link-button"
+                        disabled={busy}
+                        onClick={() => void retire(record)}
+                      >
+                        Retire link
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
