@@ -3,7 +3,7 @@ using PropFlow.Domain.Integrations;
 namespace PropFlow.Application.Integrations;
 
 public enum IntegrationWriteOutcome { Created, Updated, DuplicateSource, UnknownSource, NotFound }
-public enum SyncOutcome { Completed, Failed, NotFound, Disabled }
+public enum SyncOutcome { Completed, Failed, NotFound, Disabled, AlreadyRunning }
 
 // Health snapshot for one connection — everything the Integration Health screen (PF-6.11) shows.
 public sealed record IntegrationConnectionHealth(
@@ -19,16 +19,38 @@ public sealed record IntegrationConnectionHealth(
     int FailedRecords);
 
 // Result of a single sync run against a connection's adapter.
+//
+// The counters are about PROPFLOW ROWS, not about external record links, and that changed in
+// PF-S19.05. Before it a sync only tracked external ids, so "added" meant "external ids we had not
+// seen before" and `Failed` was hard-coded 0 because there was no mapping step that could fail
+// (docs/followups.md recorded both). Now that a sync actually reconciles:
+//
+//   Seen       - canonical records in the snapshot.
+//   Added      - PropFlow rows created.
+//   Updated    - PropFlow rows updated.
+//   Failed     - records whose mapped values a domain invariant refused.
+//   Conflicted - records that raised a conflict, upstream disappearances included.
+//   Retired    - links the source stopped reporting. The PropFlow rows are left alone.
+//
+// A connection with no mapping profile reports Added 0 and a non-zero Conflicted on its first
+// sync. That is the intended connect → sync → review → promote → sync flow, not a failure.
+// RunId identifies the SyncRun row carrying timings and the snapshot hash.
 public sealed record SyncReport(
     SyncOutcome Outcome,
     int Seen,
     int Added,
     int Updated,
     int Failed,
-    string? Error)
+    string? Error,
+    int Conflicted = 0,
+    int Retired = 0,
+    Guid? RunId = null)
 {
     public static SyncReport NotFound { get; } = new(SyncOutcome.NotFound, 0, 0, 0, 0, null);
     public static SyncReport Disabled { get; } = new(SyncOutcome.Disabled, 0, 0, 0, 0, null);
+
+    // Another dispatcher already holds this connection's run claim.
+    public static SyncReport AlreadyRunning { get; } = new(SyncOutcome.AlreadyRunning, 0, 0, 0, 0, null);
 }
 
 public sealed record CreateConnectionCommand(string SourceSystem, string DisplayName);

@@ -58,6 +58,9 @@ public static class IntegrationEndpoints
             {
                 SyncOutcome.NotFound => Results.NotFound(),
                 SyncOutcome.Disabled => Results.Problem(statusCode: 409, title: "The connection is disabled"),
+                // Another dispatcher holds the run claim. A conflict, not an error: the sync the
+                // caller asked for is already happening.
+                SyncOutcome.AlreadyRunning => Results.Problem(statusCode: 409, title: "A sync is already running"),
                 _ => Results.Ok(report)
             };
         });

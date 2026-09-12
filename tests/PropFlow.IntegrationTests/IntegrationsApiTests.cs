@@ -52,33 +52,50 @@ public sealed class IntegrationsApiTests(DatabaseFixture fixture)
         await s.LoginAsync();
         var id = await CreateMockConnection(s);
 
+        // PF-S19.05 changed what these counters mean. They used to be link-level ("external ids we
+        // had not seen before"), so a first sync reported added == seen. They are now PropFlow
+        // rows, and this connection has no MappingProfile, so the first sync reconciles nothing and
+        // reports conflicts instead. That is the intended connect → review → promote flow; the
+        // reconciled path belongs to PF-S19.10's acceptance suite.
         var first = await (await s.Client.PostAsync($"/api/integrations/{id}/sync", null))
             .Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Completed", first.GetProperty("outcome").GetString());
         var seen = first.GetProperty("seen").GetInt32();
         Assert.True(seen > 0);
-        Assert.Equal(seen, first.GetProperty("added").GetInt32());
+        Assert.Equal(0, first.GetProperty("added").GetInt32());
         Assert.Equal(0, first.GetProperty("updated").GetInt32());
+        Assert.Equal(0, first.GetProperty("failed").GetInt32());
+        // Properties and work orders need profile facts nobody supplied. Their children are skipped
+        // rather than conflicted, so this is well under `seen`.
+        Assert.True(first.GetProperty("conflicted").GetInt32() > 0);
 
         var second = await (await s.Client.PostAsync($"/api/integrations/{id}/sync", null))
             .Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(0, second.GetProperty("added").GetInt32());
         Assert.Equal(0, second.GetProperty("updated").GetInt32());
+        // Replay safety: every record was seen again, so nothing is retired.
+        Assert.Equal(0, second.GetProperty("retired").GetInt32());
 
         var records = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}/records");
         var items = records.GetProperty("items").EnumerateArray().ToList();
-        Assert.Equal(seen, records.GetProperty("totalCount").GetInt32());
-        Assert.Equal(seen, items.Count);
-        Assert.All(items, r => Assert.Equal("Synced", r.GetProperty("syncState").GetString()));
+        // Each occupancy also produces a synthetic Resident link, so the tracked count exceeds the
+        // number of records the source actually sent.
+        var tracked = records.GetProperty("totalCount").GetInt32();
+        Assert.True(tracked >= seen);
+        Assert.Equal(tracked, items.Count);
+        Assert.All(items, r => Assert.Contains(r.GetProperty("syncState").GetString(),
+            new[] { "Pending", "Synced", "Conflicted" }));
 
         var firstPage = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}/records?page=1&pageSize=2");
         Assert.Equal(2, firstPage.GetProperty("items").GetArrayLength());
-        Assert.Equal(seen, firstPage.GetProperty("totalCount").GetInt32());
+        Assert.Equal(tracked, firstPage.GetProperty("totalCount").GetInt32());
 
         var health = await s.Client.GetFromJsonAsync<JsonElement>($"/api/integrations/{id}");
         Assert.False(string.IsNullOrEmpty(health.GetProperty("lastSucceededAt").GetString()));
         Assert.Equal(0, health.GetProperty("consecutiveFailures").GetInt32());
-        Assert.Equal(seen, health.GetProperty("trackedRecords").GetInt32());
+        Assert.Equal(tracked, health.GetProperty("trackedRecords").GetInt32());
+        // failedRecords counts SyncState.Failed only, and an unconfigured profile conflicts rather
+        // than fails.
         Assert.Equal(0, health.GetProperty("failedRecords").GetInt32());
     }
 

@@ -91,6 +91,7 @@ builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationAdapter, SandboxIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationSecretStore, ConfiguredIntegrationSecretStore>();
 builder.Services.AddSingleton<IIntegrationCatalog, IntegrationCatalog>();
+builder.Services.AddScoped<EfIntegrationReconciler>();
 builder.Services.AddScoped<IIntegrationOperations, EfIntegrationOperations>();
 builder.Services.AddSingleton<IPaymentGateway, ConfiguredPaymentGateway>();
 builder.Services.AddSingleton<PropFlow.Application.Screening.IScreeningProvider, PropFlow.Infrastructure.Screening.ConfiguredScreeningProvider>();
@@ -115,6 +116,14 @@ builder.Services.AddSingleton<OutboxRelay>();
 // The background poller is off under integration tests, which drive OutboxRelay directly.
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService<OutboxDispatcher>();
+var integrationSyncOptions = builder.Configuration.GetSection(IntegrationSyncOptions.SectionName).Get<IntegrationSyncOptions>() ?? new IntegrationSyncOptions();
+integrationSyncOptions.Validate();
+builder.Services.AddSingleton(integrationSyncOptions);
+builder.Services.AddSingleton<IntegrationSyncRelay>();
+// Same rule as the outbox poller above, for the same reason: integration tests drive
+// IntegrationSyncRelay directly so a background timer cannot race an assertion.
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<IntegrationSyncDispatcher>();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
