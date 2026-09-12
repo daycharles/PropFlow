@@ -92,7 +92,7 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         var items = rows.Select(t => new WorkListItem(t.Work.Id, t.Work.Title, t.Work.Description, t.Work.Status, t.Work.Priority, t.Work.WorkType,
             t.Work.PropertyId, t.PropertyName, t.Work.BuildingId, t.Work.SpaceId,
             t.Work.CategoryId, t.CategoryName, t.Work.VendorId, t.VendorName, t.Work.EmployeeId,
-            t.Work.DueDate, t.Work.CreatedAt, t.Version)).ToList();
+            t.Work.DueDate, t.Work.CreatedAt, t.Version, t.Work.DisplayNumber)).ToList();
         return new(items, total, q.Page, q.PageSize);
     }
 
@@ -154,9 +154,44 @@ public sealed class EfWorkOperations(OperationsStore store, CommunicationsStore 
         var created = Event(work, c.ActorId, "WorkCreated", null, work.Title);
         store.WorkItems.Add(work); store.Timeline.Add(created);
         await ApplyCustomFieldsAsync(work.Id, c.CustomFields, ct);
+
+        // The allocator is a raw SQL statement (see below) that does not go through
+        // SaveChangesAsync, so it needs an explicit transaction to commit or roll back together
+        // with the work item it is numbering. On any failure of the save below, the increment
+        // rolls back too - the only gaps possible are from a genuinely concurrent create's own
+        // increment landing first, never from this transaction's own failure.
+        await using var transaction = await store.Database.BeginTransactionAsync(ct);
+        var displayNumber = await AllocateDisplayNumberAsync(ConfigurationEntityType.WorkItem, ct);
+        if (displayNumber is not null) work.SetDisplayNumber(displayNumber);
         await store.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+
         await RunAutomationAsync(AutomationTrigger.WorkCreated, work.Id, created.Id, ct);
         return work;
+    }
+
+    // PF-S03.04. A single atomic UPDATE...RETURNING - never a read-then-increment in C#, which
+    // would let two concurrent creates allocate the same number (Postgres's row lock on the
+    // UPDATE serializes concurrent allocations for free; a plain SELECT-then-write would not).
+    // Returns null when the organization has not configured numbering for this entity type -
+    // the common case today, and every existing work item's state, since none has ever had one.
+    private async Task<string?> AllocateDisplayNumberAsync(ConfigurationEntityType appliesTo, CancellationToken ct)
+    {
+        var rows = await store.Database.SqlQueryRaw<AllocatedNumberRow>("""
+            UPDATE operations."NumberingSequences"
+            SET "NextValue" = "NextValue" + 1
+            WHERE "OrganizationId" = {0} AND "AppliesTo" = {1}
+            RETURNING "NextValue" - 1 AS "Value", "Prefix", "Width"
+            """, store.OrganizationId, appliesTo.ToString()).ToListAsync(ct);
+        return rows.Count == 0 ? null : NumberingSequence.Format(rows[0].Prefix, rows[0].Width, rows[0].Value);
+    }
+
+    // Column-shaped result of the raw query above - not a domain type, never tracked.
+    private sealed class AllocatedNumberRow
+    {
+        public long Value { get; set; }
+        public string Prefix { get; set; } = "";
+        public int Width { get; set; }
     }
 
     public async Task<WorkWriteOutcome> UpdateAsync(Guid id, UpdateWorkCommand c, CancellationToken ct)

@@ -224,6 +224,7 @@ app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();
 app.MapCategoryEndpoints();
 app.MapCustomFieldEndpoints();
+app.MapNumberingEndpoints();
 app.MapResidentEndpoints();
 app.MapAssetEndpoints();
 app.MapComplianceEndpoints();
