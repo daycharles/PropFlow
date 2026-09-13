@@ -46,7 +46,7 @@ public sealed class Campaign(Guid organizationId, Guid id, string name, MessageC
 {
     public string Name { get; private set; } = Required(name, nameof(name), 200);
     public MessageChannel Channel { get; private set; } = channel;
-    public string Subject { get; private set; } = Required(subject, nameof(subject), 200);
+    public string? Subject { get; private set; } = channel == MessageChannel.Sms ? null : Required(subject, nameof(subject), 200);
     public string Body { get; private set; } = Required(body, nameof(body), 10000);
     public DateTimeOffset? ScheduledAt { get; private set; } = scheduledAt?.ToUniversalTime();
     public DateTimeOffset CreatedAt { get; private set; } = DateTimeOffset.UtcNow;
