@@ -69,11 +69,16 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                 schema: "operations",
                 table: "ReportSchedules",
                 columns: new[] { "OrganizationId", "IsActive", "NextRunAt" });
+
+            foreach (var table in new[] { "ReportSchedules", "ReportDeliveries" })
+                migrationBuilder.Sql($"ALTER TABLE operations.\"{table}\" ADD CONSTRAINT \"FK_{table}_Organization\" FOREIGN KEY (\"OrganizationId\") REFERENCES identity.\"Organizations\" (\"Id\") ON DELETE RESTRICT; ALTER TABLE operations.\"{table}\" ENABLE ROW LEVEL SECURITY; ALTER TABLE operations.\"{table}\" FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_isolation ON operations.\"{table}\" USING (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid) WITH CHECK (\"OrganizationId\" = nullif(current_setting('app.organization_id', true), '')::uuid);");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            foreach (var table in new[] { "ReportSchedules", "ReportDeliveries" })
+                migrationBuilder.Sql($"DROP POLICY IF EXISTS tenant_isolation ON operations.\"{table}\"; ALTER TABLE operations.\"{table}\" NO FORCE ROW LEVEL SECURITY; ALTER TABLE operations.\"{table}\" DISABLE ROW LEVEL SECURITY; ALTER TABLE operations.\"{table}\" DROP CONSTRAINT IF EXISTS \"FK_{table}_Organization\";");
             migrationBuilder.DropTable(
                 name: "ReportDeliveries",
                 schema: "operations");
