@@ -22,6 +22,7 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
     public DbSet<DocumentTemplate> DocumentTemplates => Set<DocumentTemplate>();
     public DbSet<DocumentPacket> DocumentPackets => Set<DocumentPacket>();
     public DbSet<SignatureRequest> SignatureRequests => Set<SignatureRequest>();
+    public DbSet<ProviderCallbackReceipt> ProviderCallbackReceipts => Set<ProviderCallbackReceipt>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -79,7 +80,7 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
         model.Entity<Campaign>(entity =>
         {
             entity.ToTable("Campaigns"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Subject).HasMaxLength(200).IsRequired(); entity.Property(x => x.Body).HasMaxLength(10000).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(200); entity.Property(x => x.Body).HasMaxLength(10000).IsRequired();
             entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
         });
@@ -89,6 +90,8 @@ public sealed class CommunicationsStore(DbContextOptions<CommunicationsStore> op
             entity.Property(x => x.Channel).HasConversion<string>().HasMaxLength(32).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Channel, x.Address }).IsUnique();
         });
+        model.Entity<ProviderCallbackReceipt>(entity =>
+        { entity.ToTable("ProviderCallbackReceipts"); entity.Property(x => x.BodyDigest).HasMaxLength(64).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.BodyDigest }).IsUnique(); });
         model.Entity<DocumentTemplate>(entity =>
         { entity.ToTable("DocumentTemplates"); entity.Property(x => x.Name).HasMaxLength(200).IsRequired(); entity.Property(x => x.Content).HasMaxLength(100000).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique(); });
         model.Entity<DocumentPacket>(entity =>

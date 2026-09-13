@@ -143,9 +143,15 @@ public static class CommunicationEndpoints
             try { var campaign = new Campaign(store.OrganizationId, Guid.NewGuid(), request.Name, request.Channel, request.Subject, request.Body, request.ScheduledAt); store.Campaigns.Add(campaign); await store.SaveChangesAsync(ct); return Results.Created($"/api/communication/campaigns/{campaign.Id}", campaign); }
             catch (ArgumentException e) { return Results.Problem(statusCode: 400, title: e.Message); }
         });
-        group.MapPost("/{id:guid}/publish", async (Guid id, CommunicationsStore store, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/publish", async (Guid id, PublishCampaignRequest request, CommunicationsStore store, OperationsStore operations, ICampaignDispatcher dispatcher, CancellationToken ct) =>
         {
-            var campaign = await store.Campaigns.SingleOrDefaultAsync(x => x.Id == id, ct); if (campaign is null) return Results.NotFound(); campaign.Publish(); await store.SaveChangesAsync(ct); return Results.Ok(campaign);
+            var campaign = await store.Campaigns.SingleOrDefaultAsync(x => x.Id == id, ct); if (campaign is null) return Results.NotFound();
+            if (request.ResidentIds is not { Count: > 0 and <= 1000 } || request.ResidentIds.Any(x => x == Guid.Empty) || request.ResidentIds.Distinct().Count() != request.ResidentIds.Count) return Results.Problem(statusCode: 400, title: "1 to 1000 distinct resident ids are required");
+            var residents = await operations.Residents.AsNoTracking().Where(x => request.ResidentIds.Contains(x.Id)).ToListAsync(ct);
+            if (residents.Count != request.ResidentIds.Count) return Results.NotFound();
+            var eligible = residents.Where(x => x.AllowsContact(campaign.Channel)).Select(x => new CampaignRecipient(x.Id, campaign.Channel == MessageChannel.Email ? x.Email! : x.Phone!)).ToList();
+            var dispatched = await dispatcher.DispatchAsync(campaign, eligible, ct);
+            return Results.Ok(new { campaign, dispatched });
         });
     }
 
@@ -239,3 +245,4 @@ public sealed record CreateConversationRequest(string Subject, string Participan
 public sealed record AddConversationMessageRequest(ConversationMessageDirection Direction, MessageChannel Channel, string Body);
 public sealed record UnsubscribeRequest(MessageChannel Channel, string Address);
 public sealed record CreateCampaignRequest(string Name, MessageChannel Channel, string Subject, string Body, DateTimeOffset? ScheduledAt = null);
+public sealed record PublishCampaignRequest(List<Guid>? ResidentIds);

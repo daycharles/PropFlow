@@ -86,6 +86,7 @@ builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IRepeatRepairDetector, EfRepeatRepairDetector>();
 builder.Services.AddScoped<IAttentionQueue, EfAttentionQueue>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
+builder.Services.AddScoped<ICampaignDispatcher, EfCampaignDispatcher>();
 builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationAdapter, SandboxIntegrationAdapter>();
