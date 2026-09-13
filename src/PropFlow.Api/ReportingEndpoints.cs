@@ -23,6 +23,7 @@ public static class ReportingEndpoints
         group.MapPost("/schedules", CreateSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
         group.MapPost("/schedules/{id:guid}/pause", PauseSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
         group.MapPost("/schedules/{id:guid}/run", RunSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
+        group.MapGet("/schedules/{id:guid}/deliveries", ListDeliveries);
     }
 
     private static async Task<IResult> ListSchedules(OperationsStore store, CancellationToken ct) => Results.Ok(await store.ReportSchedules.AsNoTracking().OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.Kind, x.Frequency, x.NextRunAt, x.Recipient, x.Format, x.IsActive, x.LastRunAt, x.DeliveryCount }).ToListAsync(ct));
@@ -46,10 +47,27 @@ public static class ReportingEndpoints
     private static async Task<IResult> RunSchedule(Guid id, OperationsStore store, TimeProvider clock, CancellationToken ct)
     {
         var schedule = await store.ReportSchedules.SingleOrDefaultAsync(x => x.Id == id && x.IsActive, ct); if (schedule is null) return Results.NotFound();
-        var now = clock.GetUtcNow(); var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{schedule.Kind}|{schedule.FilterJson}|{now:yyyy-MM-dd}")));
-        var delivery = new ReportDelivery(store.OrganizationId, Guid.NewGuid(), schedule.Id, now, hash, 0); store.ReportDeliveries.Add(delivery); schedule.MarkDelivered(now); await store.SaveChangesAsync(ct);
+        var now = clock.GetUtcNow();
+        var dayStart = new DateTimeOffset(now.Date, TimeSpan.Zero); var dayEnd = dayStart.AddDays(1);
+        var existing = await store.ReportDeliveries.AsNoTracking().Where(x => x.ScheduleId == schedule.Id && x.DeliveredAt >= dayStart && x.DeliveredAt < dayEnd).SingleOrDefaultAsync(ct);
+        if (existing is not null) return Results.Ok(new { existing.Id, existing.DeliveredAt, existing.PayloadHash, schedule.NextRunAt, idempotent = true });
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{schedule.Kind}|{schedule.FilterJson}|{now:yyyy-MM-dd}")));
+        var delivery = new ReportDelivery(store.OrganizationId, Guid.NewGuid(), schedule.Id, now, hash, await DeliveryRowCount(schedule.Kind, store, ct), schedule.Recipient, schedule.Format); store.ReportDeliveries.Add(delivery); schedule.MarkDelivered(now); await store.SaveChangesAsync(ct);
         return Results.Ok(new { delivery.Id, delivery.DeliveredAt, delivery.PayloadHash, schedule.NextRunAt });
     }
+
+    private static async Task<IResult> ListDeliveries(Guid id, OperationsStore store, CancellationToken ct) => Results.Ok(await store.ReportDeliveries.AsNoTracking().Where(x => x.ScheduleId == id).OrderByDescending(x => x.DeliveredAt).Select(x => new { x.Id, x.DeliveredAt, x.PayloadHash, x.RowCount, x.Recipient, x.Format }).ToListAsync(ct));
+
+    private static async Task<int> DeliveryRowCount(string kind, OperationsStore store, CancellationToken ct) => kind.ToLowerInvariant() switch
+    {
+        "operational" or "maintenance" => await store.WorkItems.CountAsync(ct),
+        "leasing" => await store.Leases.CountAsync(ct),
+        "financial" => await store.LeaseCharges.CountAsync(ct) + await store.ResidentPayments.CountAsync(ct),
+        "occupancy" => await store.Occupancies.CountAsync(ct),
+        "vendor" => await store.Vendors.CountAsync(ct),
+        "portfolio" => await store.Properties.CountAsync(ct),
+        _ => 0
+    };
 
     private static async Task<IResult> GetReport(string kind, DateOnly? from, DateOnly? to, Guid? propertyId, int? take, OperationsStore store, CancellationToken ct)
     {
@@ -66,7 +84,7 @@ public static class ReportingEndpoints
         {
             "operational" or "maintenance" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = await work.GroupBy(_ => 1).Select(g => new { count = g.Count(), estimatedCost = g.Sum(x => x.Cost ?? 0m) }).FirstOrDefaultAsync(ct) ?? new { count = 0, estimatedCost = 0m }, rows = await work.OrderByDescending(x => x.CreatedAt).Take(limit).Select(x => new { x.Id, x.Title, x.Status, x.Cost, x.CreatedAt, x.PropertyId, x.VendorId }).ToListAsync(ct) },
             "leasing" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = await leases.GroupBy(_ => 1).Select(g => new { count = g.Count(), monthlyRent = g.Sum(x => x.MonthlyRent) }).FirstOrDefaultAsync(ct) ?? new { count = 0, monthlyRent = 0m }, rows = await leases.OrderBy(x => x.StartsOn).Take(limit).Select(x => new { x.Id, x.SpaceId, x.ResidentId, x.Status, x.StartsOn, x.EndsOn, x.MonthlyRent }).ToListAsync(ct) },
-            "financial" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = new { charges = await store.LeaseCharges.AsNoTracking().Where(x => x.DueOn >= DateOnly.FromDateTime(start.UtcDateTime) && x.DueOn <= DateOnly.FromDateTime(end.UtcDateTime)).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m, payments = await store.ResidentPayments.AsNoTracking().Where(x => x.SettledAt >= start && x.SettledAt < end).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m }, rows = Array.Empty<object>() },
+            "financial" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = new { charges = await store.LeaseCharges.AsNoTracking().Where(x => x.DueOn >= DateOnly.FromDateTime(start.UtcDateTime) && x.DueOn <= DateOnly.FromDateTime(end.UtcDateTime) && (propertyId == null || store.Leases.Any(l => l.Id == x.LeaseId && store.Spaces.Any(s => s.Id == l.SpaceId && s.PropertyId == propertyId)))).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m, payments = await store.ResidentPayments.AsNoTracking().Where(x => x.SettledAt >= start && x.SettledAt < end && (propertyId == null || store.Leases.Any(l => l.Id == x.LeaseId && store.Spaces.Any(s => s.Id == l.SpaceId && s.PropertyId == propertyId)))).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m }, rows = Array.Empty<object>() },
             "occupancy" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = new { occupied = await store.Occupancies.AsNoTracking().CountAsync(x => x.MovedInOn <= DateOnly.FromDateTime(end.UtcDateTime) && (x.MovedOutOn == null || x.MovedOutOn >= DateOnly.FromDateTime(start.UtcDateTime)), ct), spaces = await store.Spaces.AsNoTracking().CountAsync(x => propertyId == null || x.PropertyId == propertyId, ct) }, rows = Array.Empty<object>() },
             "vendor" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = await work.Where(x => x.VendorId != null).GroupBy(x => x.VendorId).Select(g => new { vendorId = g.Key, workItems = g.Count(), cost = g.Sum(x => x.Cost ?? 0m) }).OrderByDescending(x => x.cost).Take(limit).ToListAsync(ct), rows = Array.Empty<object>() },
             "portfolio" => new { kind = normalized, filters = new { from = start, to = end, propertyId }, totals = new { properties = await store.Properties.AsNoTracking().CountAsync(x => propertyId == null || x.Id == propertyId, ct), workItems = await work.CountAsync(ct), activeLeases = await leases.CountAsync(ct) }, rows = Array.Empty<object>() },

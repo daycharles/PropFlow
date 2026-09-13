@@ -40,6 +40,7 @@ public sealed class ReportingEndpointsTests(DatabaseFixture fixture)
         using var create = await s.Client.PostAsJsonAsync("/api/reports/schedules", new { name = "Daily portfolio", kind = "portfolio", frequency = "Daily", recipient = "ops@example.test" });
         Assert.True(create.StatusCode == HttpStatusCode.Created, await create.Content.ReadAsStringAsync()); var id = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         using var run = await s.Client.PostAsync($"/api/reports/schedules/{id}/run", null); Assert.Equal(HttpStatusCode.OK, run.StatusCode);
+        using var retry = await s.Client.PostAsync($"/api/reports/schedules/{id}/run", null); Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         await using var store = s.Store(s.OrganizationA); Assert.Equal(1, store.ReportDeliveries.Count(x => x.ScheduleId == id));
     }
 }

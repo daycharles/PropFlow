@@ -32,11 +32,13 @@ public sealed class ReportSchedule(Guid organizationId, Guid id, string name, st
     private static string Required(string value, string name, int max) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Value is required.", name) : value.Trim() is var v && v.Length <= max ? v : throw new ArgumentException($"Value may contain at most {max} characters.", name);
 }
 
-public sealed class ReportDelivery(Guid organizationId, Guid id, Guid scheduleId, DateTimeOffset deliveredAt, string payloadHash, int rowCount)
+public sealed class ReportDelivery(Guid organizationId, Guid id, Guid scheduleId, DateTimeOffset deliveredAt, string payloadHash, int rowCount, string recipient, ReportExportFormat format)
     : TenantEntity(organizationId, id)
 {
     public Guid ScheduleId { get; private set; } = scheduleId == Guid.Empty ? throw new ArgumentException("Schedule is required.", nameof(scheduleId)) : scheduleId;
     public DateTimeOffset DeliveredAt { get; private set; } = deliveredAt;
     public string PayloadHash { get; private set; } = string.IsNullOrWhiteSpace(payloadHash) ? throw new ArgumentException("Payload hash is required.", nameof(payloadHash)) : payloadHash;
     public int RowCount { get; private set; } = rowCount >= 0 ? rowCount : throw new ArgumentOutOfRangeException(nameof(rowCount));
+    public string Recipient { get; private set; } = string.IsNullOrWhiteSpace(recipient) ? throw new ArgumentException("Recipient is required.", nameof(recipient)) : recipient.Trim();
+    public ReportExportFormat Format { get; private set; } = format;
 }

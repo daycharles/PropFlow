@@ -22,7 +22,19 @@ public sealed class ReportScheduleDispatcher(IServiceScopeFactory scopes, IConfi
                     foreach (var schedule in due)
                     {
                         var now = clock.GetUtcNow(); var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{schedule.Kind}|{schedule.FilterJson}|{now:yyyy-MM-dd}")));
-                        store.ReportDeliveries.Add(new ReportDelivery(store.OrganizationId, Guid.NewGuid(), schedule.Id, now, hash, 0)); schedule.MarkDelivered(now);
+                        var dayStart = new DateTimeOffset(now.Date, TimeSpan.Zero); var dayEnd = dayStart.AddDays(1);
+                        if (await store.ReportDeliveries.AnyAsync(x => x.ScheduleId == schedule.Id && x.DeliveredAt >= dayStart && x.DeliveredAt < dayEnd, stoppingToken)) continue;
+                        var count = schedule.Kind.ToLowerInvariant() switch
+                        {
+                            "operational" or "maintenance" => await store.WorkItems.CountAsync(stoppingToken),
+                            "leasing" => await store.Leases.CountAsync(stoppingToken),
+                            "financial" => await store.LeaseCharges.CountAsync(stoppingToken) + await store.ResidentPayments.CountAsync(stoppingToken),
+                            "occupancy" => await store.Occupancies.CountAsync(stoppingToken),
+                            "vendor" => await store.Vendors.CountAsync(stoppingToken),
+                            "portfolio" => await store.Properties.CountAsync(stoppingToken),
+                            _ => 0
+                        };
+                        store.ReportDeliveries.Add(new ReportDelivery(store.OrganizationId, Guid.NewGuid(), schedule.Id, now, hash, count, schedule.Recipient, schedule.Format)); schedule.MarkDelivered(now);
                     }
                     if (due.Count > 0) await store.SaveChangesAsync(stoppingToken);
                 }
