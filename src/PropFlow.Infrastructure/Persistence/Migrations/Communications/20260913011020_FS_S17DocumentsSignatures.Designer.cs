@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Communications;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Communications;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
 {
     [DbContext(typeof(CommunicationsStore))]
-    partial class CommunicationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260913011020_FS_S17DocumentsSignatures")]
+    partial class FS_S17DocumentsSignatures
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,6 +59,7 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Subject")
+                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -386,30 +390,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                     b.HasIndex("OrganizationId", "WorkId", "CreatedAt");
 
                     b.ToTable("OutboxMessages", "communications");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Communications.ProviderCallbackReceipt", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("BodyDigest")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "BodyDigest")
-                        .IsUnique();
-
-                    b.ToTable("ProviderCallbackReceipts", "communications");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Communications.SignatureRequest", b =>
