@@ -15,6 +15,7 @@ using PropFlow.Domain.Leasing;
 using PropFlow.Domain.Timeline;
 using PropFlow.Domain.Work;
 using PropFlow.Domain.Communications;
+using PropFlow.Domain.Reporting;
 
 namespace PropFlow.Infrastructure.Persistence;
 
@@ -91,6 +92,8 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     public DbSet<ManagementFeeRule> ManagementFeeRules => Set<ManagementFeeRule>();
     public DbSet<Distribution> Distributions => Set<Distribution>();
     public DbSet<OwnerStatement> OwnerStatements => Set<OwnerStatement>();
+    public DbSet<ReportSchedule> ReportSchedules => Set<ReportSchedule>();
+    public DbSet<ReportDelivery> ReportDeliveries => Set<ReportDelivery>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(new TenantConnectionInterceptor(tenant));
@@ -98,6 +101,17 @@ public sealed class OperationsStore(DbContextOptions<OperationsStore> options, I
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasDefaultSchema("operations");
+        model.Entity<ReportSchedule>(entity =>
+        {
+            entity.ToTable("ReportSchedules"); entity.Property(x => x.Name).HasMaxLength(120).IsRequired(); entity.Property(x => x.Kind).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Frequency).HasConversion<string>().HasMaxLength(20).IsRequired(); entity.Property(x => x.Format).HasConversion<string>().HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Recipient).HasMaxLength(254).IsRequired(); entity.Property(x => x.FilterJson).HasColumnType("jsonb"); entity.HasIndex(x => new { x.OrganizationId, x.IsActive, x.NextRunAt });
+        });
+        model.Entity<ReportDelivery>(entity =>
+        {
+            entity.ToTable("ReportDeliveries"); entity.Property(x => x.PayloadHash).HasMaxLength(128).IsRequired(); entity.HasIndex(x => new { x.OrganizationId, x.ScheduleId, x.DeliveredAt });
+            entity.HasOne<ReportSchedule>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.ScheduleId }).HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+        });
         model.Entity<WorkItem>(entity =>
         {
             entity.ToTable("WorkItems");

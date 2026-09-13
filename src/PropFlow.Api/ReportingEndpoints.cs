@@ -1,7 +1,10 @@
 using System.Globalization;
 using System.Text;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PropFlow.Application;
+using PropFlow.Domain.Reporting;
 using PropFlow.Infrastructure.Persistence;
 
 namespace PropFlow.Api;
@@ -16,6 +19,36 @@ public static class ReportingEndpoints
         var group = app.MapGroup("/api/reports").RequireAuthorization(Capabilities.ReadReports);
         group.MapGet("/{kind}", GetReport);
         group.MapGet("/{kind}/export", ExportReport);
+        group.MapGet("/schedules", ListSchedules);
+        group.MapPost("/schedules", CreateSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
+        group.MapPost("/schedules/{id:guid}/pause", PauseSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
+        group.MapPost("/schedules/{id:guid}/run", RunSchedule).RequireAuthorization(Capabilities.ManageConfiguration);
+    }
+
+    private static async Task<IResult> ListSchedules(OperationsStore store, CancellationToken ct) => Results.Ok(await store.ReportSchedules.AsNoTracking().OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.Kind, x.Frequency, x.NextRunAt, x.Recipient, x.Format, x.IsActive, x.LastRunAt, x.DeliveryCount }).ToListAsync(ct));
+
+    private static async Task<IResult> CreateSchedule(CreateReportScheduleRequest request, OperationsStore store, TimeProvider clock, CancellationToken ct)
+    {
+        try
+        {
+            var schedule = new ReportSchedule(store.OrganizationId, Guid.NewGuid(), request.Name, request.Kind, request.Frequency, request.NextRunAt ?? clock.GetUtcNow(), request.Recipient, request.Format, request.Filters is null ? null : JsonSerializer.Serialize(request.Filters));
+            store.ReportSchedules.Add(schedule); await store.SaveChangesAsync(ct);
+            return Results.Created($"/api/reports/schedules/{schedule.Id}", schedule);
+        }
+        catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    }
+
+    private static async Task<IResult> PauseSchedule(Guid id, OperationsStore store, CancellationToken ct)
+    {
+        var schedule = await store.ReportSchedules.SingleOrDefaultAsync(x => x.Id == id, ct); if (schedule is null) return Results.NotFound(); schedule.Pause(); await store.SaveChangesAsync(ct); return Results.Ok(new { schedule.Id, schedule.IsActive });
+    }
+
+    private static async Task<IResult> RunSchedule(Guid id, OperationsStore store, TimeProvider clock, CancellationToken ct)
+    {
+        var schedule = await store.ReportSchedules.SingleOrDefaultAsync(x => x.Id == id && x.IsActive, ct); if (schedule is null) return Results.NotFound();
+        var now = clock.GetUtcNow(); var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{schedule.Kind}|{schedule.FilterJson}|{now:yyyy-MM-dd}")));
+        var delivery = new ReportDelivery(store.OrganizationId, Guid.NewGuid(), schedule.Id, now, hash, 0); store.ReportDeliveries.Add(delivery); schedule.MarkDelivered(now); await store.SaveChangesAsync(ct);
+        return Results.Ok(new { delivery.Id, delivery.DeliveredAt, delivery.PayloadHash, schedule.NextRunAt });
     }
 
     private static async Task<IResult> GetReport(string kind, DateOnly? from, DateOnly? to, Guid? propertyId, int? take, OperationsStore store, CancellationToken ct)
@@ -23,7 +56,8 @@ public static class ReportingEndpoints
         if (!TryRange(from, to, out var start, out var end, out var error)) return Results.BadRequest(error);
         var limit = Math.Clamp(take ?? 1000, 1, 10000);
         var normalized = kind.Trim().ToLowerInvariant();
-        var work = store.WorkItems.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        var work = store.WorkItems.AsNoTracking();
+        if (from is not null || to is not null) work = work.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
         if (propertyId is not null) work = work.Where(x => x.PropertyId == propertyId);
         var leases = store.Leases.AsNoTracking().Where(x => x.StartsOn <= DateOnly.FromDateTime(end.UtcDateTime) && x.EndsOn >= DateOnly.FromDateTime(start.UtcDateTime));
         if (propertyId is not null) leases = leases.Where(x => store.Spaces.Any(s => s.Id == x.SpaceId && s.PropertyId == propertyId));
@@ -59,3 +93,5 @@ public static class ReportingEndpoints
         return error is null;
     }
 }
+
+public sealed record CreateReportScheduleRequest(string Name, string Kind, ReportScheduleFrequency Frequency, string Recipient, ReportExportFormat Format = ReportExportFormat.Csv, DateTimeOffset? NextRunAt = null, Dictionary<string, string?>? Filters = null);

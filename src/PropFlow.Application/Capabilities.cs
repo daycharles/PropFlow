@@ -48,7 +48,7 @@ public static class Capabilities
         "Organization Admin" or "Property Manager" => All.Where(x => x is not ResidentPortalRead and not ResidentPortalRequest).ToArray(),
         "Regional Manager" => CategoryManagement,
         "Maintenance Supervisor" => WorkManagement,
-        "Read Only" => [ReadWork],
+        "Read Only" => [ReadWork, ReadReports],
         // A field role is not usable until the control-plane membership names the employee/vendor
         // it represents. Endpoint scope checks then narrow this capability to assigned work.
         "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay, ManageAttachments],

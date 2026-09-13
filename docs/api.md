@@ -611,3 +611,11 @@ reproducible immutable owner statements. Journal lines may carry an optional `pr
 property reporting. Managers use `Accounting.Manage`; statement reads also accept
 `Accounting.OwnerRead` (granted to the Owner role). A repeated statement request returns the
 existing snapshot, whose response includes `netOwnerAmount` and a SHA-256 `sourceHash`.
+# Reporting (FS-S18)
+
+Authenticated users with `Reports.Read` can query `/api/reports/{kind}` for `operational`,
+`leasing`, `financial`, `occupancy`, `maintenance`, `vendor`, or `portfolio`. Optional `from`,
+`to`, `propertyId`, and bounded `take` filters are tenant-scoped. `/api/reports/{kind}/export`
+returns the same projection as UTF-8 CSV. Users with `Settings.ManageConfiguration` can create,
+list, pause, and run persisted schedules at `/api/reports/schedules`; due schedules are dispatched
+by the API worker and recorded in `ReportDeliveries` with a payload hash and next-run time.

@@ -161,6 +161,7 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = loginAttemptsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddHostedService<RuntimeDatabaseGuard>();
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<ReportScheduleDispatcher>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
 
 var app = builder.Build();

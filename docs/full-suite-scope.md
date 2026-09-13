@@ -155,3 +155,11 @@ and every status transition is auditable.
 
 The two stories remain In progress until all tasks above are build-, integration-, and
 browser-verified. This breakdown is the source of truth for follow-on task issues.
+
+**FS-S18 — Reporting and portfolio analytics (#206).** Reporting is exposed through tenant-scoped
+`/api/reports/{kind}` projections for operational, maintenance, leasing, financial, occupancy,
+vendor, and portfolio views. `/export` serializes the same projection as CSV. `ReportSchedules` and
+`ReportDeliveries` persist recurring delivery configuration and audit hashes; the dispatcher
+advances daily, weekly, and monthly schedules. Reports require `Reports.Read`; schedule management
+also requires `Settings.ManageConfiguration`. The `FS_S18Reporting` migration creates the schedule
+and delivery tables with tenant keys, foreign keys, indexes, and standard RLS/grants.
