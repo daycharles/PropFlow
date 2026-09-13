@@ -241,6 +241,7 @@ app.MapOwnerAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();
+app.MapDocumentWorkflowEndpoints();
 app.MapCategoryEndpoints();
 app.MapCustomFieldEndpoints();
 app.MapNumberingEndpoints();

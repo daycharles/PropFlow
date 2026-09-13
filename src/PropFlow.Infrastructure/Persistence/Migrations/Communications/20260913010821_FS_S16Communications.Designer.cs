@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Communications;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Communications;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
 {
     [DbContext(typeof(CommunicationsStore))]
-    partial class CommunicationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260913010821_FS_S16Communications")]
+    partial class FS_S16Communications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -178,93 +181,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                     b.ToTable("ConversationMessages", "communications");
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Communications.DocumentPacket", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("IntegrityHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("RenderedContent")
-                        .IsRequired()
-                        .HasMaxLength(100000)
-                        .HasColumnType("character varying(100000)");
-
-                    b.Property<DateTimeOffset?>("RetainUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("TemplateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("TemplateVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "TemplateId");
-
-                    b.HasIndex("OrganizationId", "Status", "ExpiresAt");
-
-                    b.ToTable("DocumentPackets", "communications");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Communications.DocumentTemplate", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasMaxLength(100000)
-                        .HasColumnType("character varying(100000)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("integer");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("DocumentTemplates", "communications");
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Communications.MessageTemplate", b =>
                 {
                     b.Property<Guid>("OrganizationId")
@@ -389,80 +305,11 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
                     b.ToTable("OutboxMessages", "communications");
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Communications.SignatureRequest", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EvidenceHash")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid>("PacketId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("SignedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SignerId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("SignerName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "PacketId", "SignerId")
-                        .IsUnique();
-
-                    b.ToTable("SignatureRequests", "communications");
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Communications.ConversationMessage", b =>
                 {
                     b.HasOne("PropFlow.Domain.Communications.Conversation", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "ConversationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Communications.DocumentPacket", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Communications.DocumentTemplate", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "TemplateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Communications.SignatureRequest", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Communications.DocumentPacket", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "PacketId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
