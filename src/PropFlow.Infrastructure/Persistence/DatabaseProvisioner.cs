@@ -151,6 +151,13 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT ON operations."ApplicationDecisions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."OutboxMessages" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."Conversations" TO propflow_app;
+            GRANT SELECT, INSERT ON communications."ConversationMessages" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."Campaigns" TO propflow_app;
+            GRANT SELECT, INSERT ON communications."ChannelUnsubscribes" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."DocumentTemplates" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON communications."DocumentPackets" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON communications."SignatureRequests" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."Connections" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."RecordLinks" TO propflow_app;
             -- FS-S19 reconciliation. Mapping configuration is ordinary editable state: a profile is

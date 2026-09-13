@@ -120,8 +120,14 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Communications
         }
 
         /// <inheritdoc />
+            foreach (var table in new[] { "Campaigns", "ChannelUnsubscribes", "Conversations", "ConversationMessages" })
+                migrationBuilder.Sql($"ALTER TABLE communications.\"{table}\" ENABLE ROW LEVEL SECURITY; ALTER TABLE communications.\"{table}\" FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_isolation ON communications.\"{table}\" USING (\"OrganizationId\" = current_setting('app.current_organization')::uuid) WITH CHECK (\"OrganizationId\" = current_setting('app.current_organization')::uuid);");
+        }
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            foreach (var table in new[] { "Campaigns", "ChannelUnsubscribes", "Conversations", "ConversationMessages" })
+                migrationBuilder.Sql($"DROP POLICY IF EXISTS tenant_isolation ON communications.\"{table}\"; ALTER TABLE communications.\"{table}\" DISABLE ROW LEVEL SECURITY;");
             migrationBuilder.DropTable(
                 name: "Campaigns",
                 schema: "communications");
