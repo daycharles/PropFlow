@@ -128,6 +128,8 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT, UPDATE ON operations."BankTransactions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Budgets", operations."BudgetLines", operations."Owners", operations."PropertyOwnerships", operations."ManagementFeeRules", operations."Distributions" TO propflow_app;
             GRANT SELECT, INSERT ON operations."OwnerStatements" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON operations."ReportSchedules" TO propflow_app;
+            GRANT SELECT, INSERT ON operations."ReportDeliveries" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."Attachments" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON operations."CustomFieldDefinitions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON operations."CustomFieldValues" TO propflow_app;
@@ -151,6 +153,14 @@ public static class DatabaseProvisioner
             GRANT SELECT, INSERT ON operations."ApplicationDecisions" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."MessageTemplates" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON communications."OutboxMessages" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."Conversations" TO propflow_app;
+            GRANT SELECT, INSERT ON communications."ConversationMessages" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."Campaigns" TO propflow_app;
+            GRANT SELECT, INSERT ON communications."ChannelUnsubscribes" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON communications."DocumentTemplates" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON communications."DocumentPackets" TO propflow_app;
+            GRANT SELECT, INSERT, UPDATE ON communications."SignatureRequests" TO propflow_app;
+            GRANT SELECT, INSERT ON communications."ProviderCallbackReceipts" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."Connections" TO propflow_app;
             GRANT SELECT, INSERT, UPDATE ON integrations."RecordLinks" TO propflow_app;
             -- FS-S19 reconciliation. Mapping configuration is ordinary editable state: a profile is

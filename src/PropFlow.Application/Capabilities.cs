@@ -37,6 +37,7 @@ public static class Capabilities
     // PF-S03.01: custom fields, numbering, business hours, and notification preferences.
     // Deliberately separate from ManageCategories (Regional Manager keeps that one, not this).
     public const string ManageConfiguration = "Settings.ManageConfiguration";
+    public const string ReadReports = "Reports.Read";
 
     // FS-S05: applicant intake is split into two capabilities on purpose. ManageApplications is
     // the workflow - create an application, record consent, order screening, approve or deny -
@@ -49,7 +50,7 @@ public static class Capabilities
     public const string ManageApplications = "Applications.Manage";   // intake, consent, screening, approve/deny
     public const string ReadApplicantPii   = "Applications.ReadPii";  // unmasked contact, income, screening detail
 
-    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration, ManageApplications, ReadApplicantPii];
+    public static readonly IReadOnlyList<string> All = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, MarkOnTheWay, ManageCategories, ManageTemplates, ManagePeople, ManageAssets, ManageIntegrations, SendResidentMessage, ManageAutomationRules, ManageAttachments, ManageProperties, ManageLeasing, ManageBilling, ManageAccounting, ReadOwnerAccounting, ResidentPortalRead, ResidentPortalRequest, ManageMembers, ManageConfiguration, ManageApplications, ReadApplicantPii, ReadReports];
     private static readonly string[] WorkManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageAssets, ManageAttachments];
     private static readonly string[] CategoryManagement = [ReadWork, AssignVendor, AssignEmployee, CreateWork, UpdateWork, ManageCategories, ManageAssets, ManageAttachments];
 
@@ -61,7 +62,7 @@ public static class Capabilities
         // one. ReadApplicantPii is deliberately absent here - see the constants above.
         "Regional Manager" => [.. CategoryManagement, ManageApplications],
         "Maintenance Supervisor" => WorkManagement,
-        "Read Only" => [ReadWork],
+        "Read Only" => [ReadWork, ReadReports],
         // A field role is not usable until the control-plane membership names the employee/vendor
         // it represents. Endpoint scope checks then narrow this capability to assigned work.
         "Technician" when employeeId is not null => [ReadWork, MarkOnTheWay, ManageAttachments],

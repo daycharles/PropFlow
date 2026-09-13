@@ -37,6 +37,9 @@ public static class ProviderCallbackEndpoints
             await using var store = DatabaseProvisioner.CreateCommunicationsStore(connection, payload.OrganizationId);
             var messages = await store.OutboxMessages.Where(x => x.ProviderReference == payload.ProviderReference).ToListAsync(ct);
             if (messages.Count == 0) return Results.NotFound();
+            var digest = Convert.ToHexString(SHA256.HashData(body.ToArray()));
+            if (await store.ProviderCallbackReceipts.AnyAsync(x => x.BodyDigest == digest, ct)) return Results.NoContent();
+            store.ProviderCallbackReceipts.Add(new ProviderCallbackReceipt(payload.OrganizationId, Guid.NewGuid(), digest, DateTimeOffset.UtcNow));
             try
             {
                 foreach (var message in messages) message.ApplyProviderCallback(status, payload.FailureReason, payload.OccurredAt ?? DateTimeOffset.UtcNow);

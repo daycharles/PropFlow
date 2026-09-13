@@ -86,9 +86,9 @@ public sealed class CapabilitiesTests
     }
 
     [Fact]
-    public void Read_only_role_can_only_read_work()
+    public void Read_only_role_can_read_work_and_reports()
     {
-        Assert.Equal([Capabilities.ReadWork], Capabilities.ForRole("Read Only"));
+        Assert.Equal([Capabilities.ReadWork, Capabilities.ReadReports], Capabilities.ForRole("Read Only"));
     }
 
     [Theory]

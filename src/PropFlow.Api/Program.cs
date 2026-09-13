@@ -86,6 +86,7 @@ builder.Services.AddScoped<IGlobalSearch, EfGlobalSearch>();
 builder.Services.AddScoped<IRepeatRepairDetector, EfRepeatRepairDetector>();
 builder.Services.AddScoped<IAttentionQueue, EfAttentionQueue>();
 builder.Services.AddScoped<IOutbox, EfOutbox>();
+builder.Services.AddScoped<ICampaignDispatcher, EfCampaignDispatcher>();
 builder.Services.AddSingleton<ITemplateRenderer, TemplateRenderer>();
 builder.Services.AddSingleton<IIntegrationAdapter, MockIntegrationAdapter>();
 builder.Services.AddSingleton<IIntegrationAdapter, SandboxIntegrationAdapter>();
@@ -177,6 +178,7 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = loginAttemptsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddHostedService<RuntimeDatabaseGuard>();
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<ReportScheduleDispatcher>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseReadiness>("database");
 
 var app = builder.Build();
@@ -237,10 +239,12 @@ app.MapLeasingEndpoints();
 app.MapBillingEndpoints();
 app.MapResidentPortalEndpoints();
 app.MapAccountingEndpoints();
+app.MapReportingEndpoints();
 app.MapOwnerAccountingEndpoints();
 app.MapAnnouncementEndpoints();
 app.MapResidentAnnouncementEndpoints();
 app.MapCommunicationEndpoints();
+app.MapDocumentWorkflowEndpoints();
 app.MapCategoryEndpoints();
 app.MapCustomFieldEndpoints();
 app.MapNumberingEndpoints();
