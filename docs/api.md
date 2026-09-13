@@ -755,3 +755,11 @@ buttons are gone, and the applicant now enters `/api/applications` through a **S
 control. Nothing in `apps/web` calls the legacy route any more — `api.marketing.listings
 .applicantStatus` (`apps/web/lib/api.ts`) is kept as a client for a route that is still live for
 an applicant with no application, not because a page uses it.
+# Reporting (FS-S18)
+
+Authenticated users with `Reports.Read` can query `/api/reports/{kind}` for `operational`,
+`leasing`, `financial`, `occupancy`, `maintenance`, `vendor`, or `portfolio`. Optional `from`,
+`to`, `propertyId`, and bounded `take` filters are tenant-scoped. `/api/reports/{kind}/export`
+returns the same projection as UTF-8 CSV. Users with `Settings.ManageConfiguration` can create,
+list, pause, and run persisted schedules at `/api/reports/schedules`; due schedules are dispatched
+by the API worker and recorded in `ReportDeliveries` with a payload hash and next-run time.

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PropFlow.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PropFlow.Infrastructure.Persistence;
 namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
 {
     [DbContext(typeof(OperationsStore))]
-    partial class OperationsStoreModelSnapshot : ModelSnapshot
+    [Migration("20260913020710_FS_S18DeliveryMetadata")]
+    partial class FS_S18DeliveryMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1800,125 +1803,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.ToTable("Applicants", "operations");
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationApplicant", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("EmploymentStatus")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<decimal?>("MonthlyIncome")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ApplicantId");
-
-                    b.HasIndex("OrganizationId", "ApplicationId", "ApplicantId")
-                        .IsUnique();
-
-                    b.ToTable("ApplicationApplicants", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationConsent", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ConsentType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("Decision")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RecordedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ApplicantId");
-
-                    b.HasIndex("OrganizationId", "ApplicationId", "ApplicantId", "ConsentType", "RecordedAt");
-
-                    b.ToTable("ApplicationConsents", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationDecision", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("DecidedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("DecidedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("Outcome")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ApplicationId", "DecidedAt");
-
-                    b.ToTable("ApplicationDecisions", "operations");
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Marketing.Inquiry", b =>
                 {
                     b.Property<Guid>("OrganizationId")
@@ -2011,128 +1895,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                     b.HasIndex("OrganizationId", "Status", "AvailableOn");
 
                     b.ToTable("Listings", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.RentalApplication", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("DecidedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ListingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ListingId", "Status");
-
-                    b.ToTable("RentalApplications", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ScreeningRequest", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTimeOffset?>("LastAttemptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ApplicantId");
-
-                    b.HasIndex("OrganizationId", "IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("OrganizationId", "ApplicationId", "Status");
-
-                    b.ToTable("ScreeningRequests", "operations");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ScreeningResult", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ApplicantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Recommendation")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int?>("Score")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ScreeningRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Summary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.HasKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "ApplicantId");
-
-                    b.HasIndex("OrganizationId", "ScreeningRequestId", "ReceivedAt");
-
-                    b.ToTable("ScreeningResults", "operations");
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Marketing.Showing", b =>
@@ -3528,45 +3290,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationApplicant", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.Applicant", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Marketing.RentalApplication", null)
-                        .WithMany("Applicants")
-                        .HasForeignKey("OrganizationId", "ApplicationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationConsent", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.Applicant", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Marketing.RentalApplication", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ApplicationDecision", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.RentalApplication", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("PropFlow.Domain.Marketing.Inquiry", b =>
                 {
                     b.HasOne("PropFlow.Domain.Marketing.Listing", null)
@@ -3588,45 +3311,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
                         .WithMany()
                         .HasForeignKey("OrganizationId", "SpaceId")
                         .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.RentalApplication", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.Listing", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ListingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ScreeningRequest", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.Applicant", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Marketing.RentalApplication", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.ScreeningResult", b =>
-                {
-                    b.HasOne("PropFlow.Domain.Marketing.Applicant", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ApplicantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PropFlow.Domain.Marketing.ScreeningRequest", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ScreeningRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("PropFlow.Domain.Marketing.Showing", b =>
@@ -3872,11 +3556,6 @@ namespace PropFlow.Infrastructure.Persistence.Migrations.Operations
             modelBuilder.Entity("PropFlow.Domain.Accounting.JournalEntry", b =>
                 {
                     b.Navigation("Lines");
-                });
-
-            modelBuilder.Entity("PropFlow.Domain.Marketing.RentalApplication", b =>
-                {
-                    b.Navigation("Applicants");
                 });
 #pragma warning restore 612, 618
         }
